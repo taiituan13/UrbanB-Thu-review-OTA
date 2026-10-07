@@ -1,0 +1,22 @@
+{
+  "name": "urbanb-reviews",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Dịch vụ thu thập review khách sạn từ trang công khai của OTA, tách biệt với Hub UrbanB.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "probe": "tsx src/scripts/probe.ts",
+    "scrape": "tsx src/scripts/scrape.ts",
+    "typecheck": "tsc --noEmit",
+    "record": "tsx src/scripts/record-extranet.ts"
+  },
+  "dependencies": {
+    "playwright": "1.63"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
