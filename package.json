@@ -9,7 +9,8 @@
     "probe": "tsx src/scripts/probe.ts",
     "scrape": "tsx src/scripts/scrape.ts",
     "typecheck": "tsc --noEmit",
-    "record": "tsx src/scripts/record-extranet.ts"
+    "record": "tsx src/scripts/record-extranet.ts",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "playwright": "1.63"

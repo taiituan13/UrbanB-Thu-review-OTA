@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 13px system-ui, sans-serif; width: 340px; margin: 12px; color: #111; }
+  h1 { font-size: 15px; margin: 0 0 10px; }
+  label { display: block; margin: 8px 0 2px; color: #444; }
+  input[type=text], input[type=password], input[type=number] { width: 100%; box-sizing: border-box; padding: 5px 6px; }
+  .row { display: flex; gap: 12px; margin-top: 6px; }
+  .row label { display: inline; margin: 0; color: #111; }
+  .buttons { display: flex; gap: 6px; margin-top: 12px; }
+  button { flex: 1; padding: 6px; cursor: pointer; }
+  #status { margin-top: 12px; border-top: 1px solid #ddd; padding-top: 8px; }
+  .ch { display: flex; gap: 6px; align-items: baseline; margin: 4px 0; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #9ca3af; flex: none; }
+  .ok .dot { background: #16a34a; } .error .dot { background: #dc2626; } .login .dot { background: #d97706; }
+  .msg { color: #555; font-size: 12px; }
+  #note { margin-top: 8px; color: #2563eb; min-height: 16px; }
+</style>
+</head>
+<body>
+<h1>Thu review OTA</h1>
+
+<label for="hotel">Tên khách sạn</label>
+<input id="hotel" type="text" placeholder="Secret Garden Bình Thạnh">
+
+<label for="sheetUrl">URL Web App của Google Sheet (…/exec)</label>
+<input id="sheetUrl" type="text">
+
+<label for="secret">Mã bí mật</label>
+<input id="secret" type="password">
+
+<label>Kênh quét</label>
+<div class="row">
+  <label><input type="checkbox" id="en-booking"> Booking</label>
+  <label><input type="checkbox" id="en-agoda"> Agoda</label>
+  <label><input type="checkbox" id="en-trip"> Trip</label>
+</div>
+
+<label for="bookingHotelId">Mã Booking (để trống nếu tài khoản chỉ có 1 chỗ nghỉ)</label>
+<input id="bookingHotelId" type="text">
+
+<label for="agodaPropertyId">Mã Agoda (để trống ⇒ tự dò)</label>
+<input id="agodaPropertyId" type="text">
+
+<label for="intervalHours">Quét mỗi (giờ)</label>
+<input id="intervalHours" type="number" min="1" step="1">
+
+<div class="buttons">
+  <button id="save">Lưu</button>
+  <button id="ping">Thử Sheet</button>
+  <button id="scan">Quét ngay</button>
+</div>
+<div id="note"></div>
+
+<div id="status"></div>
+
+<script type="module" src="popup.js"></script>
+</body>
+</html>

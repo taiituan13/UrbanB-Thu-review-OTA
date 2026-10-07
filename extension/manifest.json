@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "UrbanB — Thu review OTA",
+  "version": "0.1.0",
+  "description": "Đọc review từ extranet Booking, Agoda, Trip bằng phiên đăng nhập sẵn có và gom vào Google Sheet. Chỉ đọc.",
+  "permissions": ["storage", "alarms", "scripting", "tabs"],
+  "host_permissions": [
+    "https://admin.booking.com/*",
+    "https://account.booking.com/*",
+    "https://ycs.agoda.com/*",
+    "https://portal.agoda.com/*",
+    "https://ebooking.trip.com/*",
+    "https://script.google.com/*",
+    "https://script.googleusercontent.com/*"
+  ],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "Thu review OTA" }
+}
