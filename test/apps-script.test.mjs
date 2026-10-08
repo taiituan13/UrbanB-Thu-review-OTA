@@ -205,7 +205,7 @@ test("Nhật ký lỗi: gắn máy, bỏ query khỏi URL, cắt độ dài, t�
 });
 
 // ---------- Mã lỗi ----------
-const { lastErrorText, migrateColumns, columnLetter, lostFormula } = ctx;
+const { lastErrorText, migrateColumns, columnLetter, lostFormula, pickSeparator } = ctx;
 
 test("Nhật ký lỗi giữ mã lỗi đúng dạng; mã lạ (có thể là công thức chèn vào) bị bỏ", () => {
   const ok = plain(cleanLogs([{ ref: "E-7K3QX2", code: "BKG-LOGIN", stage: "đăng nhập" }], dev(), T0))[0];
@@ -259,4 +259,44 @@ test("Công thức Mất liên lạc dùng địa chỉ A1 (R1C1 bị Sheets ghi
   assert.equal(columnLetter(deadlineCol), "O");
   assert.equal(lostFormula("O2"), '=IF(O2="","",IF(NOW()>O2,"MẤT LIÊN LẠC",""))');
   assert.doesNotMatch(lostFormula("O2"), /RC\[/);
+});
+
+test("Công thức Mất liên lạc viết được bằng cả hai dấu phân cách", () => {
+  assert.equal(lostFormula("O2", ";"), '=IF(O2="";"";IF(NOW()>O2;"MẤT LIÊN LẠC";""))');
+  assert.doesNotMatch(lostFormula("O2", ";"), /,/);
+});
+
+// Giả lập Sheet: chỉ phân tích được công thức viết bằng dấu `accepts`.
+function fakeSheet(accepts) {
+  const writes = [];
+  let last = null;
+  return {
+    writes,
+    write: (s) => { writes.push(s); last = s; },
+    broken: () => last !== accepts,
+  };
+}
+
+test("Sheet vùng Việt Nam: dấu \",\" hỏng ⇒ tự đổi sang \";\" và trả dấu đó để nhớ", () => {
+  const sh = fakeSheet(";");
+  assert.equal(pickSeparator(null, sh.write, sh.broken), ";");
+  assert.deepEqual(sh.writes, [",", ";"]);
+});
+
+test("Đã nhớ \";\" ⇒ lượt sau ghi thẳng một lần", () => {
+  const sh = fakeSheet(";");
+  assert.equal(pickSeparator(";", sh.write, sh.broken), ";");
+  assert.deepEqual(sh.writes, [";"]);
+});
+
+test("Sheet vùng Mỹ: dấu \",\" chạy ngay, không thử dấu kia", () => {
+  const sh = fakeSheet(",");
+  assert.equal(pickSeparator(null, sh.write, sh.broken), ",");
+  assert.deepEqual(sh.writes, [","]);
+});
+
+test("Cả hai dấu đều hỏng ⇒ trả rỗng, không lặp vô tận", () => {
+  const sh = fakeSheet("không dấu nào");
+  assert.equal(pickSeparator(null, sh.write, sh.broken), "");
+  assert.equal(sh.writes.length, 2);
 });

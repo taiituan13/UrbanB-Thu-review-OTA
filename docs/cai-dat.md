@@ -25,13 +25,29 @@ sẽ bị từ chối, và Sheet vẫn chỉ người được chia sẻ mới x
 Sửa `Code.gs` về sau thì phải **Quản lý triển khai › Chỉnh sửa › Phiên bản mới**.
 Không làm bước này thì URL vẫn chạy mã cũ.
 
-**Nâng cấp một Sheet đã có** (ví dụ lên bản có tab `Máy cài`): dán `Code.gs` mới, chạy lại
-`setup` (tạo tab còn thiếu; mã bí mật giữ nguyên, không phải dán lại vào extension), rồi
-triển khai **Phiên bản mới** như trên.
+**Nâng cấp một Sheet đã có:**
+
+1. Dán `Code.gs` mới, bấm **Lưu**.
+2. **Triển khai › Quản lý triển khai**, chọn đúng bản triển khai mà các máy đang dùng
+   (URL `/exec` trong extension), bấm biểu tượng bút chì, ở ô *Phiên bản* chọn
+   **Phiên bản mới**, bấm **Triển khai**. URL giữ nguyên.
+3. **Không chạy lại `setup`.** Lần ghi đầu tiên của bản mới tự tạo tab còn thiếu và tự
+   xếp lại cột. Mã bí mật giữ nguyên, không phải dán lại vào extension.
+4. Trên một máy, bấm **Thử Sheet** để bản mới ghi lần đầu.
+
+Vì sao không chạy `setup` khi nâng cấp: `setup` chạy mã mới ngay trong trình soạn, trong
+khi URL `/exec` vẫn phục vụ mã cũ cho tới lúc triển khai Phiên bản mới. Nếu `setup` xếp
+lại một tab trước, mã cũ vẫn ghi dòng theo thứ tự cột cũ vào tab đã đổi ⇒ dòng đó lệch
+cột. Đã xảy ra ngày 08/10/2026 ở tab `Nhật ký lỗi`.
 
 Bản mới thêm hoặc dời cột thì tab cũ được xếp lại **theo tên cột** ở lần ghi đầu tiên:
 dữ liệu cũ đi theo tên cột của nó, cột mới để trống. Cột tự thêm vào được giữ và dời ra
 cuối. Vì việc xếp lại dựa vào tên, **đừng đổi tên dòng tiêu đề** của các tab dữ liệu.
+
+Cột *Mất liên lạc* của tab `Máy cài` là công thức. Sheet đặt vùng Việt Nam dùng dấu `;`
+giữa các đối số, vùng Mỹ dùng `,`. `Code.gs` ghi thử bằng `,`, thấy `#ERROR!` thì ghi lại
+bằng `;` và nhớ lựa chọn trong *Thuộc tính tập lệnh* (`FORMULA_SEP`). Đổi vùng của Sheet
+cũng không cần làm gì: dấu đã nhớ hỏng thì lượt ghi kế tiếp tự thử dấu còn lại.
 
 ## 2. Cài extension trên máy từng khách sạn
 

@@ -733,11 +733,38 @@ function writeDevices(ss, objs) {
   });
   ensureRows(sh, spec, rows.length + 1);
   sh.getRange(2, 1, rows.length, fields.length).setValues(rows);
-  // Địa chỉ A1, không R1C1: setFormulaR1C1 với "RC[12]" bị Sheets ghi nguyên chữ ⇒ #ERROR! (đo 08/10/2026).
+  // Sheet đặt vùng Việt Nam (số "6,0") đòi dấu ";" giữa các đối số; dấu "," thì Sheets không phân tích
+  // được ⇒ #ERROR! (đo 08/10/2026). Không đoán theo vùng: ghi thử, đọc lại, hỏng thì đổi dấu.
   var lostCol = fields.indexOf("lost") + 1;
   var deadline = columnLetter(fields.indexOf("deadline") + 1);
-  var formulas = rows.map(function (_, i) { return [lostFormula(deadline + (i + 2))]; });
-  sh.getRange(2, lostCol, rows.length, 1).setFormulas(formulas);
+  var range = sh.getRange(2, lostCol, rows.length, 1);
+  var props = PropertiesService.getScriptProperties();
+  var saved = props.getProperty("FORMULA_SEP");
+  var sep = pickSeparator(
+    saved,
+    function (s) {
+      range.setFormulas(rows.map(function (_, i) { return [lostFormula(deadline + (i + 2), s)]; }));
+    },
+    function () {
+      SpreadsheetApp.flush();
+      return /^#ERROR/.test(String(range.getCell(1, 1).getDisplayValue()));
+    },
+  );
+  if (sep && sep !== saved) props.setProperty("FORMULA_SEP", sep);
+}
+
+/**
+ * Ghi công thức bằng dấu phân cách đã nhớ (mặc định ","), Sheets báo lỗi cú pháp thì thử dấu còn lại.
+ * Trả dấu dùng được; "" nếu cả hai đều hỏng (khi đó ô hiện #ERROR!, không làm hỏng lượt ghi).
+ */
+function pickSeparator(saved, write, broken) {
+  var first = saved === ";" ? ";" : ",";
+  var order = [first, first === "," ? ";" : ","];
+  for (var i = 0; i < order.length; i++) {
+    write(order[i]);
+    if (!broken()) return order[i];
+  }
+  return "";
 }
 
 function columnLetter(n) {
@@ -746,8 +773,9 @@ function columnLetter(n) {
   return s;
 }
 
-function lostFormula(cell) {
-  return '=IF(' + cell + '="","",IF(NOW()>' + cell + ',"MẤT LIÊN LẠC",""))';
+function lostFormula(cell, sep) {
+  var c = sep || ",";
+  return "=IF(" + cell + '=""' + c + '""' + c + "IF(NOW()>" + cell + c + '"MẤT LIÊN LẠC"' + c + '""))';
 }
 
 function upsert(ss, spec, incoming, now) {
