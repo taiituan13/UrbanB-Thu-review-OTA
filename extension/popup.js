@@ -1,5 +1,6 @@
 import { CHANNELS, CHANNEL_LABEL, VERSION, getDeviceId, loadConfig, loadLastError, loadStatus, saveConfig } from "./config.js";
 import { formatErrorReport } from "./report.js";
+import { parseSetupCode } from "./setup-code.js";
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = ["hotel", "sheetUrl", "secret", "bookingHotelId", "agodaPropertyId", "expediaPropertyId", "intervalHours"];
@@ -90,12 +91,33 @@ $("save").onclick = async () => {
   note("Đã lưu.");
 };
 
-$("ping").onclick = async () => {
-  await save();
+async function ping() {
   note("Đang thử…");
   const r = await chrome.runtime.sendMessage({ type: "pingSheet" });
   note(r?.ok ? `Sheet trả lời: ${r.sheet ?? "ok"}` : `Lỗi${r?.ref ? " " + r.ref : ""}: ${r?.error ?? "không rõ"}`);
   await renderStatus();
+}
+
+$("ping").onclick = async () => {
+  await save();
+  await ping();
+};
+
+// Mã cài đặt điền tên, URL, mã bí mật và kênh; các mã khách sạn trên kênh và chu kỳ quét giữ nguyên.
+$("applyCode").onclick = async () => {
+  let parsed;
+  try {
+    parsed = parseSetupCode($("setupCode").value, CHANNELS);
+  } catch (e) {
+    note(e.message);
+    return;
+  }
+  const cfg = await loadConfig();
+  await saveConfig({ ...cfg, ...parsed });
+  await chrome.runtime.sendMessage({ type: "reschedule" });
+  $("setupCode").value = "";
+  await fill();
+  await ping();
 };
 
 $("scan").onclick = async () => {

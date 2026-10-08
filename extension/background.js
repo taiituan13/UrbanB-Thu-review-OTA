@@ -14,6 +14,7 @@ import {
 } from "./config.js";
 import { SheetError, makeLogEntry, parseSheetReply, withRetry } from "./report.js";
 import { normalizeBatch } from "./normalize.js";
+import { isNewer } from "./update.js";
 import {
   bookingSessionInPage,
   scanAgodaInPage,
@@ -27,6 +28,7 @@ import {
 } from "./scanners.js";
 
 const ALARM = "scan";
+const UPDATE_ALARM = "diskUpdate";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- Hẹn giờ ----------
@@ -36,13 +38,30 @@ async function schedule() {
   const minutes = Math.max(30, Math.round(Number(cfg.intervalHours || 6) * 60));
   await chrome.alarms.clear(ALARM);
   await chrome.alarms.create(ALARM, { delayInMinutes: 5, periodInMinutes: minutes });
+  await chrome.alarms.create(UPDATE_ALARM, { delayInMinutes: 1, periodInMinutes: 30 });
 }
 
 chrome.runtime.onInstalled.addListener(schedule);
 chrome.runtime.onStartup.addListener(schedule);
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM) runScan("hẹn giờ");
+  if (alarm.name === UPDATE_ALARM) reloadIfDiskNewer();
 });
+
+/**
+ * Bản cài giải nén: tác vụ hẹn giờ của Windows chép bản mới đè lên thư mục (xem update.js).
+ * Trên đĩa mới hơn bản đang chạy ⇒ tự nạp lại. Không nạp giữa lượt quét.
+ */
+async function reloadIfDiskNewer() {
+  if (running) return;
+  try {
+    const res = await fetch(chrome.runtime.getURL("manifest.json"), { cache: "no-store" });
+    const disk = (await res.json()).version;
+    if (isNewer(disk, chrome.runtime.getManifest().version)) chrome.runtime.reload();
+  } catch {
+    // Đang chép dở (JSON hỏng) ⇒ lượt sau thử lại.
+  }
+}
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg?.type === "scanNow") {

@@ -521,7 +521,81 @@ function migrateColumns(oldHeader, rows, columns) {
 // ---------- Phần chạy trên Google ----------
 
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu("Review OTA").addItem("Cập nhật thống kê", "refreshStatsMenu").addToUi();
+  SpreadsheetApp.getUi()
+    .createMenu("Review OTA")
+    .addItem("Cập nhật thống kê", "refreshStatsMenu")
+    .addItem("Tạo mã cài đặt cho khách sạn", "setupCodeMenu")
+    .addToUi();
+}
+
+// Mã cài đặt: phía extension đọc bằng parseSetupCode trong extension/setup-code.js. Đổi dạng
+// ở đây thì đổi cả bên đó và tăng số "v".
+var SETUP_CODE_PREFIX = "UBR1-";
+
+/** Thuần: kiểm đầu vào rồi dựng nội dung mã cài đặt. Sai ⇒ ném Error với câu đọc được. */
+function setupPayload(hotel, url, secret, channelsText) {
+  hotel = String(hotel || "").trim();
+  url = String(url || "").trim();
+  if (!hotel) throw new Error("Chưa nhập tên khách sạn.");
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec$/.test(url)) {
+    throw new Error("URL Web App phải có dạng https://script.google.com/macros/s/…/exec");
+  }
+  if (!secret) throw new Error("Chưa có mã bí mật: chạy setup một lần.");
+  var known = Object.keys(CHANNEL_NAMES);
+  var channels = [];
+  String(channelsText || "").toLowerCase().split(/[\s,;]+/).forEach(function (ch) {
+    if (ch && channels.indexOf(ch) < 0) channels.push(ch);
+  });
+  var unknown = channels.filter(function (ch) { return known.indexOf(ch) < 0; });
+  if (unknown.length) throw new Error("Kênh lạ: " + unknown.join(", ") + ". Kênh hợp lệ: " + known.join(", ") + ".");
+  if (!channels.length) throw new Error("Chưa chọn kênh nào.");
+  return { v: 1, hotel: hotel, sheetUrl: url, secret: secret, channels: channels };
+}
+
+function setupCodeMenu() {
+  var ui = SpreadsheetApp.getUi();
+  var props = PropertiesService.getScriptProperties();
+  var ask = function (title, text) {
+    var r = ui.prompt(title, text, ui.ButtonSet.OK_CANCEL);
+    return r.getSelectedButton() === ui.Button.OK ? r.getResponseText() : null;
+  };
+  // URL Web App không đọc được đáng tin từ trong script, nên hỏi một lần rồi nhớ.
+  var url = props.getProperty("WEB_APP_URL");
+  if (!url) {
+    url = ask("URL Web App", "Dán URL Web App (…/exec), lấy ở Triển khai › Quản lý triển khai. Chỉ hỏi một lần.");
+    if (url === null) return;
+  }
+  var devices = readObjects(SpreadsheetApp.getActiveSpreadsheet(), SHEETS.devices)
+    .map(function (d) { return d.hotel; })
+    .filter(Boolean);
+  var hotel = ask(
+    "Tên khách sạn",
+    "Viết đúng tên chuẩn: tên này là khoá của máy trong tab Máy cài." +
+      (devices.length ? "\nĐã có: " + devices.join(" · ") : ""),
+  );
+  if (hotel === null) return;
+  var channels = ask(
+    "Kênh",
+    "Các kênh khách sạn có, cách nhau dấu phẩy.\nKênh hợp lệ: " + Object.keys(CHANNEL_NAMES).join(", "),
+  );
+  if (channels === null) return;
+  var payload;
+  try {
+    payload = setupPayload(hotel, url, props.getProperty("SECRET"), channels);
+  } catch (e) {
+    ui.alert(e.message);
+    return;
+  }
+  props.setProperty("WEB_APP_URL", payload.sheetUrl);
+  var code = SETUP_CODE_PREFIX + Utilities.base64EncodeWebSafe(JSON.stringify(payload), Utilities.Charset.UTF_8);
+  // Mã chỉ gồm chữ, số và - _ =, nên chèn thẳng vào HTML được.
+  var html = HtmlService.createHtmlOutput(
+    '<p style="font:13px sans-serif">Gửi riêng mã này cho khách sạn (mã chứa mã bí mật của Sheet). ' +
+      "Bên khách sạn dán vào ô <b>Mã cài đặt</b> của extension rồi bấm <b>Áp dụng</b>.</p>" +
+      '<textarea id="c" readonly style="width:100%;height:110px;font:12px monospace">' + code + "</textarea>" +
+      '<script>var c=document.getElementById("c");c.focus();c.select();</script>',
+  ).setWidth(480).setHeight(240);
+  ui.showModalDialog(html, "Mã cài đặt");
 }
 
 function refreshStatsMenu() {

@@ -51,6 +51,9 @@ cũng không cần làm gì: dấu đã nhớ hỏng thì lượt ghi kế tiế
 
 ## 2. Cài extension trên máy từng khách sạn
 
+Máy Windows: dùng cách ở [cai-tu-xa.md](cai-tu-xa.md). Cách đó cài bằng một lệnh, điền cài đặt
+bằng mã cài đặt, và tự cập nhật. Cách tay dưới đây dùng khi thử trên máy khác, và để hiểu các ô.
+
 1. Chép thư mục `extension/` sang máy.
 2. Mở `chrome://extensions`, bật **Chế độ dành cho nhà phát triển**, bấm
    **Tải tiện ích đã giải nén** rồi chọn thư mục `extension/`.
@@ -144,7 +147,7 @@ tự quy mọi điểm về thang 10.
   lần đầu gặp có thể báo đỏ thay vì cam.
 - Go2Joy: giờ review được hiểu là giờ Việt Nam. Extension nhận ra phiên hết hạn khi trang
   bị đẩy khỏi `/review-detail`. Tài khoản quản nhiều khách sạn thì quét khách sạn đang
-  được chọn trên trang. Dạng phản hồi của khách sạn **chưa đo** (khách sạn đo thử có
-  339 bài, chưa bài nào được trả lời).
+  được chọn trên trang. Phản hồi của khách sạn đã đo trên Secret Garden Bình Thạnh (47/662
+  bài có phản hồi, 08/10/2026).
 - Endpoint là API nội bộ của extranet, đo ngày 07–08/10/2026. Kênh đổi giao diện thì
   extension sẽ báo đỏ, và phải sửa `extension/scanners.js`.

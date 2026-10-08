@@ -23,10 +23,19 @@
   .err .hint { color: #374151; margin-top: 2px; }
   #last { margin-top: 10px; }
   #last h2 { font-size: 13px; margin: 0 0 4px; }
+  .code { display: flex; gap: 6px; }
+  .code input { flex: 1; }
+  .code button { flex: none; padding: 5px 10px; }
 </style>
 </head>
 <body>
 <h1>Thu review OTA</h1>
+
+<label for="setupCode">Mã cài đặt (người quản lý gửi): dán vào rồi bấm Áp dụng</label>
+<div class="code">
+  <input id="setupCode" type="text" placeholder="UBR1-…" autocomplete="off">
+  <button id="applyCode">Áp dụng</button>
+</div>
 
 <label for="hotel">Tên khách sạn (cũng là tên máy trong tab "Máy cài")</label>
 <input id="hotel" type="text" placeholder="Secret Garden Bình Thạnh">
