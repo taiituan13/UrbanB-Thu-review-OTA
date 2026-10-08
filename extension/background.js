@@ -19,6 +19,8 @@ import {
   scanAgodaInPage,
   scanBookingInPage,
   scanExpediaInPage,
+  expediaPropertiesInPage,
+  pickPropertyId,
   scanTravelokaInPage,
   scanTripInPage,
 } from "./scanners.js";
@@ -164,9 +166,17 @@ async function scanTrip(tabId) {
 }
 
 async function scanExpedia(tabId, cfg) {
-  const pid = String(cfg.expediaPropertyId || "").trim();
-  const url = "https://apps.expediapartnercentral.com/supply/reviews/post-stay-reviews" + (pid ? `?htid=${encodeURIComponent(pid)}` : "");
-  assertLoggedIn("expedia", await go(tabId, url));
+  const reviews = "https://apps.expediapartnercentral.com/supply/reviews/post-stay-reviews";
+  let pid = String(cfg.expediaPropertyId || "").trim();
+  if (!pid) {
+    // Chưa chọn chỗ nghỉ trong phiên thì Expedia đá sang trang chọn chỗ nghỉ, kể cả khi
+    // tài khoản chỉ có một chỗ (đo 08/10/2026) ⇒ đọc danh sách ở đó.
+    const landed = await go(tabId, reviews);
+    assertLoggedIn("expedia", landed);
+    if (!/\/manageproperty\//i.test(new URL(landed).pathname)) return runInPage(tabId, scanExpediaInPage);
+    pid = pickPropertyId("Expedia", (await runInPage(tabId, expediaPropertiesInPage)) ?? []);
+  }
+  assertLoggedIn("expedia", await go(tabId, `${reviews}?htid=${encodeURIComponent(pid)}`));
   return runInPage(tabId, scanExpediaInPage);
 }
 

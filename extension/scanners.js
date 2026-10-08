@@ -179,6 +179,19 @@ export async function scanExpediaInPage() {
   let cap = null;
   for (let i = 0; i < 60 && !cap; i++) {
     cap = window.__urbanbCap?.expedia;
+    // Trang nhận trang review đầu tiên từ máy chủ (__APOLLO_STATE__) nên không gửi SupplyReviewsQuery
+    // cho tới khi người dùng đổi bộ lọc (đo 08/10/2026). Chờ 5 giây không thấy thì nhờ chính Apollo
+    // của trang gọi lại query đó; capture.js bắt được request ấy như mọi request khác.
+    if (!cap && i === 10) {
+      try {
+        const oq = [...(window.__APOLLO_CLIENT__?.getObservableQueries?.("all")?.values() ?? [])].find(
+          (q) => q.queryName === "SupplyReviewsQuery",
+        );
+        oq?.refetch().catch(() => {});
+      } catch (e) {
+        // Không có Apollo thì vẫn chờ tiếp như cũ.
+      }
+    }
     if (!cap) await sleep(500);
   }
   if (!cap) return { ok: false, error: "Không bắt được request review của trang Expedia" };
@@ -219,6 +232,24 @@ export async function scanExpediaInPage() {
     if (Number.isFinite(s)) snapshots.push({ category: "Tổng", categoryCode: "overall", score: s, scale: 10, reviewCount: total ?? "" });
   }
   return { ok: true, total, reviews, channelHotelId: propertyId, snapshots };
+}
+
+/** Expedia — trên trang chọn chỗ nghỉ (/manageproperty/): mã các chỗ nghỉ tài khoản thấy được. */
+export function expediaPropertiesInPage() {
+  const ids = [...document.querySelectorAll('a[href*="htid="]')]
+    .map((a) => new URL(a.href, location.href).searchParams.get("htid"))
+    .filter((id) => /^\d+$/.test(id ?? ""));
+  return [...new Set(ids)];
+}
+
+/**
+ * Chọn mã chỗ nghỉ khi không điền sẵn: đúng một thì dùng, không có hoặc nhiều thì báo lỗi.
+ * Câu lỗi khớp loại NOID / MULTI trong report.js.
+ */
+export function pickPropertyId(label, ids) {
+  if (ids.length === 1) return ids[0];
+  if (!ids.length) throw new Error(`Không dò được mã khách sạn ${label}. Điền mã ${label} trong cài đặt.`);
+  throw new Error(`Tài khoản ${label} thấy ${ids.length} chỗ nghỉ (${ids.join(", ")}). Điền mã ${label} trong cài đặt.`);
 }
 
 /** Booking — trên trang chủ (nhóm hoặc một chỗ nghỉ): lấy ses và danh sách mã chỗ nghỉ thấy được. */

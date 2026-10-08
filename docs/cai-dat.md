@@ -62,8 +62,8 @@ cũng không cần làm gì: dấu đã nhớ hỏng thì lượt ghi kế tiế
      **tắt**; khách sạn có hai kênh này thì tick vào.
    - **Mã Booking**: chỉ cần điền khi tài khoản Booking thấy nhiều chỗ nghỉ.
    - **Mã Agoda**: để trống thì extension tự dò.
-   - **Mã Expedia**: để trống thì quét khách sạn đang chọn trên Partner Central; tài khoản
-     quản nhiều khách sạn thì điền mã (số `htid` trên thanh địa chỉ).
+   - **Mã Expedia**: để trống thì extension tự dò khi tài khoản chỉ có một khách sạn; tài
+     khoản quản nhiều khách sạn thì điền mã (số `htid` trên thanh địa chỉ).
 4. Bấm **Thử Sheet**. Đúng thì hiện tên Sheet.
 5. Bấm **Quét ngay**. Extension mở từng extranet trong một tab nền, đọc review, đóng
    tab, rồi gửi lên Sheet. Mỗi kênh mất khoảng nửa phút đến vài phút.
