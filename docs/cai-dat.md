@@ -11,7 +11,8 @@ Extension chỉ đọc: nó không trả lời review, không đổi cài đặt
    `apps-script/Code.gs`, rồi bấm Lưu.
 3. Chọn hàm `setup` ở thanh trên, bấm **Chạy**. Lần đầu Google sẽ hỏi quyền truy cập
    Sheet; chấp nhận.
-   - Hàm tạo bốn tab: `Review`, `Điểm hạng mục`, `Lượt quét`, `Điểm tổng hợp`.
+   - Hàm tạo các tab: `Thống kê`, `Review`, `Điểm hạng mục`, `Lượt quét`, `Điểm tổng hợp`,
+     `Máy cài`, `Nhật ký lỗi`.
    - Mở **Nhật ký thực thi** để chép dòng *"Mã bí mật (dán vào extension): …"*.
 4. Bấm **Triển khai › Tùy chọn triển khai mới › Ứng dụng web**:
    - Thực thi dưới tên: **Tôi**
@@ -24,13 +25,18 @@ sẽ bị từ chối, và Sheet vẫn chỉ người được chia sẻ mới x
 Sửa `Code.gs` về sau thì phải **Quản lý triển khai › Chỉnh sửa › Phiên bản mới**.
 Không làm bước này thì URL vẫn chạy mã cũ.
 
+**Nâng cấp một Sheet đã có** (ví dụ lên bản có tab `Máy cài`): dán `Code.gs` mới, chạy lại
+`setup` (tạo tab còn thiếu; mã bí mật giữ nguyên, không phải dán lại vào extension), rồi
+triển khai **Phiên bản mới** như trên.
+
 ## 2. Cài extension trên máy từng khách sạn
 
 1. Chép thư mục `extension/` sang máy.
 2. Mở `chrome://extensions`, bật **Chế độ dành cho nhà phát triển**, bấm
    **Tải tiện ích đã giải nén** rồi chọn thư mục `extension/`.
 3. Ghim biểu tượng "Thu review OTA", bấm vào rồi điền:
-   - **Tên khách sạn**: ghi vào cột "Khách sạn". Mỗi máy một tên, viết thống nhất.
+   - **Tên khách sạn**: ghi vào cột "Khách sạn", và là tên của máy trong tab `Máy cài`.
+     Mỗi máy một tên, viết thống nhất.
    - **URL Web App** và **Mã bí mật**: lấy từ bước 1.
    - **Kênh quét**: bỏ chọn kênh mà khách sạn không có. Expedia và Traveloka mặc định
      **tắt**; khách sạn có hai kênh này thì tick vào.
@@ -54,9 +60,19 @@ Sau đó extension tự quét theo số giờ đã đặt (mặc định 6 giờ
 | Cam | Kênh đã đá về trang đăng nhập | Mở extranet đó, đăng nhập lại, bấm Quét ngay |
 | Đỏ | Lỗi khác (đọc dòng chữ dưới tên kênh) | Gửi ảnh chụp cho người phụ trách |
 
-Biểu tượng có dấu `!` đỏ khi có ít nhất một kênh không xanh. Tab `Lượt quét` trong
-Sheet ghi mọi lượt của mọi khách sạn, kể cả lượt lỗi, nên người quản lý xem được
-máy nào đang im mà không cần tới tận nơi.
+Biểu tượng có dấu `!` đỏ khi có ít nhất một kênh không xanh. Dưới cùng ô bật lên là
+**mã máy** (8 ký tự) và phiên bản, để đối chiếu với tab `Máy cài`.
+
+Người quản lý không cần tới tận máy:
+
+- **Máy cài**: mỗi tên khách sạn một dòng — trạng thái từng kênh, lần cuối liên lạc,
+  lỗi gần nhất, phiên bản, kênh đang bật. Cột **Mất liên lạc** tự hiện khi máy im quá
+  2 × chu kỳ quét (Chrome tắt, máy tắt, hoặc extension bị gỡ). Cột **Cảnh báo** báo
+  khi hai máy khác nhau cùng khai một tên, hoặc một máy đã đổi tên sang tên khác.
+- **Nhật ký lỗi**: mỗi lỗi một dòng — kênh, giai đoạn (mở tab · đăng nhập · quét ·
+  chuẩn hoá · gửi Sheet), thông điệp, trang lúc lỗi, chi tiết kỹ thuật. Lọc theo cột
+  *Khách sạn* để xem riêng một máy. Giữ 5.000 dòng mới nhất.
+- **Lượt quét**: mọi lượt của mọi khách sạn, kể cả lượt lỗi.
 
 ## 4. Dữ liệu trong Sheet
 
@@ -73,6 +89,10 @@ máy nào đang im mà không cần tới tận nơi.
   hạng mục, Expedia chỉ có điểm tổng.
   Mỗi lượt quét thêm một bộ dòng, nên xem được điểm đi lên hay đi xuống.
 - **Lượt quét**: nhật ký.
+- **Máy cài**, **Nhật ký lỗi**: xem mục 3.
+
+Nhật ký lỗi không chứa phiên đăng nhập: URL bị cắt bỏ mọi thứ sau dấu `?` (nơi Booking
+để mã phiên `ses`), và extension không gửi cookie hay token.
 
 Tên khách bị gỡ trước khi gửi. Mã đặt phòng thì vẫn giữ, vì đó là thứ nối review về
 lượt lưu trú.
@@ -82,6 +102,10 @@ sau này thêm kênh khác thang không phải sửa dữ liệu cũ.
 
 ## 5. Giới hạn đã biết
 
+- Google đôi khi trả trang lỗi 404 khi Sheet trả lời (đo ngày 08/10/2026: khoảng 1/10
+  lượt), dù dữ liệu đã ghi xong. Extension tự gửi lại tối đa 3 lần; Sheet nhận ra lượt
+  gửi lại và không ghi lần hai. Cả 3 lần đều hỏng thì lỗi nằm chờ trong máy (tối đa 50
+  dòng) và được gửi kèm lượt sau.
 - Phiên Booking hết hạn sau khoảng 2 giờ không dùng. Nếu máy chỉ mở Chrome mà không
   ai đụng tới extranet, kênh Booking sẽ thường xuyên báo cam.
 - Trip mới đọc nguồn Trip.com (`channelSource = 1`); bài từ Qunar/Ly.com chưa thu.

@@ -3,6 +3,7 @@
 // Cài: chạy setup() một lần (tạo các tab, sinh mã bí mật, in ra ở Nhật ký thực thi),
 // rồi Deploy › New deployment › Web app · Execute as: Me · Who has access: Anyone.
 // Extension của mỗi khách sạn POST JSON lên URL …/exec kèm mã bí mật.
+// Mỗi lần liên lạc cập nhật tab "Máy cài"; lỗi của extension ghi vào tab "Nhật ký lỗi".
 
 var SHEETS = {
   review: {
@@ -80,7 +81,51 @@ var SHEETS = {
       ["reviewCount", "Số review", "number"],
     ],
   },
+  // Mỗi bản cài (khoá = tên khách sạn đã chuẩn hoá) một dòng; ghi đè sau mỗi lần liên lạc.
+  devices: {
+    name: "Máy cài",
+    key: "nameKey",
+    columns: [
+      ["nameKey", "Khoá (tên chuẩn hoá)", "text"],
+      ["hotel", "Tên khai báo", "text"],
+      ["lost", "Mất liên lạc", "formula"],
+      ["warning", "Cảnh báo", "text"],
+      ["statusText", "Trạng thái kênh", "text"],
+      ["lastSeen", "Lần cuối liên lạc (UTC)", "text"],
+      ["lastAction", "Việc lần cuối", "text"],
+      ["lastError", "Lỗi gần nhất", "text"],
+      ["lastErrorAt", "Lúc lỗi (UTC)", "text"],
+      ["version", "Phiên bản", "text"],
+      ["channels", "Kênh bật", "text"],
+      ["intervalHours", "Chu kỳ quét (giờ)", "number"],
+      ["devices", "Mã máy · lần cuối thấy", "text"],
+      ["firstSeen", "Lần đầu liên lạc (UTC)", "text"],
+      ["deadline", "Hạn liên lạc kế tiếp", "datetime"],
+    ],
+  },
+  // Chỉ thêm dòng; giữ LOG_KEEP dòng mới nhất. Lọc theo cột Khách sạn để xem từng máy.
+  logs: {
+    name: "Nhật ký lỗi",
+    columns: [
+      ["at", "Thời điểm (UTC)", "text"],
+      ["hotel", "Khách sạn", "text"],
+      ["device", "Mã máy", "text"],
+      ["version", "Phiên bản", "text"],
+      ["channel", "Kênh", "text"],
+      ["stage", "Giai đoạn", "text"],
+      ["message", "Lỗi", "text"],
+      ["url", "Trang lúc lỗi", "text"],
+      ["detail", "Chi tiết", "text"],
+      ["receivedAt", "Sheet nhận lúc (UTC)", "text"],
+    ],
+  },
 };
+
+/** Số dòng nhật ký lỗi giữ lại; vượt thì xoá dòng cũ nhất. */
+var LOG_KEEP = 5000;
+
+/** Một máy im quá LOST_FACTOR × chu kỳ quét thì bị đánh dấu mất liên lạc. */
+var LOST_FACTOR = 2;
 
 var SEEN_FIELDS = { firstSeen: true, lastSeen: true };
 
@@ -301,6 +346,133 @@ function buildStats(reviews, runs, scores, snapshots, nowIso) {
   return blocks;
 }
 
+// ---------- Máy cài và nhật ký lỗi (hàm thuần) ----------
+
+var HOUR_MS = 3600000;
+var CHANNEL_NAMES = { booking: "Booking", agoda: "Agoda", trip: "Trip", expedia: "Expedia", traveloka: "Traveloka" };
+var STATE_NAMES = { ok: "ổn", error: "lỗi", login: "cần đăng nhập" };
+
+/** "  Linh  Đan " và "linh dan" là một khách sạn: bỏ dấu, đ → d, gộp khoảng trắng, chữ thường. */
+function normalizeName(name) {
+  return String(name || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/** URL không bao giờ được mang query hay hash: `ses` của Booking nằm ở đó. */
+function stripUrl(url) {
+  return String(url || "").split(/[?#]/)[0].slice(0, 300);
+}
+
+function channelStatusText(status) {
+  if (!status) return "";
+  return Object.keys(CHANNEL_NAMES)
+    .filter(function (ch) { return status[ch]; })
+    .map(function (ch) {
+      var st = status[ch];
+      return CHANNEL_NAMES[ch] + ": " + (STATE_NAMES[st.state] || st.state);
+    })
+    .join(" · ");
+}
+
+/** "a1b2c3d4@2026-10-08T10:00:00Z; …" ⇔ [{ id, at }] */
+function parseDeviceList(text) {
+  return String(text || "")
+    .split(";")
+    .map(function (x) { return x.trim(); })
+    .filter(Boolean)
+    .map(function (x) {
+      var i = x.indexOf("@");
+      return i < 0 ? { id: x, at: "" } : { id: x.slice(0, i), at: x.slice(i + 1) };
+    });
+}
+
+function formatDeviceList(list) {
+  return list.map(function (d) { return d.id + "@" + d.at; }).join("; ");
+}
+
+/**
+ * Cập nhật bảng Máy cài (mảng object theo SHEETS.devices) bằng một lần liên lạc.
+ * device: { deviceId, hotel, version, channels, intervalHours, status }.
+ * Trả mảng object mới; không đụng tới mảng vào.
+ */
+function mergeDevice(rows, device, info, nowIso) {
+  rows = rows.map(function (r) { var o = {}; for (var k in r) o[k] = r[k]; return o; });
+  var key = normalizeName(device.hotel) || "(chưa đặt tên)";
+  var id = String(device.deviceId || "").slice(0, 8) || "?";
+  var interval = Number(device.intervalHours) || 6;
+  var now = Date.parse(nowIso);
+
+  // Cùng mã máy mà khai tên khác ⇒ máy đã đổi tên: gỡ nó khỏi dòng cũ để dòng cũ không báo trùng mãi.
+  rows.forEach(function (r) {
+    if (r.nameKey === key) return;
+    var list = parseDeviceList(r.devices);
+    var kept = list.filter(function (d) { return d.id !== id; });
+    if (kept.length === list.length) return;
+    r.devices = formatDeviceList(kept);
+    r.warning = "Máy " + id + " đã đổi tên sang “" + String(device.hotel || "").trim() + "”";
+  });
+
+  var row = null;
+  for (var i = 0; i < rows.length; i++) if (rows[i].nameKey === key) row = rows[i];
+  if (!row) {
+    row = { nameKey: key, firstSeen: nowIso, lastError: "", lastErrorAt: "" };
+    rows.push(row);
+  }
+  row.hotel = String(device.hotel || "").trim();
+  row.version = device.version || "";
+  row.channels = device.channels || "";
+  row.intervalHours = interval;
+  row.lastSeen = nowIso;
+  row.lastAction = info.action || "";
+  if (device.status) row.statusText = channelStatusText(device.status);
+  if (info.error) {
+    row.lastError = info.error;
+    row.lastErrorAt = nowIso;
+  }
+  row.deadline = new Date(now + LOST_FACTOR * interval * HOUR_MS).toISOString();
+
+  var monthAgo = new Date(now - 30 * 24 * HOUR_MS).toISOString();
+  var list = parseDeviceList(row.devices).filter(function (d) { return d.id !== id && d.at >= monthAgo; });
+  list.push({ id: id, at: nowIso });
+  row.devices = formatDeviceList(list);
+  // Chỉ đếm máy còn liên lạc trong cửa sổ mất liên lạc: cài lại extension (mã mới) không báo trùng mãi.
+  var activeFrom = new Date(now - LOST_FACTOR * interval * HOUR_MS).toISOString();
+  var active = list.filter(function (d) { return d.at >= activeFrom; });
+  row.warning = active.length > 1 ? "Trùng tên: " + active.length + " máy cùng khai tên này" : "";
+  return rows;
+}
+
+function cut(value, n) {
+  var s = value === null || value === undefined ? "" : String(value);
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+/** Dòng nhật ký từ extension ⇒ dòng ghi Sheet: gắn máy, cắt độ dài, gỡ query khỏi URL, tối đa 50 dòng. */
+function cleanLogs(logs, device, nowIso) {
+  if (!Array.isArray(logs)) return [];
+  device = device || {};
+  return logs.slice(-50).map(function (l) {
+    l = l || {};
+    return {
+      at: cut(l.at, 40),
+      hotel: cut(String(device.hotel || "").trim(), 200),
+      device: String(device.deviceId || "").slice(0, 8),
+      version: cut(device.version, 20),
+      channel: cut(l.channel, 20),
+      stage: cut(l.stage, 40),
+      message: cut(l.message, 500),
+      url: stripUrl(l.url),
+      detail: cut(l.detail, 2000),
+      receivedAt: nowIso,
+    };
+  });
+}
+
 // ---------- Phần chạy trên Google ----------
 
 function onOpen() {
@@ -314,7 +486,10 @@ function refreshStatsMenu() {
 function readObjects(ss, spec) {
   var sh = ss.getSheetByName(spec.name);
   if (!sh || sh.getLastRow() < 2) return [];
-  return rowsToObjects(spec.columns, sh.getRange(2, 1, sh.getLastRow() - 1, spec.columns.length).getValues());
+  var values = sh.getRange(2, 1, sh.getLastRow() - 1, spec.columns.length).getValues().map(function (r) {
+    return r.map(function (v) { return v instanceof Date ? v.toISOString() : v; });
+  });
+  return rowsToObjects(spec.columns, values);
 }
 
 function refreshStats(ss) {
@@ -374,7 +549,9 @@ function ensureSheet(ss, spec) {
 /** Cột chữ đặt dạng văn bản để Sheets không tự đổi "2026-09-19T13:21:04" hay mã số dài. */
 function applyFormats(sh, spec) {
   spec.columns.forEach(function (c, i) {
-    sh.getRange(1, i + 1, sh.getMaxRows(), 1).setNumberFormat(c[2] === "text" ? "@" : "0.0#");
+    if (c[2] === "formula") return; // ép "@" thì công thức hiện thành chữ
+    var format = c[2] === "text" ? "@" : c[2] === "datetime" ? "dd/MM/yyyy HH:mm" : "0.0#";
+    sh.getRange(1, i + 1, sh.getMaxRows(), 1).setNumberFormat(format);
   });
 }
 
@@ -403,15 +580,35 @@ function doPost(e) {
   }
   var secret = PropertiesService.getScriptProperties().getProperty("SECRET");
   if (!secret || body.secret !== secret) return json({ ok: false, error: "Sai mã bí mật" });
-
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (body.action === "ping") return json({ ok: true, sheet: ss.getName() });
-  if (body.action !== "ingest") return json({ ok: false, error: "Hành động lạ" });
+  if (["ping", "ingest", "heartbeat"].indexOf(body.action) < 0) return json({ ok: false, error: "Hành động lạ" });
 
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(60000)) return json({ ok: false, error: "Sheet đang bận, thử lại sau" });
   try {
-    var now = new Date().toISOString();
+    // Google đôi khi trả 404 ở chặng chuyển hướng SAU KHI doPost đã chạy (đo 08/10/2026: 7/60 lượt),
+    // nên extension gửi lại cùng requestId. Lượt lặp nhận lại câu trả lời cũ, không ghi lần hai.
+    var cache = CacheService.getScriptCache();
+    var reqKey = body.requestId ? "req:" + String(body.requestId).slice(0, 64) : "";
+    var hit = reqKey ? cache.get(reqKey) : null;
+    if (hit) {
+      var old = JSON.parse(hit);
+      old.replayed = true;
+      return json(old);
+    }
+    var result = handle(SpreadsheetApp.getActiveSpreadsheet(), body, new Date().toISOString());
+    var text = JSON.stringify(result);
+    if (reqKey && text.length < 90000) cache.put(reqKey, text, 600);
+    return json(result);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handle(ss, body, now) {
+  var result = { ok: true };
+  if (body.action === "ping") result.sheet = ss.getName();
+  var action = { ping: "Thử Sheet", heartbeat: "Báo sống sau lượt quét" }[body.action] || "";
+  if (body.action === "ingest") {
     var r = upsert(ss, SHEETS.review, body.reviews || [], now);
     upsert(ss, SHEETS.scores, body.scores || [], now);
     var run = body.run || {};
@@ -419,17 +616,60 @@ function doPost(e) {
     run.updated = r.updated;
     append(ss, SHEETS.runs, [run]);
     append(ss, SHEETS.snapshots, body.snapshots || []);
-    // Thống kê hỏng không được làm hỏng lượt ghi dữ liệu.
-    var statsError = "";
+    result.inserted = r.inserted;
+    result.updated = r.updated;
+    action = "Gửi " + (CHANNEL_NAMES[run.channel] || run.channel || "?") + " (" + (run.status || "?") + ")";
+  }
+  // Sổ máy và nhật ký hỏng không được làm hỏng lượt ghi review.
+  try {
+    var logs = cleanLogs(body.logs, body.device, now);
+    if (logs.length) appendLogs(ss, logs);
+    if (body.device) {
+      var last = logs.length ? logs[logs.length - 1] : null;
+      var error = last ? (last.channel ? CHANNEL_NAMES[last.channel] || last.channel : "") + " · " + last.stage + " · " + last.message : "";
+      writeDevices(ss, mergeDevice(readObjects(ss, SHEETS.devices), body.device, { action: action, error: error }, now));
+    }
+  } catch (err) {
+    result.deviceError = String(err);
+  }
+  if (body.action === "ingest") {
+    // Thống kê hỏng cũng không được làm hỏng lượt ghi dữ liệu.
+    result.statsError = "";
     try {
       refreshStats(ss);
     } catch (err) {
-      statsError = String(err);
+      result.statsError = String(err);
     }
-    return json({ ok: true, inserted: r.inserted, updated: r.updated, statsError: statsError });
-  } finally {
-    lock.releaseLock();
   }
+  return result;
+}
+
+function appendLogs(ss, logs) {
+  append(ss, SHEETS.logs, logs);
+  var sh = ss.getSheetByName(SHEETS.logs.name);
+  var extra = sh.getLastRow() - 1 - LOG_KEEP;
+  if (extra > 0) sh.deleteRows(2, extra);
+}
+
+/** Ghi lại cả bảng Máy cài; cột "Mất liên lạc" là công thức để tự đổi theo giờ, không cần lượt ghi mới. */
+function writeDevices(ss, objs) {
+  if (!objs.length) return;
+  var spec = SHEETS.devices;
+  var sh = ensureSheetLight(ss, spec);
+  var fields = spec.columns.map(function (c) { return c[0]; });
+  var rows = objs.map(function (o) {
+    return fields.map(function (f) {
+      if (f === "deadline") return o.deadline ? new Date(o.deadline) : "";
+      if (f === "lost") return "";
+      return sanitizeCell(o[f] === undefined || o[f] === null ? "" : o[f]);
+    });
+  });
+  ensureRows(sh, spec, rows.length + 1);
+  sh.getRange(2, 1, rows.length, fields.length).setValues(rows);
+  var lostCol = fields.indexOf("lost") + 1;
+  var offset = fields.indexOf("deadline") - fields.indexOf("lost");
+  var formula = '=IF(RC[' + offset + ']="","",IF(NOW()>RC[' + offset + '],"MẤT LIÊN LẠC",""))';
+  sh.getRange(2, lostCol, rows.length, 1).setFormulaR1C1(formula);
 }
 
 function upsert(ss, spec, incoming, now) {

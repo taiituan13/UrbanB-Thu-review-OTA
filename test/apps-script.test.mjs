@@ -135,3 +135,71 @@ test("Sheet rỗng không làm hỏng thống kê", () => {
   assert.equal(blocks.length, 3);
   assert.ok(blocks.every((b) => b.rows.length === 0));
 });
+
+// ---------- Máy cài và nhật ký lỗi ----------
+const { normalizeName, mergeDevice, cleanLogs } = ctx;
+const dev = (over = {}) => ({ deviceId: "aaaaaaaa-1111", hotel: "Linh Đan", version: "0.3.0", channels: "booking", intervalHours: 6, ...over });
+const T0 = "2026-10-08T00:00:00.000Z";
+const hoursLater = (h) => new Date(Date.parse(T0) + h * 3600000).toISOString();
+
+test("Tên chuẩn hoá: bỏ dấu, đ, khoảng trắng thừa, hoa thường", () => {
+  assert.equal(normalizeName("  Linh   Đan "), "linh dan");
+  assert.equal(normalizeName("LINH DAN"), normalizeName("Linh Đan"));
+  assert.notEqual(normalizeName("Linh Đan"), normalizeName("Secret Garden"));
+});
+
+test("Máy mới ⇒ một dòng; hạn liên lạc = 2 × chu kỳ; trạng thái kênh thành chữ", () => {
+  const rows = plain(mergeDevice([], dev({ status: { booking: { state: "login" }, trip: { state: "ok" } } }), { action: "Thử Sheet" }, T0));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].nameKey, "linh dan");
+  assert.equal(rows[0].firstSeen, T0);
+  assert.equal(rows[0].deadline, hoursLater(12));
+  assert.equal(rows[0].statusText, "Booking: cần đăng nhập · Trip: ổn");
+  assert.equal(rows[0].warning, "");
+});
+
+test("Cùng máy liên lạc lại ⇒ vẫn một dòng, giữ lần đầu, lỗi gần nhất được ghi", () => {
+  let rows = mergeDevice([], dev(), { action: "a" }, T0);
+  rows = plain(mergeDevice(rows, dev({ hotel: "linh dan" }), { action: "b", error: "Trip · quét · hỏng" }, hoursLater(1)));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].firstSeen, T0);
+  assert.equal(rows[0].lastSeen, hoursLater(1));
+  assert.equal(rows[0].lastError, "Trip · quét · hỏng");
+  assert.equal(rows[0].warning, "");
+});
+
+test("Hai máy khác nhau cùng khai một tên ⇒ cảnh báo trùng", () => {
+  let rows = mergeDevice([], dev(), { action: "a" }, T0);
+  rows = plain(mergeDevice(rows, dev({ deviceId: "bbbbbbbb-2222", hotel: "LINH DAN" }), { action: "a" }, hoursLater(1)));
+  assert.equal(rows.length, 1);
+  assert.match(rows[0].warning, /Trùng tên: 2 máy/);
+});
+
+test("Cài lại extension (mã mới) ⇒ hết cảnh báo khi mã cũ im quá cửa sổ", () => {
+  let rows = mergeDevice([], dev(), { action: "a" }, T0);
+  rows = plain(mergeDevice(rows, dev({ deviceId: "cccccccc-3333" }), { action: "a" }, hoursLater(13)));
+  assert.equal(rows[0].warning, "");
+});
+
+test("Máy đổi tên ⇒ dòng mới, dòng cũ ghi rõ đã đổi tên và bỏ mã máy", () => {
+  let rows = mergeDevice([], dev(), { action: "a" }, T0);
+  rows = plain(mergeDevice(rows, dev({ hotel: "Linh Đan Phan Xích Long" }), { action: "a" }, hoursLater(1)));
+  assert.equal(rows.length, 2);
+  const old = rows.find((r) => r.nameKey === "linh dan");
+  assert.match(old.warning, /đã đổi tên sang “Linh Đan Phan Xích Long”/);
+  assert.equal(old.devices, "");
+});
+
+test("Nhật ký lỗi: gắn máy, bỏ query khỏi URL, cắt độ dài, tối đa 50 dòng", () => {
+  const logs = Array.from({ length: 60 }, (_, i) => ({
+    at: T0, channel: "booking", stage: "quét", message: "x".repeat(900), url: "https://admin.booking.com/a?ses=BIMAT", detail: String(i),
+  }));
+  const out = plain(cleanLogs(logs, dev(), T0));
+  assert.equal(out.length, 50);
+  assert.equal(out[49].detail, "59", "giữ các dòng mới nhất");
+  assert.equal(out[0].hotel, "Linh Đan");
+  assert.equal(out[0].device, "aaaaaaaa");
+  assert.equal(out[0].url, "https://admin.booking.com/a");
+  assert.ok(out[0].message.length <= 501);
+  assert.deepEqual(plain(cleanLogs(undefined, dev(), T0)), []);
+});

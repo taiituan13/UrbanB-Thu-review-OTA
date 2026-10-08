@@ -1,4 +1,4 @@
-import { CHANNELS, CHANNEL_LABEL, loadConfig, loadStatus, saveConfig } from "./config.js";
+import { CHANNELS, CHANNEL_LABEL, VERSION, getDeviceId, loadConfig, loadStatus, saveConfig } from "./config.js";
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = ["hotel", "sheetUrl", "secret", "bookingHotelId", "agodaPropertyId", "expediaPropertyId", "intervalHours"];
@@ -67,3 +67,6 @@ chrome.storage.onChanged.addListener((changes) => {
 
 fill();
 renderStatus();
+getDeviceId().then((id) => {
+  $("device").textContent = `Mã máy ${id.slice(0, 8)} · phiên bản ${VERSION}`;
+});

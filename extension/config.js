@@ -1,6 +1,8 @@
+import { pushLimited } from "./report.js";
+
 // Cấu hình của một bản cài (một khách sạn), lưu trong chrome.storage.local.
 
-export const VERSION = "0.2.0";
+export const VERSION = "0.3.0";
 
 export const CHANNELS = ["booking", "agoda", "trip", "expedia", "traveloka"];
 
@@ -41,4 +43,32 @@ export async function saveChannelStatus(channel, value) {
   const status = await loadStatus();
   status[channel] = value;
   await chrome.storage.local.set({ status });
+}
+
+/**
+ * Mã máy: sinh một lần lúc cài, không đổi khi đổi tên khách sạn.
+ * Sheet dùng nó để phát hiện hai máy khai cùng một tên, hoặc một máy đã đổi tên.
+ */
+export async function getDeviceId() {
+  const { deviceId } = await chrome.storage.local.get("deviceId");
+  if (deviceId) return deviceId;
+  const id = crypto.randomUUID();
+  await chrome.storage.local.set({ deviceId: id });
+  return id;
+}
+
+/** Lỗi chờ gửi về tab "Nhật ký lỗi"; giữ lại khi gửi Sheet hỏng để gửi kèm lượt sau. */
+export async function loadPendingLogs() {
+  const { pendingLogs } = await chrome.storage.local.get("pendingLogs");
+  return pendingLogs ?? [];
+}
+
+export async function queueLog(entry) {
+  await chrome.storage.local.set({ pendingLogs: pushLimited(await loadPendingLogs(), entry) });
+}
+
+export async function dropLogs(ids) {
+  const sent = new Set(ids);
+  const left = (await loadPendingLogs()).filter((l) => !sent.has(l.id));
+  await chrome.storage.local.set({ pendingLogs: left });
 }

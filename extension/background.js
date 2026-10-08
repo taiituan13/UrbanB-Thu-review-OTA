@@ -1,6 +1,17 @@
 // Tiến trình nền: hẹn giờ, mở tab extranet trong nền, quét, chuẩn hoá, gửi về Google Sheet.
 
-import { CHANNELS, VERSION, loadConfig, saveChannelStatus, loadStatus } from "./config.js";
+import {
+  CHANNELS,
+  VERSION,
+  dropLogs,
+  getDeviceId,
+  loadConfig,
+  loadPendingLogs,
+  loadStatus,
+  queueLog,
+  saveChannelStatus,
+} from "./config.js";
+import { SheetError, makeLogEntry, parseSheetReply, withRetry } from "./report.js";
 import { normalizeBatch } from "./normalize.js";
 import {
   bookingSessionInPage,
@@ -164,20 +175,51 @@ const SCANNERS = { booking: scanBooking, agoda: scanAgoda, trip: scanTrip, exped
 
 // ---------- Gửi về Google Sheet ----------
 
+/** Thông tin máy gửi kèm mọi lượt, để Sheet cập nhật tab "Máy cài". */
+async function deviceInfo(cfg) {
+  return {
+    deviceId: await getDeviceId(),
+    hotel: cfg.hotel,
+    version: VERSION,
+    channels: CHANNELS.filter((ch) => cfg.enabled[ch]).join(", "),
+    intervalHours: Number(cfg.intervalHours) || 6,
+    status: await loadStatus(),
+  };
+}
+
+/**
+ * Gửi một lượt về Sheet, kèm thông tin máy và các lỗi đang chờ.
+ * Cùng một requestId cho mọi lần gửi lại ⇒ Apps Script không ghi hai lần.
+ */
 async function postSheet(cfg, payload) {
-  const res = await fetch(cfg.sheetUrl, {
-    method: "POST",
-    body: JSON.stringify({ ...payload, secret: cfg.secret }),
+  const logs = await loadPendingLogs();
+  const body = JSON.stringify({
+    ...payload,
+    requestId: crypto.randomUUID(),
+    device: await deviceInfo(cfg),
+    logs,
+    secret: cfg.secret,
   });
-  const body = await res.text();
-  let j;
   try {
-    j = JSON.parse(body);
-  } catch {
-    throw new Error(`Sheet trả về không phải JSON (HTTP ${res.status}). Kiểm lại URL Web App và quyền "Bất kỳ ai".`);
+    const reply = await withRetry(
+      async () => {
+        let res;
+        try {
+          res = await fetch(cfg.sheetUrl, { method: "POST", body });
+        } catch (e) {
+          throw new SheetError(`Không gọi được Sheet: ${e?.message ?? e}`, true);
+        }
+        return parseSheetReply(res.status, await res.text());
+      },
+      { sleep },
+    );
+    if (logs.length) await dropLogs(logs.map((l) => l.id));
+    return reply;
+  } catch (e) {
+    // Lỗi gửi Sheet thì chưa ghi được vào Sheet ⇒ xếp hàng, gửi kèm lượt sau.
+    await queueLog(makeLogEntry({ channel: payload.run?.channel ?? "", stage: "gửi Sheet", error: e }));
+    throw e;
   }
-  if (!j.ok) throw new Error(`Sheet từ chối: ${j.error ?? "không rõ"}`);
-  return j;
 }
 
 async function pingSheet() {
@@ -203,6 +245,10 @@ async function runScan(trigger) {
       if (!cfg.enabled[channel]) continue;
       await scanOne(channel, cfg, trigger);
     }
+    // Báo sống kèm trạng thái cuối của mọi kênh; chạy cả khi không bật kênh nào.
+    try {
+      await postSheet(cfg, { action: "heartbeat" });
+    } catch {}
   } finally {
     running = false;
     await refreshBadge();
@@ -213,17 +259,30 @@ async function scanOne(channel, cfg, trigger) {
   const startedAt = new Date().toISOString();
   const run = { at: startedAt, hotel: cfg.hotel, channel, trigger, version: VERSION, status: "", count: 0, note: "" };
   let tab = null;
+  let stage = "mở tab";
   try {
     tab = await chrome.tabs.create({ url: "about:blank", active: false });
+    stage = "quét";
     const result = await SCANNERS[channel](tab.id, cfg);
     if (!result?.ok) throw new Error(result?.error ?? "Quét thất bại");
 
+    stage = "chuẩn hoá";
     const ctx = { hotel: cfg.hotel, channelHotelId: result.channelHotelId };
     const batch = normalizeBatch(channel, result.reviews, ctx);
     const snapshots = (result.snapshots ?? []).map((s) => ({ ...s, at: startedAt, hotel: cfg.hotel, channel }));
     run.status = batch.errors.length ? "một phần" : "ok";
     run.count = batch.reviews.length;
     run.note = `kênh báo ${result.total ?? "?"} bài` + (batch.errors.length ? ` · ${batch.errors.length} bài lỗi chuẩn hoá` : "");
+    if (batch.errors.length) {
+      await queueLog(makeLogEntry({
+        channel,
+        stage,
+        error: `${batch.errors.length} bài lỗi chuẩn hoá (vẫn gửi các bài còn lại)`,
+        detail: batch.errors.slice(0, 5).join("\n"),
+      }));
+    }
+
+    stage = "gửi Sheet";
 
     const sent = await postSheet(cfg, {
       action: "ingest",
@@ -242,8 +301,16 @@ async function scanOne(channel, cfg, trigger) {
     const login = e instanceof LoginRequired;
     run.status = login ? "cần đăng nhập" : "lỗi";
     run.note = String(e?.message ?? e);
+    // Lỗi lúc gửi Sheet thì postSheet đã tự xếp hàng; các giai đoạn khác ghi ở đây.
+    if (stage !== "gửi Sheet") {
+      let url = "";
+      try {
+        if (tab?.id != null) url = (await chrome.tabs.get(tab.id)).url ?? "";
+      } catch {}
+      await queueLog(makeLogEntry({ channel, stage: login ? "đăng nhập" : stage, error: e, url }));
+    }
     await saveChannelStatus(channel, { at: startedAt, state: login ? "login" : "error", count: 0, message: run.note });
-    // Ghi lượt lỗi vào Sheet để người xem biết kênh nào đang im; lỗi khi ghi thì bỏ qua.
+    // Ghi lượt lỗi (kèm nhật ký lỗi) vào Sheet; gửi hỏng thì lỗi nằm lại hàng đợi cho lượt sau.
     try {
       await postSheet(cfg, { action: "ingest", run, reviews: [], scores: [], snapshots: [] });
     } catch {}
