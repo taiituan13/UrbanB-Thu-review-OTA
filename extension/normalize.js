@@ -8,6 +8,10 @@ const STRIP_FIELDS = {
   booking: ["name", "yourname"],
   agoda: ["reviewer", "memberFirstName", "memberTitle", "reviewToken"],
   trip: ["userName", "userIcon", "replyToken"],
+  traveloka: ["reviewerName"],
+  // Expedia: tên khách nằm ở traveler.name/title — gỡ riêng trong normalizeExpedia vì "title"
+  // cũng là tiêu đề bài. Hai khoá dưới chỉ là phần trang trí giao diện, bỏ cho JSON gốc gọn.
+  expedia: ["analytics", "icon"],
 };
 
 /** Giới hạn một ô Google Sheet là 50.000 ký tự; chừa lề. */
@@ -199,6 +203,106 @@ export function normalizeTrip(item, { hotel, channelHotelId }) {
   return { review: finish(row), scores };
 }
 
+/** Mili giây (chuỗi hoặc số) → ISO UTC. */
+function msToIso(value) {
+  const n = Number(value);
+  return value !== null && value !== "" && Number.isFinite(n) ? new Date(n).toISOString() : "";
+}
+
+/**
+ * Ngày nhận/trả phòng Traveloka là mili giây của nửa đêm giờ địa phương; quy về ngày theo
+ * giờ Việt Nam (UTC+7) để không lùi một ngày. Giả định: khách sạn ở Việt Nam.
+ */
+function msToVnDate(value) {
+  const n = Number(value);
+  if (value === null || value === "" || !Number.isFinite(n)) return "";
+  return new Date(n + 7 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+export function normalizeTraveloka(item, { hotel, channelHotelId }) {
+  const row = baseRow("traveloka", hotel, channelHotelId, item.reviewId);
+  const booking = item.bookingInfo ?? {};
+  const reply = item.businessReplyDataDisplay;
+  row.bookingCode = text(item.bookingId);
+  row.reviewDate = msToIso(item.timestamp);
+  row.checkIn = msToVnDate(booking.checkInDate);
+  row.checkOut = msToVnDate(booking.checkOutDate);
+  row.roomType = text(booking.roomTypeDisplayText);
+  row.guestType = text(item.travelThemeDisplayText);
+  row.language = text(item.language);
+  const score = Number(item.overallScore);
+  row.score = item.overallScore != null && Number.isFinite(score) ? score : null;
+  row.comment = text(item.reviewText);
+  if (reply && typeof reply === "object") {
+    row.reply = text(reply.replyText);
+    row.replyDate = row.reply ? msToIso(reply.timestamp) : "";
+  }
+  row.raw = rawJson("traveloka", item);
+  // Traveloka chỉ có điểm hạng mục cấp khách sạn (aggregateInfo), lấy ở bảng Điểm tổng hợp.
+  return { review: finish(row), scores: [] };
+}
+
+const EN_MONTHS = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/** "Posted Aug 20, 2026" → "2026-08-20". Chữ tiếng Anh vì hàm quét ép locale en_US. */
+export function parseEnDate(value) {
+  const m = String(value ?? "").match(/\b([A-Z][a-z]{2})[a-z]*\.? (\d{1,2}), (\d{4})/);
+  if (!m || !EN_MONTHS[m[1]]) return "";
+  return `${m[3]}-${pad2(EN_MONTHS[m[1]])}-${pad2(m[2])}`;
+}
+
+/** "Fri, Jul 24 – Thu, Jul 30, 2026" → ["2026-07-24", "2026-07-30"]; đầu kỳ thiếu năm thì mượn năm cuối kỳ. */
+export function parseEnStay(value) {
+  const parts = [...String(value ?? "").matchAll(/\b([A-Z][a-z]{2}) (\d{1,2})(?:, (\d{4}))?/g)]
+    .filter((m) => EN_MONTHS[m[1]])
+    .map((m) => ({ month: EN_MONTHS[m[1]], day: Number(m[2]), year: m[3] ? Number(m[3]) : null }));
+  if (parts.length < 2) return ["", ""];
+  const [a, b] = parts;
+  const endYear = b.year ?? a.year;
+  if (!endYear) return ["", ""];
+  const startYear = a.year ?? (a.month > b.month ? endYear - 1 : endYear);
+  return [`${startYear}-${pad2(a.month)}-${pad2(a.day)}`, `${endYear}-${pad2(b.month)}-${pad2(b.day)}`];
+}
+
+/** Gom mọi chuỗi "text" trong một khối giao diện (Expedia trả nội dung dưới dạng khối hiển thị). */
+function collectText(node) {
+  if (node == null) return [];
+  if (typeof node === "string") return [];
+  if (Array.isArray(node)) return node.flatMap(collectText);
+  if (typeof node === "object") {
+    const own = typeof node.text === "string" ? [node.text] : [];
+    return own.concat(Object.entries(node).filter(([k]) => k !== "text").flatMap(([, v]) => collectText(v)));
+  }
+  return [];
+}
+
+/** Câu Expedia hiện thay cho nhận xét khi khách không viết gì. */
+const EXPEDIA_NO_COMMENT = /^This guest didn't leave a comment\.?$/i;
+
+export function normalizeExpedia(item, { hotel, channelHotelId }) {
+  const row = baseRow("expedia", hotel, channelHotelId, item.reviewCardIdentifier);
+  const traveler = item.traveler ?? {};
+  row.bookingCode = text(item.bookingIdentifier?.orderRefNumber);
+  row.reviewDate = parseEnDate(item.postedDate?.text);
+  [row.checkIn, row.checkOut] = parseEnStay(traveler.details?.[0]?.text);
+  const rating = String(item.rating?.[0]?.text ?? "").match(/([\d.,]+)\s*\/\s*(\d+)/);
+  if (rating) {
+    row.score = Number(rating[1].replace(",", "."));
+    row.scale = Number(rating[2]);
+  }
+  row.title = text(item.title);
+  row.comment = (item.content?.content ?? [])
+    .map((c) => text(c?.text))
+    .filter((t) => t && !EXPEDIA_NO_COMMENT.test(t))
+    .join("\n");
+  // Dạng của "response" chưa đo được (đo 08/10/2026: 0 bài có phản hồi) ⇒ gom mọi chữ bên trong.
+  if (item.response) row.reply = collectText(item.response).join("\n").trim();
+  const clean = { ...item, traveler: { ...traveler, name: undefined, title: undefined, avatar: undefined } };
+  row.raw = rawJson("expedia", clean);
+  return { review: finish(row), scores: [] };
+}
+
 function scoreRow(review, code, name, score, scale) {
   return {
     key: `${review.key}|${code}`,
@@ -216,6 +320,8 @@ const NORMALIZERS = {
   booking: normalizeBooking,
   agoda: normalizeAgoda,
   trip: normalizeTrip,
+  traveloka: normalizeTraveloka,
+  expedia: normalizeExpedia,
 };
 
 /** Chuẩn hoá cả lô của một kênh. Bài lỗi không làm hỏng cả lô: được đếm và báo lại. */

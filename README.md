@@ -1,6 +1,6 @@
 # UrbanB — Thu review OTA
 
-Chrome extension đọc review của khách sạn từ extranet **Booking**, **Agoda** và **Trip**
+Chrome extension đọc review của khách sạn từ extranet **Booking**, **Agoda**, **Trip**, **Expedia** và **Traveloka**
 bằng phiên đăng nhập sẵn có trên máy, rồi gom tất cả về một Google Sheet chung.
 Mỗi khách sạn cài một bản trên máy của mình.
 
@@ -23,5 +23,5 @@ Làm theo [docs/cai-dat.md](docs/cai-dat.md).
 
 ## Giới hạn
 
-Endpoint là API nội bộ của extranet, đo ngày 07/10/2026. Khi kênh đổi giao diện,
+Endpoint là API nội bộ của extranet, đo ngày 07–08/10/2026. Khi kênh đổi giao diện,
 extension sẽ báo lỗi ở kênh đó và phải sửa `extension/scanners.js`.

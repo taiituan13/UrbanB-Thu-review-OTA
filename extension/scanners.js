@@ -116,6 +116,111 @@ export async function scanTripInPage() {
   return { ok: true, total, reviews, channelHotelId: masterHotelId, snapshots: [] };
 }
 
+/**
+ * Traveloka — chạy trên tera.traveloka.com/…/guest-review/ (đo 08/10/2026).
+ * Dùng lại request getHotelReviews mà trang đã gửi (capture.js ghi lại), chỉ đổi bộ lọc và phân trang.
+ */
+export async function scanTravelokaInPage() {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let cap = null;
+  for (let i = 0; i < 60 && !cap; i++) {
+    cap = window.__urbanbCap?.traveloka;
+    if (!cap) await sleep(500);
+  }
+  if (!cap) return { ok: false, error: "Không bắt được request review của trang Traveloka" };
+
+  const template = JSON.parse(cap.init.body);
+  const pageSize = 10; // trang tự dùng 10; xin nhiều hơn vẫn được, nhưng chưa đo được trần
+  const reviews = [];
+  let total = null;
+  let aggregate = null;
+  for (let skip = 0; skip < 5000; skip += pageSize) {
+    const body = structuredClone(template);
+    body.data.top = pageSize;
+    body.data.skip = skip;
+    // filterType null = tất cả (kể cả bài chỉ chấm điểm); giá trị khác "null" như "ALL" bị trả 400.
+    body.data.filterSortSpec = { filterType: null, dateRangeStart: null, dateRangeEnd: null, sortType: "NEWEST_TIMESTAMP" };
+    const res = await fetch(cap.url, { ...cap.init, body: JSON.stringify(body) });
+    if (!res.ok) return { ok: false, error: `Traveloka HTTP ${res.status}` };
+    const j = await res.json();
+    const d = j.data ?? {};
+    const page = d.reviewList ?? [];
+    total = Number(d.numReviewEntries ?? total);
+    aggregate = aggregate ?? d.aggregateInfo ?? null;
+    reviews.push(...page);
+    if (page.length < pageSize || (Number.isFinite(total) && reviews.length >= total)) break;
+    await sleep(800);
+  }
+
+  const snapshots = [];
+  if (aggregate) {
+    const n = Number(aggregate.numOfReviews);
+    const add = (code, name, value) => {
+      const s = Number(value);
+      if (Number.isFinite(s)) snapshots.push({ category: name, categoryCode: code, score: s, scale: 10, reviewCount: n });
+    };
+    add("overall", "Tổng", aggregate.overallScore);
+    add("cleanliness", "Sạch sẽ", aggregate.cleanlinessScore);
+    add("comfort", "Thoải mái", aggregate.comfortScore);
+    add("service", "Dịch vụ", aggregate.serviceScore);
+    add("food", "Đồ ăn", aggregate.foodScore);
+    add("location", "Vị trí", aggregate.locationScore);
+  }
+  return { ok: true, total, reviews, channelHotelId: String(template.data?.hotelId ?? ""), snapshots };
+}
+
+/**
+ * Expedia — chạy trên apps.expediapartnercentral.com/supply/reviews/post-stay-reviews (đo 08/10/2026).
+ * GraphQL persisted query SupplyReviewsQuery; dùng lại request của trang, bỏ bộ lọc, lật từng trang.
+ * Ép locale en_US để chữ ngày/điểm luôn cùng một dạng cho bộ chuẩn hoá.
+ */
+export async function scanExpediaInPage() {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let cap = null;
+  for (let i = 0; i < 60 && !cap; i++) {
+    cap = window.__urbanbCap?.expedia;
+    if (!cap) await sleep(500);
+  }
+  if (!cap) return { ok: false, error: "Không bắt được request review của trang Expedia" };
+
+  const template = JSON.parse(cap.init.body);
+  const ops = Array.isArray(template) ? template : [template];
+  const op = ops.find((o) => o.operationName === "SupplyReviewsQuery");
+  if (!op) return { ok: false, error: "Request Expedia không có SupplyReviewsQuery" };
+  const propertyId = String(op.variables?.propertyContext?.propertyId ?? "");
+
+  const reviews = [];
+  let totalPages = 1;
+  let insight = null;
+  for (let page = 1; page <= totalPages && page < 200; page++) {
+    const body = structuredClone(template);
+    const target = (Array.isArray(body) ? body : [body]).find((o) => o.operationName === "SupplyReviewsQuery");
+    target.variables.reviewsContext = { ...target.variables.reviewsContext, filters: [], page };
+    target.variables.reviewId = "";
+    if (target.variables.context) target.variables.context.locale = "en_US";
+    const res = await fetch(cap.url, { ...cap.init, body: JSON.stringify(body) });
+    if (!res.ok) return { ok: false, error: `Expedia HTTP ${res.status}` };
+    const j = await res.json();
+    const one = Array.isArray(j) ? j[0] : j;
+    if (one.errors?.length) return { ok: false, error: "Expedia báo lỗi: " + one.errors.map((e) => e.message).join("; ").slice(0, 300) };
+    const d = one.data?.supplyReviews ?? {};
+    reviews.push(...(d.list ?? []));
+    totalPages = Number(d.pagination?.totalPages ?? 1) || 1;
+    insight = insight ?? d.insightsSecondaryPane?.modules?.find((m) => m?.overAllRating != null) ?? null;
+    if (page < totalPages) await sleep(800);
+  }
+
+  const snapshots = [];
+  let total = null;
+  if (insight) {
+    const s = Number(String(insight.overAllRating).replace(",", "."));
+    const n = Number(String(insight.totalReviews ?? "").match(/\d+/)?.[0]);
+    if (Number.isFinite(n)) total = n;
+    if (Number.isFinite(s)) snapshots.push({ category: "Tổng", categoryCode: "overall", score: s, scale: 10, reviewCount: total ?? "" });
+  }
+  return { ok: true, total, reviews, channelHotelId: propertyId, snapshots };
+}
+
 /** Booking — trên trang chủ (nhóm hoặc một chỗ nghỉ): lấy ses và danh sách mã chỗ nghỉ thấy được. */
 export function bookingSessionInPage() {
   const ses = new URLSearchParams(location.search).get("ses");

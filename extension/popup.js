@@ -1,7 +1,7 @@
 import { CHANNELS, CHANNEL_LABEL, loadConfig, loadStatus, saveConfig } from "./config.js";
 
 const $ = (id) => document.getElementById(id);
-const FIELDS = ["hotel", "sheetUrl", "secret", "bookingHotelId", "agodaPropertyId", "intervalHours"];
+const FIELDS = ["hotel", "sheetUrl", "secret", "bookingHotelId", "agodaPropertyId", "expediaPropertyId", "intervalHours"];
 const STATE_TEXT = { ok: "ổn", error: "lỗi", login: "cần đăng nhập lại" };
 
 function note(text) {

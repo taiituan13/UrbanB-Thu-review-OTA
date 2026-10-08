@@ -2,7 +2,14 @@
 
 import { CHANNELS, VERSION, loadConfig, saveChannelStatus, loadStatus } from "./config.js";
 import { normalizeBatch } from "./normalize.js";
-import { bookingSessionInPage, scanAgodaInPage, scanBookingInPage, scanTripInPage } from "./scanners.js";
+import {
+  bookingSessionInPage,
+  scanAgodaInPage,
+  scanBookingInPage,
+  scanExpediaInPage,
+  scanTravelokaInPage,
+  scanTripInPage,
+} from "./scanners.js";
 
 const ALARM = "scan";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -79,6 +86,9 @@ const LOGIN_PATTERNS = {
   booking: (u) => u.hostname === "account.booking.com" || u.pathname.includes("sign-in"),
   agoda: (u) => u.pathname.includes("/public/login"),
   trip: (u) => u.pathname.startsWith("/login"),
+  expedia: (u) => /\/account\/logon/i.test(u.pathname),
+  // Chưa đo được trang đăng nhập Traveloka (lúc đo đã đăng nhập sẵn) ⇒ nhận diện rộng.
+  traveloka: (u) => !u.hostname.startsWith("tera.") || /login|sign-?in/i.test(u.pathname),
 };
 
 function needsLogin(channel, url) {
@@ -138,7 +148,19 @@ async function scanTrip(tabId) {
   return runInPage(tabId, scanTripInPage);
 }
 
-const SCANNERS = { booking: scanBooking, agoda: scanAgoda, trip: scanTrip };
+async function scanExpedia(tabId, cfg) {
+  const pid = String(cfg.expediaPropertyId || "").trim();
+  const url = "https://apps.expediapartnercentral.com/supply/reviews/post-stay-reviews" + (pid ? `?htid=${encodeURIComponent(pid)}` : "");
+  assertLoggedIn("expedia", await go(tabId, url));
+  return runInPage(tabId, scanExpediaInPage);
+}
+
+async function scanTraveloka(tabId) {
+  assertLoggedIn("traveloka", await go(tabId, "https://tera.traveloka.com/vi-vn/guest-review/"));
+  return runInPage(tabId, scanTravelokaInPage);
+}
+
+const SCANNERS = { booking: scanBooking, agoda: scanAgoda, trip: scanTrip, expedia: scanExpedia, traveloka: scanTraveloka };
 
 // ---------- Gửi về Google Sheet ----------
 
