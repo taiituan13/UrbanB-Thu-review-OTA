@@ -1,6 +1,6 @@
 // Mã cài đặt: một chuỗi gộp tên khách sạn, URL Web App, mã bí mật và các kênh, để người cài
-// dán vào một ô thay vì gõ tay chuỗi bí mật 64 ký tự. Người quản lý tạo mã trong Sheet
-// (menu Review OTA › Tạo mã cài đặt, hàm setupCodeMenu trong Code.gs).
+// dán vào một ô thay vì gõ tay chuỗi bí mật 64 ký tự. Tạm không dùng (08/10/2026): ô mã trong
+// popup đã ẩn và menu tạo mã trong Sheet đã bỏ; setupPayload trong Code.gs vẫn dựng được mã.
 //
 // Dạng: "UBR1-" + base64 an toàn cho URL (có thể còn dấu "=") của JSON UTF-8
 // { v: 1, hotel, sheetUrl, secret, channels: [...] }.
