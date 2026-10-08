@@ -234,6 +234,59 @@ export async function scanExpediaInPage() {
   return { ok: true, total, reviews, channelHotelId: propertyId, snapshots };
 }
 
+/**
+ * Go2Joy — chạy trên ha.go2joy.vn/review-detail (đo 08/10/2026).
+ * Dùng lại request getUserReviewList mà trang đã gửi (capture.js bắt qua XHR); một lượt
+ * limit=500 đã trả đủ 339 bài, vẫn lật trang phòng khi khách sạn có nhiều hơn.
+ */
+export async function scanGo2joyInPage() {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let cap = null;
+  for (let i = 0; i < 60 && !cap; i++) {
+    cap = window.__urbanbCap?.go2joy;
+    if (!cap) await sleep(500);
+  }
+  if (!cap) return { ok: false, error: "Không bắt được request review của trang Go2Joy" };
+
+  const url = new URL(cap.url);
+  const limit = 500;
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("tab", "1"); // 1 = "Tất cả"; 2 = "Chưa phản hồi"
+  url.searchParams.set("sortBy", "1"); // 1 = "Mới nhất"
+  const reviews = [];
+  let total = null;
+  let info = null;
+  for (let page = 1; page < 50; page++) {
+    url.searchParams.set("page", String(page));
+    const res = await fetch(url, { method: cap.init.method || "GET", headers: cap.init.headers });
+    if (!res.ok) return { ok: false, error: `Go2Joy HTTP ${res.status}` };
+    const j = await res.json();
+    if (j.code !== 1) return { ok: false, error: "Go2Joy báo lỗi: " + String(j.message ?? j.code).slice(0, 200) };
+    const d = j.data ?? {};
+    const list = d.userReviewList ?? [];
+    reviews.push(...list);
+    total = Number(d.meta?.total ?? total);
+    info = info ?? d.additionalData ?? null;
+    if (list.length < limit || page >= Number(d.meta?.lastPage ?? page)) break;
+    await sleep(800);
+  }
+
+  // Điểm trung bình khách sạn (thang 5) Go2Joy công bố, kèm ba hạng mục.
+  const snapshots = [];
+  if (info) {
+    const n = Number(info.totalReview);
+    const add = (code, name, value) => {
+      const s = Number(value);
+      if (value != null && Number.isFinite(s)) snapshots.push({ category: name, categoryCode: code, score: s, scale: 5, reviewCount: Number.isFinite(n) ? n : "" });
+    };
+    add("overall", "Tổng", info.averageMark);
+    add("clean", "Sạch sẽ", info.averageMarkClean);
+    add("facility", "Tiện ích", info.averageMarkFacility);
+    add("service", "Dịch vụ", info.averageMarkService);
+  }
+  return { ok: true, total, reviews, channelHotelId: url.searchParams.get("hotelSn") ?? String(info?.sn ?? ""), snapshots };
+}
+
 /** Expedia — trên trang chọn chỗ nghỉ (/manageproperty/): mã các chỗ nghỉ tài khoản thấy được. */
 export function expediaPropertiesInPage() {
   const ids = [...document.querySelectorAll('a[href*="htid="]')]

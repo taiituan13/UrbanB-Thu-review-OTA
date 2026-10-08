@@ -211,6 +211,8 @@ test("Nhật ký lỗi giữ mã lỗi đúng dạng; mã lạ (có thể là c�
   const ok = plain(cleanLogs([{ ref: "E-7K3QX2", code: "BKG-LOGIN", stage: "đăng nhập" }], dev(), T0))[0];
   assert.equal(ok.ref, "E-7K3QX2");
   assert.equal(ok.code, "BKG-LOGIN");
+  const g2j = plain(cleanLogs([{ ref: "E-7K3QX2", code: "G2J-LOGIN", stage: "đăng nhập" }], dev(), T0))[0];
+  assert.equal(g2j.code, "G2J-LOGIN", "tiền tố kênh có chữ số (Go2Joy) vẫn được nhận");
   const bad = plain(cleanLogs([{ ref: "=HYPERLINK(1)", code: "bkg login; drop" }], dev(), T0))[0];
   assert.equal(bad.ref, "");
   assert.equal(bad.code, "");

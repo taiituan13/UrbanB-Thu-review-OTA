@@ -21,6 +21,7 @@ import {
   scanExpediaInPage,
   expediaPropertiesInPage,
   pickPropertyId,
+  scanGo2joyInPage,
   scanTravelokaInPage,
   scanTripInPage,
 } from "./scanners.js";
@@ -106,6 +107,8 @@ const LOGIN_PATTERNS = {
   expedia: (u) => /\/account\/logon/i.test(u.pathname),
   // Chưa đo được trang đăng nhập Traveloka (lúc đo đã đăng nhập sẵn) ⇒ nhận diện rộng.
   traveloka: (u) => !u.hostname.startsWith("tera.") || /login|sign-?in/i.test(u.pathname),
+  // Chưa đo được trang đăng nhập Go2Joy ⇒ rời trang đánh giá là coi như hết phiên.
+  go2joy: (u) => u.hostname !== "ha.go2joy.vn" || !u.pathname.startsWith("/review-detail"),
 };
 
 function needsLogin(channel, url) {
@@ -185,7 +188,19 @@ async function scanTraveloka(tabId) {
   return runInPage(tabId, scanTravelokaInPage);
 }
 
-const SCANNERS = { booking: scanBooking, agoda: scanAgoda, trip: scanTrip, expedia: scanExpedia, traveloka: scanTraveloka };
+async function scanGo2joy(tabId) {
+  assertLoggedIn("go2joy", await go(tabId, "https://ha.go2joy.vn/review-detail"));
+  return runInPage(tabId, scanGo2joyInPage);
+}
+
+const SCANNERS = {
+  booking: scanBooking,
+  agoda: scanAgoda,
+  trip: scanTrip,
+  expedia: scanExpedia,
+  traveloka: scanTraveloka,
+  go2joy: scanGo2joy,
+};
 
 // ---------- Gửi về Google Sheet ----------
 

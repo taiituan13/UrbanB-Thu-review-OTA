@@ -12,6 +12,7 @@ const STRIP_FIELDS = {
   // Expedia: tên khách nằm ở traveler.name/title — gỡ riêng trong normalizeExpedia vì "title"
   // cũng là tiêu đề bài. Hai khoá dưới chỉ là phần trang trí giao diện, bỏ cho JSON gốc gọn.
   expedia: ["analytics", "icon"],
+  go2joy: ["userNickName"],
 };
 
 /** Giới hạn một ô Google Sheet là 50.000 ký tự; chừa lề. */
@@ -303,6 +304,44 @@ export function normalizeExpedia(item, { hotel, channelHotelId }) {
   return { review: finish(row), scores: [] };
 }
 
+/**
+ * Loại đặt phòng Go2Joy (đo 08/10/2026 trên 339 bài): 1 và 2 khớp nhãn giao diện; 3 suy từ thời
+ * lượng lưu trú — loại 1 dài 1–6 giờ, loại 2 đúng 14 giờ, loại 3 đúng 22 giờ.
+ */
+const GO2JOY_BOOKING_TYPE = { 1: "Theo giờ", 2: "Qua đêm", 3: "Theo ngày" };
+
+/** Điểm hạng mục từng bài của Go2Joy (thang 5), tên đúng chữ trên trang. */
+const GO2JOY_CATEGORIES = [
+  ["markClean", "clean", "Sạch sẽ"],
+  ["markFacility", "facility", "Tiện ích"],
+  ["markService", "service", "Dịch vụ"],
+];
+
+/**
+ * Go2Joy ghi giờ dạng "2026-10-08 11:12:28", không kèm múi giờ, và giao diện hiện đúng con số
+ * đó ⇒ coi là giờ Việt Nam, giữ nguyên như Booking để ngày review không bị lùi.
+ */
+export function normalizeGo2joy(item, { hotel, channelHotelId }) {
+  const row = baseRow("go2joy", hotel, channelHotelId, item.sn);
+  row.bookingCode = text(item.bookingNo);
+  row.reviewDate = bookingDate(item.createTime);
+  row.checkIn = bookingDate(item.checkInTime);
+  row.checkOut = bookingDate(item.checkOutTime);
+  row.roomType = text(item.roomTypeName);
+  row.guestType = GO2JOY_BOOKING_TYPE[item.bookingType] ?? text(item.bookingType);
+  row.score = typeof item.averageMark === "number" ? item.averageMark : null;
+  row.scale = 5;
+  row.comment = text(item.comment);
+  // Chưa đo được bài nào có phản hồi (0/339 ngày 08/10/2026) ⇒ đoán theo tên trường.
+  row.reply = text(item.staffReply);
+  row.replyDate = row.reply ? bookingDate(item.staffReplyTime) : "";
+  row.raw = rawJson("go2joy", item);
+  const scores = GO2JOY_CATEGORIES.filter(([field]) => typeof item[field] === "number").map(([field, code, name]) =>
+    scoreRow(row, code, name, item[field], 5),
+  );
+  return { review: finish(row), scores };
+}
+
 function scoreRow(review, code, name, score, scale) {
   return {
     key: `${review.key}|${code}`,
@@ -322,6 +361,7 @@ const NORMALIZERS = {
   trip: normalizeTrip,
   traveloka: normalizeTraveloka,
   expedia: normalizeExpedia,
+  go2joy: normalizeGo2joy,
 };
 
 /** Chuẩn hoá cả lô của một kênh. Bài lỗi không làm hỏng cả lô: được đếm và báo lại. */

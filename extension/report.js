@@ -49,7 +49,14 @@ export function stripUrl(url) {
   }
 }
 
-export const CHANNEL_LABEL = { booking: "Booking", agoda: "Agoda", trip: "Trip", expedia: "Expedia", traveloka: "Traveloka" };
+export const CHANNEL_LABEL = {
+  booking: "Booking",
+  agoda: "Agoda",
+  trip: "Trip",
+  expedia: "Expedia",
+  traveloka: "Traveloka",
+  go2joy: "Go2Joy",
+};
 
 // ---------- Mã lỗi ----------
 //
@@ -68,7 +75,7 @@ export function makeErrorRef(random = (n) => crypto.getRandomValues(new Uint8Arr
   return "E-" + s;
 }
 
-const CHANNEL_PREFIX = { booking: "BKG", agoda: "AGD", trip: "TRP", expedia: "EXP", traveloka: "TVL" };
+const CHANNEL_PREFIX = { booking: "BKG", agoda: "AGD", trip: "TRP", expedia: "EXP", traveloka: "TVL", go2joy: "G2J" };
 
 /**
  * Danh mục loại lỗi; luật đầu tiên khớp thắng. `hint` là việc nhân viên khách sạn tự làm được,

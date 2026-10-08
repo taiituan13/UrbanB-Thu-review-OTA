@@ -4,9 +4,9 @@ export { CHANNEL_LABEL };
 
 // Cấu hình của một bản cài (một khách sạn), lưu trong chrome.storage.local.
 
-export const VERSION = "0.4.1";
+export const VERSION = "0.5.0";
 
-export const CHANNELS = ["booking", "agoda", "trip", "expedia", "traveloka"];
+export const CHANNELS = ["booking", "agoda", "trip", "expedia", "traveloka", "go2joy"];
 
 export const DEFAULT_CONFIG = {
   sheetUrl: "", // URL Web App của Apps Script (…/exec)
@@ -14,9 +14,9 @@ export const DEFAULT_CONFIG = {
   hotel: "", // tên khách sạn, ghi vào cột "Khách sạn"
   bookingHotelId: "", // bắt buộc nếu tài khoản Booking thấy nhiều chỗ nghỉ
   agodaPropertyId: "", // để trống ⇒ tự dò từ trang chủ Agoda
-  expediaPropertyId: "", // để trống ⇒ khách sạn đang chọn trên Expedia
-  // Expedia và Traveloka tắt sẵn: không phải khách sạn nào cũng có, bật nhầm thì đèn báo cam mãi.
-  enabled: { booking: true, agoda: true, trip: true, expedia: false, traveloka: false },
+  expediaPropertyId: "", // để trống ⇒ tự dò khi tài khoản chỉ có một khách sạn
+  // Expedia, Traveloka, Go2Joy tắt sẵn: không phải khách sạn nào cũng có, bật nhầm thì đèn báo cam mãi.
+  enabled: { booking: true, agoda: true, trip: true, expedia: false, traveloka: false, go2joy: false },
   intervalHours: 6,
 };
 

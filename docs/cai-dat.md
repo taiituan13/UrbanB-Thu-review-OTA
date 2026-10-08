@@ -1,7 +1,7 @@
 # Cài đặt: extension thu review → Google Sheet
 
 Mỗi khách sạn cài một bản extension trên máy đang đăng nhập sẵn các extranet
-(Booking, Agoda, Trip, Expedia, Traveloka). Mọi bản cài cùng ghi vào **một** Google Sheet chung.
+(Booking, Agoda, Trip, Expedia, Traveloka, Go2Joy). Mọi bản cài cùng ghi vào **một** Google Sheet chung.
 Extension chỉ đọc: nó không trả lời review, không đổi cài đặt nào trên extranet.
 
 ## 1. Tạo Google Sheet và điểm nhận (làm một lần, ở máy quản lý)
@@ -58,8 +58,8 @@ cũng không cần làm gì: dấu đã nhớ hỏng thì lượt ghi kế tiế
    - **Tên khách sạn**: ghi vào cột "Khách sạn", và là tên của máy trong tab `Máy cài`.
      Mỗi máy một tên, viết thống nhất.
    - **URL Web App** và **Mã bí mật**: lấy từ bước 1.
-   - **Kênh quét**: bỏ chọn kênh mà khách sạn không có. Expedia và Traveloka mặc định
-     **tắt**; khách sạn có hai kênh này thì tick vào.
+   - **Kênh quét**: bỏ chọn kênh mà khách sạn không có. Expedia, Traveloka và Go2Joy mặc
+     định **tắt**; khách sạn có các kênh này thì tick vào.
    - **Mã Booking**: chỉ cần điền khi tài khoản Booking thấy nhiều chỗ nghỉ.
    - **Mã Agoda**: để trống thì extension tự dò.
    - **Mã Expedia**: để trống thì extension tự dò khi tài khoản chỉ có một khách sạn; tài
@@ -109,9 +109,10 @@ Người quản lý không cần tới tận máy:
   không thêm dòng mới; nếu nội dung đổi (khách sửa bài, khách sạn trả lời) thì dòng
   được cập nhật, và cột "Lần cuối thấy" luôn được dời.
 - **Điểm hạng mục**: điểm từng hạng mục của từng bài, giữ **tên gốc** của kênh.
-  Agoda, Traveloka và Expedia không có điểm hạng mục theo bài.
-- **Điểm tổng hợp**: điểm cấp khách sạn mà kênh tự tính — Agoda và Traveloka có từng
-  hạng mục, Expedia chỉ có điểm tổng.
+  Agoda, Traveloka và Expedia không có điểm hạng mục theo bài. Go2Joy có ba hạng mục
+  theo bài: Sạch sẽ, Tiện ích, Dịch vụ.
+- **Điểm tổng hợp**: điểm cấp khách sạn mà kênh tự tính — Agoda, Traveloka và Go2Joy có
+  từng hạng mục, Expedia chỉ có điểm tổng.
   Mỗi lượt quét thêm một bộ dòng, nên xem được điểm đi lên hay đi xuống.
 - **Lượt quét**: nhật ký.
 - **Máy cài**, **Nhật ký lỗi**: xem mục 3.
@@ -122,8 +123,9 @@ Nhật ký lỗi không chứa phiên đăng nhập: URL bị cắt bỏ mọi t
 Tên khách bị gỡ trước khi gửi. Mã đặt phòng thì vẫn giữ, vì đó là thứ nối review về
 lượt lưu trú.
 
-Thang điểm: cả năm kênh đều dùng thang 10. Cột "Thang" vẫn được ghi để
-sau này thêm kênh khác thang không phải sửa dữ liệu cũ.
+Thang điểm: Booking, Agoda, Trip, Expedia, Traveloka dùng thang 10; Go2Joy dùng thang 5.
+Các tab Review, Điểm hạng mục, Điểm tổng hợp giữ điểm gốc kèm cột "Thang"; tab Thống kê
+tự quy mọi điểm về thang 10.
 
 ## 5. Giới hạn đã biết
 
@@ -136,9 +138,13 @@ sau này thêm kênh khác thang không phải sửa dữ liệu cũ.
 - Trip mới đọc nguồn Trip.com (`channelSource = 1`); bài từ Qunar/Ly.com chưa thu.
 - Expedia gom bài của mọi thương hiệu trong nhóm (Expedia, Hotels.com, Travelocity…);
   thương hiệu mới nằm trong cột dữ liệu gốc, chưa tách thành cột riêng.
-- Expedia và Traveloka: extension dùng lại request mà chính trang gửi, nên trang review
+- Expedia, Traveloka và Go2Joy: extension dùng lại request mà chính trang gửi, nên trang review
   phải tải được bình thường. Dạng phản hồi của khách sạn trên Expedia và trang đăng nhập
   của Traveloka **chưa đo** (khách sạn đo thử chưa có phản hồi nào, và phiên chưa hết hạn);
   lần đầu gặp có thể báo đỏ thay vì cam.
+- Go2Joy: giờ review được hiểu là giờ Việt Nam. Extension nhận ra phiên hết hạn khi trang
+  bị đẩy khỏi `/review-detail`. Tài khoản quản nhiều khách sạn thì quét khách sạn đang
+  được chọn trên trang. Dạng phản hồi của khách sạn **chưa đo** (khách sạn đo thử có
+  339 bài, chưa bài nào được trả lời).
 - Endpoint là API nội bộ của extranet, đo ngày 07–08/10/2026. Kênh đổi giao diện thì
   extension sẽ báo đỏ, và phải sửa `extension/scanners.js`.

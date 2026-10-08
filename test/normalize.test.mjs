@@ -210,3 +210,65 @@ test("Expedia: kỳ lưu trú vắt qua năm", () => {
   assert.equal(parseEnDate("Posted Jun 2, 2026"), "2026-06-02");
   assert.equal(parseEnDate("Đăng ngày 2/6"), "");
 });
+
+// Dạng một bài Go2Joy, đo 08/10/2026 (Linh Đan Hotel); tên khách đã thay bằng tên giả.
+const go2joy = {
+  sn: 1154406,
+  markClean: 5,
+  markFacility: 4,
+  markService: 4.5,
+  averageMark: 4.5,
+  comment: "Phòng sạch, nhân viên thân thiện",
+  userNickName: "Khách Thử Nghiệm",
+  createTime: "2026-10-08 05:12:28",
+  numOfLike: 0,
+  staffReplyName: null,
+  staffReplyTime: null,
+  staffReply: null,
+  status: 1,
+  roomTypeName: "Honey Moon",
+  bookingSn: 4756509,
+  bookingNo: 4856509,
+  bookingType: 1,
+  bookingStatus: 2,
+  checkInTime: "2026-10-08 01:00:00",
+  checkOutTime: "2026-10-08 04:00:00",
+};
+
+test("Go2Joy: thang 5, giờ Việt Nam giữ nguyên ngày, ba điểm hạng mục, gỡ tên khách", () => {
+  const { reviews, scores } = normalizeBatch("go2joy", [go2joy], { hotel: "Linh Đan", channelHotelId: "10715" });
+  const r = reviews[0];
+  assert.equal(r.key, "go2joy|1154406");
+  assert.equal(r.channelHotelId, "10715");
+  assert.equal(r.bookingCode, "4856509");
+  assert.equal(r.score, 4.5);
+  assert.equal(r.scale, 5);
+  // 05:12 giờ Việt Nam đổi sang UTC sẽ lùi về ngày 07; giữ nguyên thì đúng ngày 08.
+  assert.equal(r.reviewDate, "2026-10-08T05:12:28");
+  assert.equal(r.checkIn, "2026-10-08T01:00:00");
+  assert.equal(r.checkOut, "2026-10-08T04:00:00");
+  assert.equal(r.roomType, "Honey Moon");
+  assert.equal(r.guestType, "Theo giờ");
+  assert.equal(r.comment, "Phòng sạch, nhân viên thân thiện");
+  assert.equal(r.reply, "");
+  assert.ok(!r.raw.includes("Khách Thử Nghiệm"), "tên khách phải bị gỡ");
+  assert.deepEqual(
+    scores.map((s) => [s.categoryCode, s.category, s.score, s.scale]),
+    [["clean", "Sạch sẽ", 5, 5], ["facility", "Tiện ích", 4, 5], ["service", "Dịch vụ", 4.5, 5]],
+  );
+});
+
+test("Go2Joy: không nhận xét, có phản hồi, loại đặt phòng lạ", () => {
+  const r = normalizeBatch("go2joy", [{
+    ...go2joy,
+    comment: null,
+    staffReply: "Cảm ơn anh chị",
+    staffReplyTime: "2026-10-09 08:00:00",
+    bookingType: 9,
+  }], {}).reviews[0];
+  assert.equal(r.comment, "");
+  assert.equal(r.reply, "Cảm ơn anh chị");
+  assert.equal(r.replyDate, "2026-10-09T08:00:00");
+  assert.equal(r.guestType, "9", "loại lạ giữ nguyên số để còn tra");
+  assert.equal(normalizeBatch("go2joy", [{ ...go2joy, bookingType: 2 }], {}).reviews[0].guestType, "Qua đêm");
+});

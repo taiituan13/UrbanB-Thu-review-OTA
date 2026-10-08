@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "UrbanB — Thu review OTA",
-  "version": "0.4.1",
-  "description": "Đọc review từ extranet Booking, Agoda, Trip, Expedia, Traveloka bằng phiên đăng nhập sẵn có và gom vào Google Sheet. Chỉ đọc.",
+  "version": "0.5.0",
+  "description": "Đọc review từ extranet Booking, Agoda, Trip, Expedia, Traveloka, Go2Joy bằng phiên đăng nhập sẵn có và gom vào Google Sheet. Chỉ đọc.",
   "permissions": ["storage", "alarms", "scripting", "tabs"],
   "host_permissions": [
     "https://admin.booking.com/*",
@@ -13,13 +13,14 @@
     "https://www.expediapartnercentral.com/*",
     "https://apps.expediapartnercentral.com/*",
     "https://tera.traveloka.com/*",
+    "https://ha.go2joy.vn/*",
     "https://script.google.com/*",
     "https://script.googleusercontent.com/*"
   ],
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [
     {
-      "matches": ["https://tera.traveloka.com/*", "https://apps.expediapartnercentral.com/*"],
+      "matches": ["https://tera.traveloka.com/*", "https://apps.expediapartnercentral.com/*", "https://ha.go2joy.vn/*"],
       "js": ["capture.js"],
       "run_at": "document_start",
       "world": "MAIN"

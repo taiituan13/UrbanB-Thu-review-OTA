@@ -1,6 +1,6 @@
 # UrbanB — Thu review OTA
 
-Chrome extension đọc review của khách sạn từ extranet **Booking**, **Agoda**, **Trip**, **Expedia** và **Traveloka**
+Chrome extension đọc review của khách sạn từ extranet **Booking**, **Agoda**, **Trip**, **Expedia**, **Traveloka** và **Go2Joy**
 bằng phiên đăng nhập sẵn có trên máy, rồi gom tất cả về một Google Sheet chung.
 Mỗi khách sạn cài một bản trên máy của mình.
 

@@ -35,7 +35,7 @@ Lỗi gửi Sheet (sai mã bí mật, sai URL…) không thuộc kênh nào, nê
 
 ## Danh mục loại lỗi
 
-Tiền tố kênh: `BKG` Booking · `AGD` Agoda · `TRP` Trip · `EXP` Expedia · `TVL` Traveloka.
+Tiền tố kênh: `BKG` Booking · `AGD` Agoda · `TRP` Trip · `EXP` Expedia · `TVL` Traveloka · `G2J` Go2Joy.
 Các loại không có tiền tố kênh bắt đầu bằng `SHEET`.
 
 ### Lỗi theo kênh (`<kênh>-…`)

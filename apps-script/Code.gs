@@ -352,7 +352,7 @@ function buildStats(reviews, runs, scores, snapshots, nowIso) {
 // ---------- Máy cài và nhật ký lỗi (hàm thuần) ----------
 
 var HOUR_MS = 3600000;
-var CHANNEL_NAMES = { booking: "Booking", agoda: "Agoda", trip: "Trip", expedia: "Expedia", traveloka: "Traveloka" };
+var CHANNEL_NAMES = { booking: "Booking", agoda: "Agoda", trip: "Trip", expedia: "Expedia", traveloka: "Traveloka", go2joy: "Go2Joy" };
 var STATE_NAMES = { ok: "ổn", error: "lỗi", login: "cần đăng nhập" };
 
 /** "  Linh  Đan " và "linh dan" là một khách sạn: bỏ dấu, đ → d, gộp khoảng trắng, chữ thường. */
@@ -463,7 +463,7 @@ function cleanLogs(logs, device, nowIso) {
     l = l || {};
     return {
       ref: /^E-[0-9A-Z]{6}$/.test(String(l.ref)) ? l.ref : "",
-      code: /^[A-Z]{2,6}-[A-Z]{2,10}$/.test(String(l.code)) ? l.code : "",
+      code: /^[A-Z][A-Z0-9]{1,5}-[A-Z]{2,10}$/.test(String(l.code)) ? l.code : "", // G2J có chữ số
       at: cut(l.at, 40),
       hotel: cut(String(device.hotel || "").trim(), 200),
       device: String(device.deviceId || "").slice(0, 8),
