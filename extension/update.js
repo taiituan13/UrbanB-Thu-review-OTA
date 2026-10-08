@@ -1,9 +1,9 @@
 // Tự cập nhật cho bản cài giải nén (không qua Chrome Web Store).
 //
-// Trên máy Windows của khách sạn, tác vụ hẹn giờ do windows/cai-dat.ps1 đăng ký tải bản mới
-// từ GitHub và chép đè lên thư mục extension. Chrome không tự nạp lại bản giải nén khi tệp
-// trên đĩa đổi, nên background.js định kỳ đọc manifest.json trên đĩa, so với bản đang chạy,
-// và tự gọi chrome.runtime.reload() khi trên đĩa mới hơn.
+// Trên máy Windows của khách sạn, chạy lại windows/cai-dat.ps1 là chép bản mới từ GitHub đè
+// lên thư mục extension. (Tác vụ hẹn giờ tự chạy lệnh đó đã tạm bỏ 08/10/2026.) Chrome không
+// tự nạp lại bản giải nén khi tệp trên đĩa đổi, nên background.js định kỳ đọc manifest.json
+// trên đĩa, so với bản đang chạy, và tự gọi chrome.runtime.reload() khi trên đĩa mới hơn.
 //
 // Đo ngày 08/10/2026 trên Chromium với chế độ nhà phát triển bật: reload() nạp mã mới từ đĩa,
 // onInstalled báo reason "update", extension vẫn là UNPACKED và không bị tắt. Tắt chế độ nhà

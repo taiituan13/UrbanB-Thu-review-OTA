@@ -49,7 +49,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 /**
- * Bản cài giải nén: tác vụ hẹn giờ của Windows chép bản mới đè lên thư mục (xem update.js).
+ * Bản cài giải nén: chạy lại lệnh cài trên Windows là chép bản mới đè lên thư mục (xem update.js).
  * Trên đĩa mới hơn bản đang chạy ⇒ tự nạp lại. Không nạp giữa lượt quét.
  */
 async function reloadIfDiskNewer() {

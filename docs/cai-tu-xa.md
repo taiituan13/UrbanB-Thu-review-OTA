@@ -1,8 +1,7 @@
 # Cài extension cho khách sạn (Windows)
 
 Cách cài này không qua Chrome Web Store. Người quản lý chuẩn bị một **mã cài đặt**, người cài
-chạy **một lệnh** rồi bấm **bốn bước** trong Chrome. Sau đó máy tự cập nhật: mỗi lần repo có bản
-mới, máy tự tải về trong vòng vài giờ, không ai phải vào máy nữa.
+chạy **một lệnh** rồi bấm **bốn bước** trong Chrome. Muốn cập nhật thì chạy lại đúng lệnh đó.
 
 Người cài có thể là nhân viên khách sạn tự làm theo trang này, hoặc người quản lý vào máy qua
 UltraViewer/TeamViewer. Mỗi máy mất khoảng 5 phút.
@@ -33,8 +32,8 @@ Booking thấy nhiều chỗ nghỉ thì sau khi cài vẫn phải điền mã B
 irm https://raw.githubusercontent.com/taiituan13/UrbanB-Thu-review-OTA/main/windows/cai-dat.ps1 | iex
 ```
 
-Lệnh này tải extension vào `C:\UrbanB\extension`, bật tự cập nhật, chép sẵn đường dẫn thư mục,
-rồi in ra bốn bước tiếp theo.
+Lệnh này tải extension vào `C:\UrbanB\extension`, chép sẵn đường dẫn thư mục, rồi in ra bốn
+bước tiếp theo.
 
 **Bước 2: nạp vào Chrome.**
 
@@ -55,35 +54,31 @@ Dòng chữ xanh hiện "Sheet trả lời: …" là xong.
 Máy đã cài bản giải nén từ thư mục khác trước đây: gỡ bản cũ trong `chrome://extensions` trước,
 rồi làm lại từ bước 1.
 
-## Tự cập nhật chạy thế nào
+## Cập nhật
 
-- Lệnh cài đăng ký tác vụ hẹn giờ **"UrbanB - cap nhat Thu review OTA"** trong Task Scheduler.
-  Tác vụ chạy mỗi 3 giờ từ 7:00 tới 22:00; máy tắt lúc đó thì chạy bù khi bật lên. Mỗi lần chạy,
-  cửa sổ PowerShell có thể loé lên rồi tắt ngay: đó là tác vụ này.
-- Tác vụ so phiên bản trên GitHub với bản trên máy. Có bản mới hơn thì tải về, chép đè
-  `C:\UrbanB\extension`, và ghi một dòng vào `C:\UrbanB\cap-nhat.log`. Không có bản mới thì
-  không làm gì, kể cả không ghi log.
-- Extension tự kiểm thư mục mỗi 30 phút. Thấy bản trên đĩa mới hơn thì tự nạp lại, trừ khi đang
-  quét dở. Cài đặt đã điền và mã máy giữ nguyên.
-- Chậm nhất khoảng 3,5 giờ sau khi bản mới được đẩy lên GitHub, máy chạy bản mới. Cột *Phiên bản*
-  của tab `Máy cài` cho biết máy nào đã lên.
+Chạy lại đúng lệnh ở bước 1 trên máy cần cập nhật. Lệnh chép bản mới nhất đè lên
+`C:\UrbanB\extension`; không phải làm lại bước 2 và 3. Extension tự kiểm thư mục mỗi 30 phút,
+thấy bản trên đĩa mới hơn thì tự nạp lại (trừ khi đang quét dở), giữ nguyên cài đặt và mã máy.
+Muốn chạy bản mới ngay: vào `chrome://extensions`, bấm nút nạp lại của Thu review OTA.
 
-Muốn cập nhật ngay một máy: chạy lại lệnh cài ở bước 1. Lệnh này an toàn khi chạy lại: chỉ chép
-đè cùng thư mục và đăng ký lại cùng tác vụ, không cần làm lại bước 2 và 3.
+Cột *Phiên bản* của tab `Máy cài` cho biết máy nào đã lên bản mới.
+
+Máy không tự tải bản mới: tác vụ hẹn giờ tự cập nhật đã **tạm bỏ** (08/10/2026). Máy nào từng
+cài bằng lệnh bản 0.6.0 còn giữ tác vụ "UrbanB - cap nhat Thu review OTA"; chạy lại lệnh cài là
+tác vụ đó bị gỡ.
 
 ## Khi có sự cố
 
 | Dấu hiệu | Kiểm |
 |---|---|
-| Lệnh cài in chữ đỏ "Cài không xong" | Dòng cuối của `C:\UrbanB\cap-nhat.log` ghi lý do. Thường là máy không vào được `github.com` |
-| Tab `Máy cài` mãi ở phiên bản cũ | Mở `C:\UrbanB\cap-nhat.log`. Không có dòng nào gần đây ⇒ tác vụ hẹn giờ không chạy: mở Task Scheduler, tìm tác vụ "UrbanB - cap nhat…" |
+| Lệnh cài in chữ đỏ "Cài không xong" | Dòng cuối của `C:\UrbanB\cai-dat.log` ghi lý do. Thường là máy không vào được `github.com` |
+| Tab `Máy cài` vẫn ở phiên bản cũ sau khi chạy lại lệnh cài | Chờ 30 phút, hoặc bấm nạp lại trong `chrome://extensions`. Vẫn cũ ⇒ Chrome đang nạp extension từ thư mục khác `C:\UrbanB\extension` |
 | Extension biến mất hoặc xám trong `chrome://extensions` | Ai đó tắt Chế độ dành cho nhà phát triển. Bật lại là extension chạy lại, cài đặt còn nguyên |
 | Chrome hiện cảnh báo về tiện ích ở chế độ nhà phát triển | Bấm đóng. Đừng bấm tắt tiện ích |
 
 ## Giới hạn
 
-- Phần tự cập nhật đã được đo trên Chromium với chế độ nhà phát triển bật: chép bản mới đè lên
-  thư mục thì extension tự nạp lại, giữ cài đặt và mã máy (08/10/2026). Tệp `cai-dat.ps1` thì
-  **chưa chạy thử trên máy Windows thật**. Máy đầu tiên nên do người quản lý cài và theo dõi.
-- Mọi máy tải mã từ repo GitHub công khai `taiituan13/UrbanB-Thu-review-OTA`, nhánh `main`.
-  Đẩy lên `main` là phát hành: trong vài giờ, 15 máy chạy mã đó. Chạy `npm test` trước khi đẩy.
+- Việc extension tự nạp lại khi thư mục có bản mới đã được đo trên Chromium với chế độ nhà phát
+  triển bật: giữ cài đặt và mã máy (08/10/2026). Tệp `cai-dat.ps1` thì **chưa chạy thử trên máy
+  Windows thật**. Máy đầu tiên nên do người quản lý cài và theo dõi.
+- Lệnh cài tải mã từ repo GitHub công khai `taiituan13/UrbanB-Thu-review-OTA`, nhánh `main`.

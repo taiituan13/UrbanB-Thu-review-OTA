@@ -52,7 +52,7 @@ cũng không cần làm gì: dấu đã nhớ hỏng thì lượt ghi kế tiế
 ## 2. Cài extension trên máy từng khách sạn
 
 Máy Windows: dùng cách ở [cai-tu-xa.md](cai-tu-xa.md). Cách đó cài bằng một lệnh, điền cài đặt
-bằng mã cài đặt, và tự cập nhật. Cách tay dưới đây dùng khi thử trên máy khác, và để hiểu các ô.
+bằng mã cài đặt, và cập nhật bằng cách chạy lại lệnh. Cách tay dưới đây dùng khi thử trên máy khác, và để hiểu các ô.
 
 1. Chép thư mục `extension/` sang máy.
 2. Mở `chrome://extensions`, bật **Chế độ dành cho nhà phát triển**, bấm
