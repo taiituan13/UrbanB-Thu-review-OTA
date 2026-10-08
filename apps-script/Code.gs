@@ -527,31 +527,6 @@ function onOpen() {
     .addToUi();
 }
 
-// Mã cài đặt: phía extension đọc bằng parseSetupCode trong extension/setup-code.js. Đổi dạng
-// ở đây thì đổi cả bên đó và tăng số "v". Menu tạo mã đã bỏ 08/10/2026 (khách sạn điền tay);
-// setupPayload còn giữ, có test, để dựng lại menu khi cần.
-var SETUP_CODE_PREFIX = "UBR1-";
-
-/** Thuần: kiểm đầu vào rồi dựng nội dung mã cài đặt. Sai ⇒ ném Error với câu đọc được. */
-function setupPayload(hotel, url, secret, channelsText) {
-  hotel = String(hotel || "").trim();
-  url = String(url || "").trim();
-  if (!hotel) throw new Error("Chưa nhập tên khách sạn.");
-  if (!/^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec$/.test(url)) {
-    throw new Error("URL Web App phải có dạng https://script.google.com/macros/s/…/exec");
-  }
-  if (!secret) throw new Error("Chưa có mã bí mật: chạy setup một lần.");
-  var known = Object.keys(CHANNEL_NAMES);
-  var channels = [];
-  String(channelsText || "").toLowerCase().split(/[\s,;]+/).forEach(function (ch) {
-    if (ch && channels.indexOf(ch) < 0) channels.push(ch);
-  });
-  var unknown = channels.filter(function (ch) { return known.indexOf(ch) < 0; });
-  if (unknown.length) throw new Error("Kênh lạ: " + unknown.join(", ") + ". Kênh hợp lệ: " + known.join(", ") + ".");
-  if (!channels.length) throw new Error("Chưa chọn kênh nào.");
-  return { v: 1, hotel: hotel, sheetUrl: url, secret: secret, channels: channels };
-}
-
 function refreshStatsMenu() {
   refreshStats(SpreadsheetApp.getActiveSpreadsheet());
 }

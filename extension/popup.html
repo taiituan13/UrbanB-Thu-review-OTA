@@ -63,7 +63,6 @@
   input[type=checkbox] { accent-color: var(--fg); margin: 0; }
   .channels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 8px; }
   .channels label { display: flex; gap: 5px; align-items: center; margin: 0; color: var(--fg); font-size: 13px; }
-  .code { display: flex; gap: 6px; }
   .row { display: flex; gap: 8px; margin-top: 12px; }
   .row button { flex: 1; }
   footer { padding: 10px 14px 12px; font-size: 11px; color: var(--muted); }
@@ -89,15 +88,6 @@
   <!-- Ít dùng: gập sẵn; máy chưa điền đủ tên, URL, mã bí mật thì popup.js tự mở. -->
   <details id="settings">
     <summary>Cài đặt</summary>
-
-    <!-- Ô mã cài đặt tạm ẩn (08/10/2026). Bỏ thuộc tính hidden là dùng lại được. -->
-    <div id="setupBox" hidden>
-      <label for="setupCode">Mã cài đặt (người quản lý gửi): dán vào rồi bấm Áp dụng</label>
-      <div class="code">
-        <input id="setupCode" type="text" placeholder="UBR1-…" autocomplete="off">
-        <button class="secondary" id="applyCode">Áp dụng</button>
-      </div>
-    </div>
 
     <label for="hotel">Tên khách sạn (cũng là tên máy trong tab "Máy cài")</label>
     <input id="hotel" type="text" placeholder="Secret Garden Bình Thạnh">

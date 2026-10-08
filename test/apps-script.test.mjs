@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { CHANNELS } from "../extension/config.js";
 
 const ctx = {};
 vm.createContext(ctx);
@@ -301,4 +302,8 @@ test("Cả hai dấu đều hỏng ⇒ trả rỗng, không lặp vô tận", ()
   const sh = fakeSheet("không dấu nào");
   assert.equal(pickSeparator(null, sh.write, sh.broken), "");
   assert.equal(sh.writes.length, 2);
+});
+
+test("Code.gs và extension biết cùng một bộ kênh", () => {
+  assert.deepEqual(Object.keys(ctx.CHANNEL_NAMES).sort(), [...CHANNELS].sort());
 });

@@ -1,6 +1,5 @@
 import { CHANNELS, CHANNEL_LABEL, VERSION, getDeviceId, loadConfig, loadLastError, loadStatus, saveConfig } from "./config.js";
 import { formatErrorReport } from "./report.js";
-import { parseSetupCode } from "./setup-code.js";
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = ["hotel", "sheetUrl", "secret", "bookingHotelId", "agodaPropertyId", "expediaPropertyId", "intervalHours"];
@@ -126,23 +125,6 @@ async function ping() {
 
 $("ping").onclick = async () => {
   await save();
-  await ping();
-};
-
-// Mã cài đặt điền tên, URL, mã bí mật và kênh; các mã khách sạn trên kênh và chu kỳ quét giữ nguyên.
-$("applyCode").onclick = async () => {
-  let parsed;
-  try {
-    parsed = parseSetupCode($("setupCode").value, CHANNELS);
-  } catch (e) {
-    note(e.message, "settingsNote");
-    return;
-  }
-  const cfg = await loadConfig();
-  await saveConfig({ ...cfg, ...parsed });
-  await chrome.runtime.sendMessage({ type: "reschedule" });
-  $("setupCode").value = "";
-  await fill();
   await ping();
 };
 
