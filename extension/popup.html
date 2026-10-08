@@ -3,83 +3,142 @@
 <head>
 <meta charset="utf-8">
 <style>
-  body { font: 13px system-ui, sans-serif; width: 340px; margin: 12px; color: #111; }
-  h1 { font-size: 15px; margin: 0 0 10px; }
-  label { display: block; margin: 8px 0 2px; color: #444; }
-  input[type=text], input[type=password], input[type=number] { width: 100%; box-sizing: border-box; padding: 5px 6px; }
-  .row { display: flex; gap: 12px; margin-top: 6px; }
-  .row label { display: inline; margin: 0; color: #111; }
-  .buttons { display: flex; gap: 6px; margin-top: 12px; }
-  button { flex: 1; padding: 6px; cursor: pointer; }
-  #status { margin-top: 12px; border-top: 1px solid #ddd; padding-top: 8px; }
-  .ch { display: flex; gap: 6px; align-items: baseline; margin: 4px 0; }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: #9ca3af; flex: none; }
-  .ok .dot { background: #16a34a; } .error .dot { background: #dc2626; } .login .dot { background: #d97706; }
-  .msg { color: #555; font-size: 12px; }
-  #note { margin-top: 8px; color: #2563eb; min-height: 16px; }
-  .err { margin-top: 3px; padding: 5px 6px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; font-size: 12px; }
-  .err .ref { font: bold 13px ui-monospace, monospace; user-select: all; }
-  .err button { flex: none; padding: 1px 8px; margin-left: 6px; font-size: 12px; }
-  .err .hint { color: #374151; margin-top: 2px; }
-  #last { margin-top: 10px; }
-  #last h2 { font-size: 13px; margin: 0 0 4px; }
+  /* Màu theo lớp thương hiệu UrbanB (DESIGN.md của repo UrbanB). Không tải phông qua mạng. */
+  :root {
+    --bg: #f9f7f2; --surface: #ffffff; --tint: #ecdec0; --fg: #123b37; --muted: #4a6660;
+    --border: #ddd0b0; --accent: #a68a64; --on-dark: #f9f7f2;
+    --ok: #3c6e52; --warn: #7a5417; --err: #8c3226;
+  }
+  body { margin: 0; width: 360px; background: var(--bg); color: var(--fg); font: 13px/1.45 Inter, "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; gap: 10px; align-items: center; padding: 12px 14px; background: var(--fg); color: var(--on-dark); }
+  header img { width: 36px; height: 36px; border-radius: 6px; box-shadow: 0 0 0 1px rgba(249, 247, 242, 0.3); }
+  header h1 { margin: 0; font: 600 17px/1.2 "Playfair Display", Georgia, serif; }
+  header .hotel { font-size: 12px; color: var(--tint); }
+  main { padding: 12px 14px 4px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 2px 10px; }
+  .ch { display: flex; gap: 8px; padding: 8px 0; border-top: 1px solid #efe7d6; }
+  .ch:first-child { border-top: 0; }
+  .ch .body { flex: 1; min-width: 0; }
+  .dot { width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; background: #b8ad97; flex: none; }
+  .ok .dot { background: var(--ok); } .login .dot { background: var(--warn); } .error .dot { background: var(--err); }
+  .line { display: flex; justify-content: space-between; gap: 8px; }
+  .name { font-weight: 600; }
+  .when { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .detail { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  .login .detail { color: var(--warn); } .error .detail { color: var(--err); }
+  .empty { padding: 10px 0; color: var(--muted); }
+
+  .err { margin-top: 6px; padding: 6px 8px; background: #f6ebe8; border: 1px solid #e6cbc4; border-radius: 6px; font-size: 12px; }
+  .err .top { display: flex; align-items: center; gap: 6px; }
+  .err .ref { font: 600 13px ui-monospace, Consolas, monospace; user-select: all; }
+  .err .code { color: var(--muted); }
+  .err button { margin-left: auto; min-height: 26px; padding: 0 10px; font-size: 12px; }
+  .err .hint { margin-top: 3px; }
+
+  button { font: inherit; cursor: pointer; border-radius: 10px; }
+  .primary { display: block; width: 100%; min-height: 44px; margin-top: 12px; border: 0; background: var(--fg); color: var(--on-dark); font-size: 14px; font-weight: 600; }
+  .primary:hover { background: #0c2a27; }
+  .primary:disabled { opacity: 0.6; cursor: default; }
+  .secondary { min-height: 36px; padding: 0 14px; border: 1px solid var(--border); background: var(--surface); color: var(--fg); }
+  .secondary:hover { border-color: var(--accent); }
+  .small { margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .note { margin-top: 6px; font-size: 12px; overflow-wrap: anywhere; }
+  .note:empty { display: none; }
+
+  #last h2 { margin: 12px 0 4px; font-size: 13px; color: var(--err); }
+  #last .detail { margin-bottom: 2px; }
+
+  details { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+  summary { cursor: pointer; font-weight: 600; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸ "; color: var(--accent); }
+  details[open] summary::before { content: "▾ "; }
+  label { display: block; margin: 10px 0 3px; color: var(--muted); font-size: 12px; }
+  input[type=text], input[type=password], input[type=number] {
+    width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); color: var(--fg); font: inherit;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  input[type=checkbox] { accent-color: var(--fg); margin: 0; }
+  .channels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 8px; }
+  .channels label { display: flex; gap: 5px; align-items: center; margin: 0; color: var(--fg); font-size: 13px; }
   .code { display: flex; gap: 6px; }
-  .code input { flex: 1; }
-  .code button { flex: none; padding: 5px 10px; }
+  .row { display: flex; gap: 8px; margin-top: 12px; }
+  .row button { flex: 1; }
+  footer { padding: 10px 14px 12px; font-size: 11px; color: var(--muted); }
 </style>
 </head>
 <body>
-<h1>Thu review OTA</h1>
+<header>
+  <img src="icons/icon-48.png" alt="">
+  <div>
+    <h1>Thu review OTA</h1>
+    <div class="hotel" id="hdrHotel"></div>
+  </div>
+</header>
 
-<label for="setupCode">Mã cài đặt (người quản lý gửi): dán vào rồi bấm Áp dụng</label>
-<div class="code">
-  <input id="setupCode" type="text" placeholder="UBR1-…" autocomplete="off">
-  <button id="applyCode">Áp dụng</button>
-</div>
+<main>
+  <!-- Dùng hằng ngày: trạng thái các kênh đang bật, Quét ngay, mã lỗi. -->
+  <div class="card" id="status"></div>
+  <button class="primary" id="scan">Quét ngay</button>
+  <div class="small" id="auto"></div>
+  <div class="note" id="note"></div>
+  <div id="last"></div>
 
-<label for="hotel">Tên khách sạn (cũng là tên máy trong tab "Máy cài")</label>
-<input id="hotel" type="text" placeholder="Secret Garden Bình Thạnh">
+  <!-- Ít dùng: gập sẵn; máy chưa điền đủ tên, URL, mã bí mật thì popup.js tự mở. -->
+  <details id="settings">
+    <summary>Cài đặt</summary>
 
-<label for="sheetUrl">URL Web App của Google Sheet (…/exec)</label>
-<input id="sheetUrl" type="text">
+    <!-- Ô mã cài đặt tạm ẩn (08/10/2026). Bỏ thuộc tính hidden là dùng lại được. -->
+    <div id="setupBox" hidden>
+      <label for="setupCode">Mã cài đặt (người quản lý gửi): dán vào rồi bấm Áp dụng</label>
+      <div class="code">
+        <input id="setupCode" type="text" placeholder="UBR1-…" autocomplete="off">
+        <button class="secondary" id="applyCode">Áp dụng</button>
+      </div>
+    </div>
 
-<label for="secret">Mã bí mật</label>
-<input id="secret" type="password">
+    <label for="hotel">Tên khách sạn (cũng là tên máy trong tab "Máy cài")</label>
+    <input id="hotel" type="text" placeholder="Secret Garden Bình Thạnh">
 
-<label>Kênh quét</label>
-<div class="row">
-  <label><input type="checkbox" id="en-booking"> Booking</label>
-  <label><input type="checkbox" id="en-agoda"> Agoda</label>
-  <label><input type="checkbox" id="en-trip"> Trip</label>
-</div>
-<div class="row">
-  <label><input type="checkbox" id="en-expedia"> Expedia</label>
-  <label><input type="checkbox" id="en-traveloka"> Traveloka</label>
-  <label><input type="checkbox" id="en-go2joy"> Go2Joy</label>
-</div>
+    <label for="sheetUrl">URL Web App của Google Sheet (…/exec)</label>
+    <input id="sheetUrl" type="text">
 
-<label for="bookingHotelId">Mã Booking (để trống nếu tài khoản chỉ có 1 chỗ nghỉ)</label>
-<input id="bookingHotelId" type="text">
+    <label for="secret">Mã bí mật</label>
+    <input id="secret" type="password">
 
-<label for="agodaPropertyId">Mã Agoda (để trống ⇒ tự dò)</label>
-<input id="agodaPropertyId" type="text">
+    <label>Kênh quét</label>
+    <div class="channels">
+      <label><input type="checkbox" id="en-booking"> Booking</label>
+      <label><input type="checkbox" id="en-agoda"> Agoda</label>
+      <label><input type="checkbox" id="en-trip"> Trip</label>
+      <label><input type="checkbox" id="en-expedia"> Expedia</label>
+      <label><input type="checkbox" id="en-traveloka"> Traveloka</label>
+      <label><input type="checkbox" id="en-go2joy"> Go2Joy</label>
+    </div>
 
-<label for="expediaPropertyId">Mã Expedia (để trống ⇒ tự dò)</label>
-<input id="expediaPropertyId" type="text">
+    <label for="bookingHotelId">Mã Booking (để trống nếu tài khoản chỉ có 1 chỗ nghỉ)</label>
+    <input id="bookingHotelId" type="text">
 
-<label for="intervalHours">Quét mỗi (giờ)</label>
-<input id="intervalHours" type="number" min="1" step="1">
+    <label for="agodaPropertyId">Mã Agoda (để trống ⇒ tự dò)</label>
+    <input id="agodaPropertyId" type="text">
 
-<div class="buttons">
-  <button id="save">Lưu</button>
-  <button id="ping">Thử Sheet</button>
-  <button id="scan">Quét ngay</button>
-</div>
-<div id="note"></div>
+    <label for="expediaPropertyId">Mã Expedia (để trống ⇒ tự dò)</label>
+    <input id="expediaPropertyId" type="text">
 
-<div id="status"></div>
-<div id="last"></div>
-<div id="device" class="msg"></div>
+    <label for="intervalHours">Quét mỗi (giờ)</label>
+    <input id="intervalHours" type="number" min="1" step="1">
+
+    <div class="row">
+      <button class="secondary" id="save">Lưu</button>
+      <button class="secondary" id="ping">Thử Sheet</button>
+    </div>
+    <div class="note" id="settingsNote"></div>
+  </details>
+</main>
+
+<footer id="device"></footer>
 
 <script type="module" src="popup.js"></script>
 </body>

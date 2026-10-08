@@ -6,14 +6,24 @@ const $ = (id) => document.getElementById(id);
 const FIELDS = ["hotel", "sheetUrl", "secret", "bookingHotelId", "agodaPropertyId", "expediaPropertyId", "intervalHours"];
 const STATE_TEXT = { ok: "ổn", error: "lỗi", login: "cần đăng nhập lại" };
 
-function note(text) {
-  $("note").textContent = text;
+/** Dòng chữ dưới nút Quét ngay; `where` = "settingsNote" cho dòng trong khối Cài đặt. */
+function note(text, where = "note") {
+  $(where).textContent = text;
+}
+
+/** Tên khách sạn trên dải đầu và dòng "Tự quét mỗi N giờ" theo cấu hình đã lưu. */
+function renderHeader(cfg) {
+  $("hdrHotel").textContent = cfg.hotel || "Chưa đặt tên khách sạn";
+  $("auto").textContent = `Tự quét mỗi ${Math.max(1, Number(cfg.intervalHours) || 6)} giờ.`;
 }
 
 async function fill() {
   const cfg = await loadConfig();
   for (const f of FIELDS) $(f).value = cfg[f] ?? "";
   for (const ch of CHANNELS) $(`en-${ch}`).checked = !!cfg.enabled[ch];
+  renderHeader(cfg);
+  // Máy mới cài: mở sẵn khối Cài đặt để người cài thấy ngay ô phải điền.
+  if (!cfg.hotel || !cfg.sheetUrl || !cfg.secret) $("settings").open = true;
 }
 
 /** Chép đoạn báo lỗi đầy đủ (mã, khách sạn, máy, phiên bản, lỗi) để dán gửi người quản lý. */
@@ -33,30 +43,44 @@ async function copyReport(entry, button) {
 function errorBox(entry) {
   const box = document.createElement("div");
   box.className = "err";
-  box.innerHTML = `<div>Mã lỗi <span class="ref"></span> <span class="msg"></span><button>Sao chép</button></div><div class="hint"></div>`;
+  box.innerHTML = `<div class="top">Mã lỗi <span class="ref"></span> <span class="code"></span><button class="secondary">Sao chép</button></div><div class="hint"></div>`;
   box.querySelector(".ref").textContent = entry.ref;
-  box.querySelector("span.msg").textContent = `(${entry.code})`;
+  box.querySelector(".code").textContent = `(${entry.code})`;
   box.querySelector(".hint").textContent = entry.hint ?? "";
   const button = box.querySelector("button");
   button.onclick = () => copyReport(entry, button);
   return box;
 }
 
+/** Giờ ngắn gọn: "14:05 8/10". */
+function shortTime(iso) {
+  const d = new Date(iso);
+  return `${d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} ${d.getDate()}/${d.getMonth() + 1}`;
+}
+
+/** Chỉ hiện các kênh đang bật; kênh đã tắt giữ trạng thái cũ trong bộ nhớ nhưng không hiện. */
 async function renderStatus() {
-  const status = await loadStatus();
+  const [cfg, status] = await Promise.all([loadConfig(), loadStatus()]);
   const box = $("status");
   box.textContent = "";
   const shown = new Set();
-  for (const ch of CHANNELS) {
+  const enabled = CHANNELS.filter((ch) => cfg.enabled[ch]);
+  if (!enabled.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "Chưa bật kênh nào. Mở Cài đặt, chọn kênh rồi bấm Lưu.";
+    box.appendChild(empty);
+  }
+  for (const ch of enabled) {
     const s = status[ch];
     const div = document.createElement("div");
     div.className = "ch " + (s?.state ?? "");
-    const when = s?.at ? new Date(s.at).toLocaleString("vi-VN") : "chưa quét";
+    const when = s?.at ? shortTime(s.at) : "chưa quét";
     const detail = s ? `${STATE_TEXT[s.state] ?? s.state} · ${s.count} bài · ${s.message}` : "";
-    div.innerHTML = `<span class="dot"></span><div class="body"><b></b> <span class="msg"></span><div class="msg"></div></div>`;
-    div.querySelector("b").textContent = CHANNEL_LABEL[ch];
-    div.querySelector("span.msg").textContent = when;
-    div.querySelector("div.msg").textContent = detail;
+    div.innerHTML = `<span class="dot"></span><div class="body"><div class="line"><span class="name"></span><span class="when"></span></div><div class="detail"></div></div>`;
+    div.querySelector(".name").textContent = CHANNEL_LABEL[ch];
+    div.querySelector(".when").textContent = when;
+    div.querySelector(".detail").textContent = detail;
     if (s?.error?.ref) {
       div.querySelector(".body").appendChild(errorBox(s.error));
       shown.add(s.error.ref);
@@ -69,9 +93,9 @@ async function renderStatus() {
   lastBox.textContent = "";
   if (last?.ref && last.stage === "gửi Sheet" && !shown.has(last.ref)) {
     const h = document.createElement("h2");
-    h.textContent = `Lỗi gửi Sheet · ${new Date(last.at).toLocaleString("vi-VN")}`;
+    h.textContent = `Lỗi gửi Sheet · ${shortTime(last.at)}`;
     const msg = document.createElement("div");
-    msg.className = "msg";
+    msg.className = "detail";
     msg.textContent = `${CHANNEL_LABEL[last.channel] ?? "Sheet"} · ${last.stage} · ${last.message}`;
     lastBox.append(h, msg, errorBox(last));
   }
@@ -84,17 +108,19 @@ async function save() {
   for (const ch of CHANNELS) cfg.enabled[ch] = $(`en-${ch}`).checked;
   await saveConfig(cfg);
   await chrome.runtime.sendMessage({ type: "reschedule" });
+  renderHeader(cfg);
+  await renderStatus();
 }
 
 $("save").onclick = async () => {
   await save();
-  note("Đã lưu.");
+  note("Đã lưu.", "settingsNote");
 };
 
 async function ping() {
-  note("Đang thử…");
+  note("Đang thử…", "settingsNote");
   const r = await chrome.runtime.sendMessage({ type: "pingSheet" });
-  note(r?.ok ? `Sheet trả lời: ${r.sheet ?? "ok"}` : `Lỗi${r?.ref ? " " + r.ref : ""}: ${r?.error ?? "không rõ"}`);
+  note(r?.ok ? `Sheet trả lời: ${r.sheet ?? "ok"}` : `Lỗi${r?.ref ? " " + r.ref : ""}: ${r?.error ?? "không rõ"}`, "settingsNote");
   await renderStatus();
 }
 
@@ -109,7 +135,7 @@ $("applyCode").onclick = async () => {
   try {
     parsed = parseSetupCode($("setupCode").value, CHANNELS);
   } catch (e) {
-    note(e.message);
+    note(e.message, "settingsNote");
     return;
   }
   const cfg = await loadConfig();
@@ -122,14 +148,19 @@ $("applyCode").onclick = async () => {
 
 $("scan").onclick = async () => {
   await save();
-  note("Đang quét — có thể mất vài phút, có thể đóng ô này.");
-  const r = await chrome.runtime.sendMessage({ type: "scanNow" });
-  note(r?.ok ? "Xong lượt quét." : `Lỗi: ${r?.error ?? "không rõ"}`);
+  $("scan").disabled = true;
+  note("Đang quét. Có thể mất vài phút, đóng ô này cũng không sao.");
+  try {
+    const r = await chrome.runtime.sendMessage({ type: "scanNow" });
+    note(r?.ok ? "Xong lượt quét." : `Lỗi: ${r?.error ?? "không rõ"}`);
+  } finally {
+    $("scan").disabled = false;
+  }
   await renderStatus();
 };
 
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes.status || changes.lastError) renderStatus();
+  if (changes.status || changes.lastError || changes.config) renderStatus();
 });
 
 fill();

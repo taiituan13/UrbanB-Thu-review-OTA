@@ -89,7 +89,8 @@ try {
   Write-Host "  2. Bật 'Chế độ dành cho nhà phát triển' (góc trên bên phải). Để bật mãi: tắt đi là extension ngừng chạy."
   Write-Host "  3. Bấm 'Tải tiện ích đã giải nén'. Trong hộp chọn thư mục, dán đường dẫn vào ô địa chỉ"
   Write-Host "     (đã chép sẵn: $ExtDir) rồi bấm 'Chọn thư mục'."
-  Write-Host "  4. Bấm biểu tượng mảnh ghép, ghim 'Thu review OTA', mở nó, dán mã cài đặt, bấm 'Áp dụng'."
+  Write-Host "  4. Bấm biểu tượng mảnh ghép, ghim 'Thu review OTA', mở nó, điền tên khách sạn, URL, mã bí mật,"
+  Write-Host "     chọn kênh, bấm 'Thử Sheet'."
 } catch {
   Write-Log ("LỖI: " + $_.Exception.Message)
   Write-Host "Cài không xong. Chụp màn hình này gửi người quản lý." -ForegroundColor Red

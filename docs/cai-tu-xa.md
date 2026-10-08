@@ -1,26 +1,24 @@
 # Cài extension cho khách sạn (Windows)
 
-Cách cài này không qua Chrome Web Store. Người quản lý chuẩn bị một **mã cài đặt**, người cài
-chạy **một lệnh** rồi bấm **bốn bước** trong Chrome. Muốn cập nhật thì chạy lại đúng lệnh đó.
+Cách cài này không qua Chrome Web Store. Người cài chạy **một lệnh**, bấm **bốn bước** trong
+Chrome, rồi điền cài đặt vào ô của extension. Muốn cập nhật thì chạy lại đúng lệnh đó.
 
 Người cài có thể là nhân viên khách sạn tự làm theo trang này, hoặc người quản lý vào máy qua
 UltraViewer/TeamViewer. Mỗi máy mất khoảng 5 phút.
 
-## Người quản lý: tạo mã cài đặt
+## Người quản lý: chuẩn bị trước
 
-1. Mở Google Sheet "Review OTA — chuỗi", chọn menu **Review OTA › Tạo mã cài đặt cho khách sạn**.
-   - Lần đầu, Sheet hỏi **URL Web App** (lấy ở Triển khai › Quản lý triển khai, đuôi `/exec`).
-     Sheet nhớ URL này, các lần sau không hỏi lại.
-2. Nhập **tên khách sạn**. Tên này là khoá của máy trong tab `Máy cài`, nên phải viết thống nhất.
-   Hộp nhập liệt kê sẵn các tên đã có.
-3. Nhập **các kênh** khách sạn có, cách nhau dấu phẩy, ví dụ `booking, agoda, trip, go2joy`.
-4. Sheet hiện mã bắt đầu bằng `UBR1-`. Chép và **gửi riêng** cho khách sạn đó.
+Gửi **riêng** cho người cài ba thứ:
 
-⚠️ Mã cài đặt chứa mã bí mật của Sheet. Ai có mã đều gửi được dữ liệu vào Sheet, nên chỉ gửi qua
-tin nhắn riêng, không dán vào nhóm chung.
+1. **Tên khách sạn.** Tên này là khoá của máy trong tab `Máy cài`, nên phải viết thống nhất với
+   tên đã có trong Sheet.
+2. **URL Web App** (Triển khai › Quản lý triển khai, đuôi `/exec`) và **mã bí mật** của Sheet.
+3. **Các kênh** khách sạn có (Booking, Agoda, Trip, Expedia, Traveloka, Go2Joy).
 
-Mã không chứa mã khách sạn trên từng kênh (Booking, Agoda, Expedia). Khách sạn mà tài khoản
-Booking thấy nhiều chỗ nghỉ thì sau khi cài vẫn phải điền mã Booking trong ô bật lên
+⚠️ Ai có URL và mã bí mật đều gửi được dữ liệu vào Sheet, nên chỉ gửi qua tin nhắn riêng, không
+dán vào nhóm chung.
+
+Khách sạn mà tài khoản Booking thấy nhiều chỗ nghỉ thì còn phải điền **mã Booking**
 (xem [cai-dat.md](cai-dat.md) mục 2).
 
 ## Người cài: trên máy khách sạn
@@ -44,9 +42,12 @@ bước tiếp theo.
    vào ô địa chỉ rồi bấm **Chọn thư mục**.
 4. Bấm biểu tượng mảnh ghép cạnh thanh địa chỉ, ghim **Thu review OTA**.
 
-**Bước 3: dán mã cài đặt.** Bấm biểu tượng Thu review OTA, dán mã vào ô **Mã cài đặt**, bấm
-**Áp dụng**. Extension điền tên khách sạn, URL, mã bí mật, bật đúng kênh, rồi tự thử gửi Sheet.
-Dòng chữ xanh hiện "Sheet trả lời: …" là xong.
+**Bước 3: điền cài đặt.** Bấm biểu tượng Thu review OTA. Máy mới cài thì khối **Cài đặt** mở
+sẵn. Điền tên khách sạn, URL Web App, mã bí mật, tick đúng các kênh, rồi bấm **Thử Sheet**
+(nút này lưu trước rồi mới thử). Dòng chữ hiện "Sheet trả lời: …" là xong.
+
+Từ lần mở sau, khối Cài đặt gập lại. Phần trên cùng chỉ hiện các kênh đang bật, nút **Quét
+ngay**, và mã lỗi kèm nút **Sao chép** khi có kênh hỏng.
 
 **Bước 4: quét lần đầu.** Đăng nhập sẵn các extranet trong **cùng Chrome đó**, rồi bấm
 **Quét ngay**. Kênh nào báo cam thì đăng nhập lại kênh đó.

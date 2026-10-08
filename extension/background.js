@@ -76,7 +76,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     return true;
   }
   if (msg?.type === "reschedule") {
-    schedule().then(() => reply({ ok: true }));
+    // Popup gửi lệnh này sau mỗi lần lưu cài đặt: bật/tắt kênh cũng đổi huy hiệu.
+    Promise.all([schedule(), refreshBadge()]).then(() => reply({ ok: true }));
     return true;
   }
   return false;
@@ -304,7 +305,6 @@ async function runScan(trigger) {
   try {
     const cfg = await loadConfig();
     if (!cfg.sheetUrl || !cfg.secret || !cfg.hotel) {
-      await setBadge("!");
       return "Chưa điền đủ tên khách sạn, URL Web App và mã bí mật.";
     }
     for (const channel of CHANNELS) {
@@ -407,11 +407,14 @@ async function scanOne(channel, cfg, trigger) {
 
 async function setBadge(text) {
   await chrome.action.setBadgeText({ text });
-  await chrome.action.setBadgeBackgroundColor({ color: text ? "#dc2626" : "#16a34a" });
+  // Đỏ lỗi của bộ màu UrbanB; huy hiệu rỗng thì màu nền không hiện.
+  await chrome.action.setBadgeBackgroundColor({ color: "#8c3226" });
 }
 
+/** "!" khi chưa điền đủ cài đặt hoặc một kênh ĐANG BẬT không ổn. Kênh đã tắt không tính. */
 async function refreshBadge() {
-  const status = await loadStatus();
-  const bad = Object.values(status).some((s) => s && s.state !== "ok");
-  await setBadge(bad ? "!" : "");
+  const [cfg, status] = await Promise.all([loadConfig(), loadStatus()]);
+  const missing = !cfg.sheetUrl || !cfg.secret || !cfg.hotel;
+  const bad = CHANNELS.some((ch) => cfg.enabled[ch] && status[ch] && status[ch].state !== "ok");
+  await setBadge(missing || bad ? "!" : "");
 }
