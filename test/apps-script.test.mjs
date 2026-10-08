@@ -203,3 +203,60 @@ test("Nhật ký lỗi: gắn máy, bỏ query khỏi URL, cắt độ dài, t�
   assert.ok(out[0].message.length <= 501);
   assert.deepEqual(plain(cleanLogs(undefined, dev(), T0)), []);
 });
+
+// ---------- Mã lỗi ----------
+const { lastErrorText, migrateColumns, columnLetter, lostFormula } = ctx;
+
+test("Nhật ký lỗi giữ mã lỗi đúng dạng; mã lạ (có thể là công thức chèn vào) bị bỏ", () => {
+  const ok = plain(cleanLogs([{ ref: "E-7K3QX2", code: "BKG-LOGIN", stage: "đăng nhập" }], dev(), T0))[0];
+  assert.equal(ok.ref, "E-7K3QX2");
+  assert.equal(ok.code, "BKG-LOGIN");
+  const bad = plain(cleanLogs([{ ref: "=HYPERLINK(1)", code: "bkg login; drop" }], dev(), T0))[0];
+  assert.equal(bad.ref, "");
+  assert.equal(bad.code, "");
+  assert.equal(SHEETS.logs.columns[0][1], "Mã lỗi", "mã lỗi ở cột đầu để Ctrl+F thấy ngay");
+});
+
+test("Ô lỗi gần nhất của Máy cài bắt đầu bằng mã lỗi", () => {
+  assert.equal(
+    lastErrorText({ ref: "E-7K3QX2", code: "TRP-HTTP", channel: "trip", stage: "quét", message: "Trip HTTP 500" }),
+    "E-7K3QX2 · TRP-HTTP · Trip · quét · Trip HTTP 500",
+  );
+  assert.equal(lastErrorText({ ref: "", code: "", channel: "", stage: "gửi Sheet", message: "hỏng" }), "gửi Sheet · hỏng");
+  assert.equal(lastErrorText(null), "");
+});
+
+const spec = [["ref", "Mã lỗi"], ["code", "Loại lỗi"], ["at", "Thời điểm"], ["msg", "Lỗi"]];
+
+test("Nâng cấp tab cũ: dữ liệu dời theo TÊN cột, cột mới để trống", () => {
+  const m = plain(migrateColumns(["Thời điểm", "Lỗi"], [["T1", "hỏng"], ["T2", "hỏng 2"]], spec));
+  assert.deepEqual(m.header, ["Mã lỗi", "Loại lỗi", "Thời điểm", "Lỗi"]);
+  assert.deepEqual(m.rows, [["", "", "T1", "hỏng"], ["", "", "T2", "hỏng 2"]]);
+});
+
+test("Tiêu đề đã đúng, hoặc chỉ có thêm cột người dùng ở cuối ⇒ không đụng tới", () => {
+  assert.equal(migrateColumns(["Mã lỗi", "Loại lỗi", "Thời điểm", "Lỗi"], [], spec), null);
+  assert.equal(migrateColumns(["Mã lỗi", "Loại lỗi", "Thời điểm", "Lỗi", "Ghi chú của tôi"], [], spec), null);
+  assert.equal(migrateColumns(["Mã lỗi", "Loại lỗi", "Thời điểm", "Lỗi", "", ""], [], spec), null);
+});
+
+test("Nâng cấp không bao giờ bỏ cột: cột lạ, cột trùng tên, cột không tên mà có dữ liệu đều được giữ", () => {
+  const m = plain(migrateColumns(["Lỗi", "Ghi chú", "Lỗi", ""], [["a", "b", "c", "d"]], spec));
+  assert.deepEqual(m.header, ["Mã lỗi", "Loại lỗi", "Thời điểm", "Lỗi", "Ghi chú", "Lỗi", "(cột cũ 4)"]);
+  assert.deepEqual(m.rows, [["", "", "", "a", "b", "c", "d"]]);
+});
+
+test("Tiêu đề không trùng tên nào ⇒ không xếp lại (tránh xoá trắng dữ liệu)", () => {
+  assert.equal(migrateColumns(["", ""], [["x", "y"]], spec), null);
+  assert.equal(migrateColumns(["A", "B"], [["x", "y"]], spec), null);
+});
+
+test("Công thức Mất liên lạc dùng địa chỉ A1 (R1C1 bị Sheets ghi nguyên chữ ⇒ #ERROR!)", () => {
+  assert.equal(columnLetter(1), "A");
+  assert.equal(columnLetter(15), "O");
+  assert.equal(columnLetter(27), "AA");
+  const deadlineCol = SHEETS.devices.columns.findIndex((c) => c[0] === "deadline") + 1;
+  assert.equal(columnLetter(deadlineCol), "O");
+  assert.equal(lostFormula("O2"), '=IF(O2="","",IF(NOW()>O2,"MẤT LIÊN LẠC",""))');
+  assert.doesNotMatch(lostFormula("O2"), /RC\[/);
+});

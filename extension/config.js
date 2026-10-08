@@ -1,12 +1,12 @@
-import { pushLimited } from "./report.js";
+import { CHANNEL_LABEL, pushLimited } from "./report.js";
+
+export { CHANNEL_LABEL };
 
 // Cấu hình của một bản cài (một khách sạn), lưu trong chrome.storage.local.
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.4.0";
 
 export const CHANNELS = ["booking", "agoda", "trip", "expedia", "traveloka"];
-
-export const CHANNEL_LABEL = { booking: "Booking", agoda: "Agoda", trip: "Trip", expedia: "Expedia", traveloka: "Traveloka" };
 
 export const DEFAULT_CONFIG = {
   sheetUrl: "", // URL Web App của Apps Script (…/exec)
@@ -63,8 +63,20 @@ export async function loadPendingLogs() {
   return pendingLogs ?? [];
 }
 
+/** Xếp hàng một lỗi, và nhớ nó là "lỗi gần nhất" để ô bật lên hiện mã cho người dùng sao chép. */
 export async function queueLog(entry) {
-  await chrome.storage.local.set({ pendingLogs: pushLimited(await loadPendingLogs(), entry) });
+  await chrome.storage.local.set({ pendingLogs: pushLimited(await loadPendingLogs(), entry), lastError: entry });
+}
+
+export async function loadLastError() {
+  const { lastError } = await chrome.storage.local.get("lastError");
+  return lastError ?? null;
+}
+
+/** Gửi Sheet được lại ⇒ lỗi gửi Sheet cũ không còn đúng, thôi hiện. */
+export async function clearSheetError() {
+  const last = await loadLastError();
+  if (last?.stage === "gửi Sheet") await chrome.storage.local.remove("lastError");
 }
 
 export async function dropLogs(ids) {

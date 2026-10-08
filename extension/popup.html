@@ -17,6 +17,12 @@
   .ok .dot { background: #16a34a; } .error .dot { background: #dc2626; } .login .dot { background: #d97706; }
   .msg { color: #555; font-size: 12px; }
   #note { margin-top: 8px; color: #2563eb; min-height: 16px; }
+  .err { margin-top: 3px; padding: 5px 6px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; font-size: 12px; }
+  .err .ref { font: bold 13px ui-monospace, monospace; user-select: all; }
+  .err button { flex: none; padding: 1px 8px; margin-left: 6px; font-size: 12px; }
+  .err .hint { color: #374151; margin-top: 2px; }
+  #last { margin-top: 10px; }
+  #last h2 { font-size: 13px; margin: 0 0 4px; }
 </style>
 </head>
 <body>
@@ -62,6 +68,7 @@
 <div id="note"></div>
 
 <div id="status"></div>
+<div id="last"></div>
 <div id="device" class="msg"></div>
 
 <script type="module" src="popup.js"></script>

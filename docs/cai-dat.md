@@ -29,6 +29,10 @@ Không làm bước này thì URL vẫn chạy mã cũ.
 `setup` (tạo tab còn thiếu; mã bí mật giữ nguyên, không phải dán lại vào extension), rồi
 triển khai **Phiên bản mới** như trên.
 
+Bản mới thêm hoặc dời cột thì tab cũ được xếp lại **theo tên cột** ở lần ghi đầu tiên:
+dữ liệu cũ đi theo tên cột của nó, cột mới để trống. Cột tự thêm vào được giữ và dời ra
+cuối. Vì việc xếp lại dựa vào tên, **đừng đổi tên dòng tiêu đề** của các tab dữ liệu.
+
 ## 2. Cài extension trên máy từng khách sạn
 
 1. Chép thư mục `extension/` sang máy.
@@ -58,7 +62,12 @@ Sau đó extension tự quét theo số giờ đã đặt (mặc định 6 giờ
 |---|---|---|
 | Xanh | Lượt gần nhất ổn | Không cần làm gì |
 | Cam | Kênh đã đá về trang đăng nhập | Mở extranet đó, đăng nhập lại, bấm Quét ngay |
-| Đỏ | Lỗi khác (đọc dòng chữ dưới tên kênh) | Gửi ảnh chụp cho người phụ trách |
+| Đỏ | Lỗi khác (đọc dòng chữ dưới tên kênh) | Làm theo câu hướng dẫn trong khung đỏ; vẫn lỗi thì gửi **mã lỗi** |
+
+Mỗi lỗi có một **mã lỗi** dạng `E-7K3QX2` trong khung đỏ dưới tên kênh. Nút **Sao chép**
+chép mã kèm tên khách sạn, mã máy, phiên bản và thông điệp lỗi; dán đoạn đó gửi người
+quản lý thay cho ảnh chụp. Người quản lý tìm mã bằng Ctrl+F trong tab `Nhật ký lỗi`.
+Danh mục loại lỗi và cách xử lý: [ma-loi.md](ma-loi.md).
 
 Biểu tượng có dấu `!` đỏ khi có ít nhất một kênh không xanh. Dưới cùng ô bật lên là
 **mã máy** (8 ký tự) và phiên bản, để đối chiếu với tab `Máy cài`.
@@ -69,7 +78,7 @@ Người quản lý không cần tới tận máy:
   lỗi gần nhất, phiên bản, kênh đang bật. Cột **Mất liên lạc** tự hiện khi máy im quá
   2 × chu kỳ quét (Chrome tắt, máy tắt, hoặc extension bị gỡ). Cột **Cảnh báo** báo
   khi hai máy khác nhau cùng khai một tên, hoặc một máy đã đổi tên sang tên khác.
-- **Nhật ký lỗi**: mỗi lỗi một dòng — kênh, giai đoạn (mở tab · đăng nhập · quét ·
+- **Nhật ký lỗi**: mỗi lỗi một dòng — mã lỗi, loại lỗi, kênh, giai đoạn (mở tab · đăng nhập · quét ·
   chuẩn hoá · gửi Sheet), thông điệp, trang lúc lỗi, chi tiết kỹ thuật. Lọc theo cột
   *Khách sạn* để xem riêng một máy. Giữ 5.000 dòng mới nhất.
 - **Lượt quét**: mọi lượt của mọi khách sạn, kể cả lượt lỗi.

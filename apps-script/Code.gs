@@ -104,9 +104,12 @@ var SHEETS = {
     ],
   },
   // Chỉ thêm dòng; giữ LOG_KEEP dòng mới nhất. Lọc theo cột Khách sạn để xem từng máy.
+  // Khách sạn báo lỗi bằng "Mã lỗi" (E-XXXXXX) ⇒ Ctrl+F tìm cột đầu. "Loại lỗi" tra ở docs/ma-loi.md.
   logs: {
     name: "Nhật ký lỗi",
     columns: [
+      ["ref", "Mã lỗi", "text"],
+      ["code", "Loại lỗi", "text"],
       ["at", "Thời điểm (UTC)", "text"],
       ["hotel", "Khách sạn", "text"],
       ["device", "Mã máy", "text"],
@@ -459,6 +462,8 @@ function cleanLogs(logs, device, nowIso) {
   return logs.slice(-50).map(function (l) {
     l = l || {};
     return {
+      ref: /^E-[0-9A-Z]{6}$/.test(String(l.ref)) ? l.ref : "",
+      code: /^[A-Z]{2,6}-[A-Z]{2,10}$/.test(String(l.code)) ? l.code : "",
       at: cut(l.at, 40),
       hotel: cut(String(device.hotel || "").trim(), 200),
       device: String(device.deviceId || "").slice(0, 8),
@@ -471,6 +476,46 @@ function cleanLogs(logs, device, nowIso) {
       receivedAt: nowIso,
     };
   });
+}
+
+/** Ô "Lỗi gần nhất" của tab Máy cài, từ một dòng nhật ký đã qua cleanLogs. */
+function lastErrorText(log) {
+  if (!log) return "";
+  return [log.ref, log.code, log.channel ? CHANNEL_NAMES[log.channel] || log.channel : "", log.stage, log.message]
+    .filter(function (x) { return x; })
+    .join(" · ");
+}
+
+/**
+ * Tab có sẵn mà tiêu đề khác SHEETS (vừa nâng cấp Code.gs thêm hoặc dời cột) ⇒ xếp lại dữ liệu
+ * theo TÊN cột. Cột lạ (người dùng tự thêm) được giữ, dời ra cuối; không bao giờ bỏ cột nào.
+ * Trả null nếu tiêu đề đã khớp.
+ */
+function migrateColumns(oldHeader, rows, columns) {
+  var labels = columns.map(function (c) { return c[1]; });
+  var old = oldHeader.map(function (h) { return String(h).trim(); });
+  while (old.length && old[old.length - 1] === "") old.pop();
+  // Khớp khi các cột đầu đúng SHEETS; cột thừa ở cuối là cột người dùng tự thêm, để yên.
+  if (labels.every(function (l, i) { return old[i] === l; })) return null;
+  // Không tên nào trùng ⇒ không biết cột nào là cột nào: để nguyên còn hơn xếp sai.
+  if (!old.some(function (h) { return labels.indexOf(h) >= 0; })) return null;
+  // Cột không có trong SHEETS mà có tên hoặc có dữ liệu ⇒ giữ, dời ra cuối.
+  var width = rows.reduce(function (w, r) { return Math.max(w, r.length); }, old.length);
+  var extra = [];
+  for (var i = 0; i < width; i++) {
+    var h = old[i] || "";
+    if (h && labels.indexOf(h) >= 0 && old.indexOf(h) === i) continue; // cột trùng tên lần hai cũng giữ
+    var used = h !== "" || rows.some(function (r) { return r[i] !== undefined && r[i] !== ""; });
+    if (used) extra.push(i);
+  }
+  var header = labels.concat(extra.map(function (i) { return old[i] || "(cột cũ " + (i + 1) + ")"; }));
+  var from = labels.map(function (l) { return old.indexOf(l); }).concat(extra);
+  return {
+    header: header,
+    rows: rows.map(function (r) {
+      return from.map(function (i) { return i < 0 || r[i] === undefined ? "" : r[i]; });
+    }),
+  };
 }
 
 // ---------- Phần chạy trên Google ----------
@@ -538,12 +583,35 @@ function setup() {
 }
 
 function ensureSheet(ss, spec) {
-  var sh = ss.getSheetByName(spec.name) || ss.insertSheet(spec.name);
+  var sh = ss.getSheetByName(spec.name);
+  if (sh && migrateSheet(sh, spec)) return sh;
+  sh = sh || ss.insertSheet(spec.name);
   var header = spec.columns.map(function (c) { return c[1]; });
   sh.getRange(1, 1, 1, header.length).setValues([header]).setFontWeight("bold");
   sh.setFrozenRows(1);
   applyFormats(sh, spec);
   return sh;
+}
+
+/** Tiêu đề tab khác SHEETS ⇒ xếp lại cả tab theo migrateColumns. Trả true nếu đã xếp lại. */
+function migrateSheet(sh, spec) {
+  var width = sh.getLastColumn();
+  if (width < 1 || sh.getLastRow() < 1) return false;
+  // Mỗi lượt ghi chỉ đọc dòng tiêu đề; cả tab chỉ đọc khi thật sự phải xếp lại.
+  var header = sh.getRange(1, 1, 1, width).getValues()[0];
+  if (!migrateColumns(header, [], spec.columns)) return false;
+  var values = sh.getRange(1, 1, sh.getLastRow(), width).getValues();
+  var m = migrateColumns(values[0], values.slice(1), spec.columns);
+  sh.clearContents();
+  if (sh.getMaxColumns() < m.header.length) sh.insertColumnsAfter(sh.getMaxColumns(), m.header.length - sh.getMaxColumns());
+  applyFormats(sh, spec); // đặt dạng chữ TRƯỚC khi ghi, để mốc giờ cũ không bị đổi thành ngày
+  sh.getRange(1, 1, 1, m.header.length).setValues([m.header]).setFontWeight("bold");
+  if (m.rows.length) {
+    ensureRows(sh, spec, m.rows.length + 1);
+    sh.getRange(2, 1, m.rows.length, m.header.length).setValues(m.rows.map(function (r) { return r.map(sanitizeCell); }));
+  }
+  sh.setFrozenRows(1);
+  return true;
 }
 
 /** Cột chữ đặt dạng văn bản để Sheets không tự đổi "2026-09-19T13:21:04" hay mã số dài. */
@@ -625,8 +693,7 @@ function handle(ss, body, now) {
     var logs = cleanLogs(body.logs, body.device, now);
     if (logs.length) appendLogs(ss, logs);
     if (body.device) {
-      var last = logs.length ? logs[logs.length - 1] : null;
-      var error = last ? (last.channel ? CHANNEL_NAMES[last.channel] || last.channel : "") + " · " + last.stage + " · " + last.message : "";
+      var error = lastErrorText(logs.length ? logs[logs.length - 1] : null);
       writeDevices(ss, mergeDevice(readObjects(ss, SHEETS.devices), body.device, { action: action, error: error }, now));
     }
   } catch (err) {
@@ -666,10 +733,21 @@ function writeDevices(ss, objs) {
   });
   ensureRows(sh, spec, rows.length + 1);
   sh.getRange(2, 1, rows.length, fields.length).setValues(rows);
+  // Địa chỉ A1, không R1C1: setFormulaR1C1 với "RC[12]" bị Sheets ghi nguyên chữ ⇒ #ERROR! (đo 08/10/2026).
   var lostCol = fields.indexOf("lost") + 1;
-  var offset = fields.indexOf("deadline") - fields.indexOf("lost");
-  var formula = '=IF(RC[' + offset + ']="","",IF(NOW()>RC[' + offset + '],"MẤT LIÊN LẠC",""))';
-  sh.getRange(2, lostCol, rows.length, 1).setFormulaR1C1(formula);
+  var deadline = columnLetter(fields.indexOf("deadline") + 1);
+  var formulas = rows.map(function (_, i) { return [lostFormula(deadline + (i + 2))]; });
+  sh.getRange(2, lostCol, rows.length, 1).setFormulas(formulas);
+}
+
+function columnLetter(n) {
+  var s = "";
+  for (; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
+  return s;
+}
+
+function lostFormula(cell) {
+  return '=IF(' + cell + '="","",IF(NOW()>' + cell + ',"MẤT LIÊN LẠC",""))';
 }
 
 function upsert(ss, spec, incoming, now) {
@@ -694,7 +772,10 @@ function append(ss, spec, objs) {
   sh.getRange(sh.getLastRow() + 1, 1, rows.length, spec.columns.length).setValues(rows);
 }
 
-/** Tab bị xoá tay ⇒ dựng lại; còn thì để nguyên (không ghi lại tiêu đề mỗi lượt). */
+/** Tab bị xoá tay ⇒ dựng lại; tiêu đề cũ (vừa nâng cấp Code.gs) ⇒ xếp lại cột; còn thì để nguyên. */
 function ensureSheetLight(ss, spec) {
-  return ss.getSheetByName(spec.name) || ensureSheet(ss, spec);
+  var sh = ss.getSheetByName(spec.name);
+  if (!sh) return ensureSheet(ss, spec);
+  migrateSheet(sh, spec);
+  return sh;
 }
