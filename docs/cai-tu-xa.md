@@ -60,10 +60,17 @@ rồi làm lại từ bước 1.
 
 ## Cập nhật
 
+Từ bản 0.8.1, extension tự đọc số phiên bản mới nhất trên GitHub (mỗi 30 phút và mỗi lần mở ô
+bật lên). Có bản mới thì ô bật lên hiện dải vàng **"Có bản mới …"** kèm nút **Chép lệnh cập
+nhật** và ba bước làm. Khối Cài đặt cũng luôn có lệnh này ở cuối, kèm dòng cho biết máy đang chạy
+bản nào. Extension không tự chạy được PowerShell, nên vẫn phải có người dán lệnh. Máy còn chạy bản
+cũ hơn 0.8.1 thì không có dải này: chạy lệnh tay một lần.
+
 Chạy lại đúng lệnh ở bước 1 trên máy cần cập nhật. Lệnh chép bản mới nhất đè lên
 `C:\UrbanB\extension`; không phải làm lại bước 2 và 3. Extension tự kiểm thư mục mỗi 30 phút,
 thấy bản trên đĩa mới hơn thì tự nạp lại (trừ khi đang quét dở), giữ nguyên cài đặt và mã máy.
-Muốn chạy bản mới ngay: vào `chrome://extensions`, bấm nút nạp lại của Thu review OTA.
+Muốn chạy bản mới ngay: mở lại ô bật lên của Thu review OTA (từ 0.8.1, ô tự đóng một
+nhịp rồi bản mới chạy), hoặc vào `chrome://extensions` và bấm nút nạp lại.
 
 Cột *Phiên bản* của tab `Máy cài` cho biết máy nào đã lên bản mới.
 

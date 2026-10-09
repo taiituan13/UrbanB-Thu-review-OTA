@@ -68,7 +68,9 @@ bằng cách chạy lại lệnh. Cách tay dưới đây dùng khi thử trên 
    - **Mã Booking**: chỉ cần điền khi tài khoản Booking thấy nhiều chỗ nghỉ.
    - **Mã Agoda**: để trống thì extension tự dò.
    - **Mã Expedia**: để trống thì extension tự dò khi tài khoản chỉ có một khách sạn; tài
-     khoản quản nhiều khách sạn thì điền mã (số `htid` trên thanh địa chỉ).
+     khoản quản nhiều khách sạn thì điền mã (số `htid` trên thanh địa chỉ). Điền sẵn cũng là
+     cách chắc nhất: có tài khoản bị Expedia đá sang hộp thư (`/supply/inbox`) thay vì trang
+     review, và trang đó không phải lúc nào cũng mang mã.
 4. Bấm **Thử Sheet**. Đúng thì hiện tên Sheet; máy có điền URL Hub thì dòng đó có thêm
    "Hub: ổn".
 5. Bấm **Quét ngay**. Extension mở từng extranet trong một tab nền, đọc review, đóng

@@ -2,6 +2,7 @@
 
 import {
   CHANNELS,
+  CHANNEL_LABEL,
   VERSION,
   clearSheetError,
   dropLogs,
@@ -15,12 +16,13 @@ import {
 import { SheetError, makeLogEntry, parseSheetReply, withRetry } from "./report.js";
 import { normalizeBatch } from "./normalize.js";
 import { HubError, hubBatches, hubEndpoint, hubSummaryText, parseHubReply, sumHubReplies } from "./hub.js";
-import { isNewer } from "./update.js";
+import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import {
   bookingSessionInPage,
   scanAgodaInPage,
   scanBookingInPage,
   scanExpediaInPage,
+  expediaLanding,
   expediaPropertiesInPage,
   pickPropertyId,
   scanGo2joyInPage,
@@ -46,7 +48,10 @@ chrome.runtime.onInstalled.addListener(schedule);
 chrome.runtime.onStartup.addListener(schedule);
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM) runScan("hẹn giờ");
-  if (alarm.name === UPDATE_ALARM) reloadIfDiskNewer();
+  if (alarm.name === UPDATE_ALARM) {
+    reloadIfDiskNewer();
+    checkRemoteVersion();
+  }
 });
 
 /**
@@ -64,6 +69,18 @@ async function reloadIfDiskNewer() {
   }
 }
 
+/**
+ * Đọc số phiên bản mới nhất trên GitHub, lưu vào `update` để ô bật lên hiện dải "Có bản mới".
+ * Không vào được GitHub thì giữ kết quả cũ: dải này chỉ là lời nhắc, không chặn việc gì.
+ */
+async function checkRemoteVersion() {
+  try {
+    const res = await fetch(REMOTE_MANIFEST_URL, { cache: "no-store" });
+    const latest = res.ok ? parseRemoteVersion(await res.text()) : null;
+    if (latest) await chrome.storage.local.set({ update: { latest, at: new Date().toISOString() } });
+  } catch {}
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg?.type === "scanNow") {
     runScan("bấm tay").then(
@@ -74,6 +91,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   }
   if (msg?.type === "pingSheet") {
     pingSheet().then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
+    return true;
+  }
+  if (msg?.type === "checkUpdate") {
+    // Mở ô bật lên: người vừa chạy lệnh cập nhật thì nạp bản mới ngay (ô tự đóng), không chờ 30 phút.
+    reloadIfDiskNewer();
+    checkRemoteVersion().then(() => reply({ ok: true }));
     return true;
   }
   if (msg?.type === "reschedule") {
@@ -142,6 +165,15 @@ function needsLogin(channel, url) {
 
 class LoginRequired extends Error {}
 
+/** Đường dẫn (không query) mà tab đang đứng, để câu lỗi nói trang đã chuyển đi đâu. */
+async function tabPath(tabId) {
+  try {
+    return new URL((await chrome.tabs.get(tabId)).url ?? "").pathname;
+  } catch {
+    return "trang khác";
+  }
+}
+
 function assertLoggedIn(channel, url) {
   if (needsLogin(channel, url)) throw new LoginRequired("Cần đăng nhập lại");
 }
@@ -193,14 +225,21 @@ async function scanExpedia(tabId, cfg) {
   const reviews = "https://apps.expediapartnercentral.com/supply/reviews/post-stay-reviews";
   let pid = String(cfg.expediaPropertyId || "").trim();
   if (!pid) {
-    // Chưa chọn chỗ nghỉ trong phiên thì Expedia đá sang trang chọn chỗ nghỉ, kể cả khi
-    // tài khoản chỉ có một chỗ (đo 08/10/2026) ⇒ đọc danh sách ở đó.
+    // Chưa chọn chỗ nghỉ trong phiên thì Expedia đá sang trang khác, kể cả khi tài khoản chỉ có
+    // một chỗ: /manageproperty/ (đo 08/10/2026) hoặc /supply/inbox (09/10/2026). Lấy mã từ URL
+    // trang đích, không có thì từ các link htid= trên trang đó.
     const landed = await go(tabId, reviews);
     assertLoggedIn("expedia", landed);
-    if (!/\/manageproperty\//i.test(new URL(landed).pathname)) return runInPage(tabId, scanExpediaInPage);
-    pid = pickPropertyId("Expedia", (await runInPage(tabId, expediaPropertiesInPage)) ?? []);
+    const at = expediaLanding(landed);
+    if (at.onReviews) return runInPage(tabId, scanExpediaInPage);
+    pid = at.htid ?? pickPropertyId("Expedia", (await runInPage(tabId, expediaPropertiesInPage)) ?? []);
   }
-  assertLoggedIn("expedia", await go(tabId, `${reviews}?htid=${encodeURIComponent(pid)}`));
+  const landed = await go(tabId, `${reviews}?htid=${encodeURIComponent(pid)}`);
+  assertLoggedIn("expedia", landed);
+  const at = expediaLanding(landed);
+  if (!at.onReviews) {
+    throw new Error(`Expedia chuyển sang ${at.path} thay vì trang review của chỗ nghỉ ${pid}. Kiểm lại mã Expedia trong cài đặt.`);
+  }
   return runInPage(tabId, scanExpediaInPage);
 }
 
@@ -405,7 +444,9 @@ async function scanOne(channel, cfg, trigger) {
     tab = await chrome.tabs.create({ url: "about:blank", active: false });
     stage = "quét";
     const result = await SCANNERS[channel](tab.id, cfg);
-    if (!result?.ok) throw new Error(result?.error ?? "Quét thất bại");
+    // Không có kết quả nào (kể cả câu lỗi) ⇒ trang tự chuyển đi giữa lúc bộ quét đang chạy.
+    if (!result) throw new Error(`Trang ${CHANNEL_LABEL[channel]} chuyển sang ${await tabPath(tab.id)} giữa lượt quét, không lấy được kết quả`);
+    if (!result.ok) throw new Error(result.error ?? "Quét thất bại");
 
     stage = "chuẩn hoá";
     const ctx = { hotel: cfg.hotel, channelHotelId: result.channelHotelId };

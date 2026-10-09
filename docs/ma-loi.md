@@ -44,7 +44,8 @@ Các loại không có tiền tố kênh bắt đầu bằng `SHEET` (gửi Shee
 |---|---|---|---|
 | `-LOGIN` | Extranet đá về trang đăng nhập (phiên hết hạn) | Đăng nhập lại kênh đó trong cùng Chrome, bấm Quét ngay | Lặp lại liên tục ở Booking: phiên Booking hết sau khoảng 2 giờ không dùng (xem `cai-dat.md` §5) |
 | `-MULTI` | Tài khoản thấy nhiều chỗ nghỉ, extension không biết chọn cái nào | Điền mã khách sạn của kênh trong ô cài đặt | Thông điệp lỗi liệt kê sẵn các mã thấy được |
-| `-NOID` | Không dò được mã khách sạn (Agoda) | Điền mã Agoda trong ô cài đặt | Trang chủ Agoda đổi đường dẫn ⇒ sửa `scanAgoda` trong `background.js` |
+| `-NOID` | Không dò được mã khách sạn (Agoda, Expedia) | Điền mã của kênh đó trong ô cài đặt | Agoda: trang chủ đổi đường dẫn ⇒ sửa `scanAgoda`. Expedia: trang đích không có `htid` trong URL lẫn trong link ⇒ xem `scanExpedia` (cả hai trong `background.js`) |
+| `-PAGE` | Trang kênh tự chuyển đi chỗ khác thay vì trang review, hoặc chuyển đi giữa lúc đang quét | Mở trang review của kênh xem có vào được không; kênh có ô mã khách sạn thì kiểm lại ô đó | Thông điệp ghi đường dẫn trang đích. Ví dụ Expedia đá sang `/supply/inbox` khi chưa chọn chỗ nghỉ (09/10/2026) |
 | `-TIMEOUT` | Trang không tải xong trong 45 giây | Kiểm mạng, bấm Quét ngay | Lặp lại ở một kênh: kênh chậm hoặc chặn tab nền |
 | `-TAB` | Tab nền bị đóng giữa chừng | Đừng đóng tab mà extension tự mở | Thường do người dùng đóng tay; không cần sửa mã |
 | `-CAPTURE` | Không bắt được request review của trang | Mở trang review của kênh xem có tải được không | Xem cột *Trang lúc lỗi*: trang bị chuyển hướng đi đâu. Kênh đổi giao diện ⇒ sửa `scanners.js` hoặc mẫu trong `capture.js` |

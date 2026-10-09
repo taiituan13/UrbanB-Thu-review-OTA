@@ -1,5 +1,6 @@
 import { CHANNELS, CHANNEL_LABEL, VERSION, getDeviceId, loadConfig, loadLastError, loadStatus, saveConfig } from "./config.js";
 import { formatErrorReport } from "./report.js";
+import { UPDATE_COMMAND, updateNotice } from "./update.js";
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = ["hotel", "sheetUrl", "secret", "hubUrl", "hubToken", "bookingHotelId", "agodaPropertyId", "expediaPropertyId", "intervalHours"];
@@ -109,6 +110,31 @@ async function renderStatus() {
   }
 }
 
+/** Chép lệnh cập nhật; đổi chữ trên nút một lúc để người bấm biết đã chép. */
+async function copyCommand(button) {
+  const label = button.textContent;
+  try {
+    await navigator.clipboard.writeText(UPDATE_COMMAND);
+    button.textContent = "Đã chép";
+  } catch {
+    button.textContent = "Chép hỏng — bôi đen lệnh";
+  }
+  setTimeout(() => (button.textContent = label), 2000);
+}
+
+/** Dải "Có bản mới" và dòng phiên bản trong Cài đặt, theo kết quả kiểm GitHub đã lưu. */
+async function renderUpdate() {
+  const { update } = await chrome.storage.local.get("update");
+  const notice = updateNotice(update, VERSION);
+  $("update").hidden = !notice;
+  if (notice) $("updTitle").textContent = `Có bản mới ${notice.latest} (máy đang chạy ${notice.current})`;
+  $("updState").textContent = !update?.latest
+    ? `Máy đang chạy bản ${VERSION}. Chưa kiểm được bản mới nhất trên GitHub.`
+    : notice
+      ? `Máy đang chạy bản ${VERSION}; bản mới nhất ${update.latest}.`
+      : `Máy đang chạy bản mới nhất (${VERSION}).`;
+}
+
 async function save() {
   const cfg = await loadConfig();
   for (const f of FIELDS) cfg[f] = $(f).value.trim();
@@ -153,12 +179,19 @@ $("scan").onclick = async () => {
   await renderStatus();
 };
 
+$("copyUpdate").onclick = () => copyCommand($("copyUpdate"));
+$("copyCmd").onclick = () => copyCommand($("copyCmd"));
+
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.status || changes.lastError || changes.config) renderStatus();
+  if (changes.update) renderUpdate();
 });
 
+$("updateCmd").value = UPDATE_COMMAND;
 fill();
 renderStatus();
+renderUpdate();
+chrome.runtime.sendMessage({ type: "checkUpdate" }).catch(() => {});
 getDeviceId().then((id) => {
   $("device").textContent = `Mã máy ${id.slice(0, 8)} · phiên bản ${VERSION}`;
 });

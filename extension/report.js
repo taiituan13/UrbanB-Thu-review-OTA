@@ -105,6 +105,7 @@ const CHANNEL_KINDS = [
   ["LOGIN", (stage) => stage === "đăng nhập", "Mở {kênh} trong Chrome này, đăng nhập lại, rồi bấm Quét ngay."],
   ["MULTI", /thấy \d+ chỗ nghỉ/i, "Điền mã khách sạn của {kênh} trong ô cài đặt, rồi bấm Quét ngay."],
   ["NOID", /Không dò được mã/i, "Điền mã khách sạn của {kênh} trong ô cài đặt, rồi bấm Quét ngay."],
+  ["PAGE", /chuyển sang .* (thay vì trang review|giữa lượt quét)/i, "Mở trang review của {kênh} trong Chrome này xem có vào được không. Kênh có ô mã khách sạn thì kiểm lại ô đó, rồi bấm Quét ngay; vẫn lỗi thì gửi mã lỗi."],
   ["TIMEOUT", /Hết giờ chờ trang tải/i, "Trang {kênh} tải quá chậm. Kiểm tra mạng, bấm Quét ngay; lặp lại thì gửi mã lỗi."],
   ["TAB", (stage, m) => stage === "mở tab" || /No tab with id/i.test(m), "Đừng đóng tab mà extension tự mở. Bấm Quét ngay; lặp lại thì gửi mã lỗi."],
   ["CAPTURE", /Không bắt được request|Không thấy request|Không đọc được phiên|không có SupplyReviewsQuery/i, "Mở trang review của {kênh} xem có tải được không, rồi bấm Quét ngay; vẫn lỗi thì gửi mã lỗi."],

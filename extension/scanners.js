@@ -176,6 +176,11 @@ export async function scanTravelokaInPage() {
  */
 export async function scanExpediaInPage() {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Trang tự chuyển đi sau khi background.js đã kiểm (ví dụ sang /supply/inbox) ⇒ báo rõ thay vì
+  // chờ 30 giây một request không bao giờ tới.
+  if (!/\/supply\/reviews\//i.test(location.pathname)) {
+    return { ok: false, error: `Expedia chuyển sang ${location.pathname} thay vì trang review` };
+  }
   let cap = null;
   for (let i = 0; i < 60 && !cap; i++) {
     cap = window.__urbanbCap?.expedia;
@@ -287,7 +292,23 @@ export async function scanGo2joyInPage() {
   return { ok: true, total, reviews, channelHotelId: url.searchParams.get("hotelSn") ?? String(info?.sn ?? ""), snapshots };
 }
 
-/** Expedia — trên trang chọn chỗ nghỉ (/manageproperty/): mã các chỗ nghỉ tài khoản thấy được. */
+/**
+ * Expedia — đọc URL mà tab dừng lại sau khi mở trang review: đã ở trang review chưa, và URL có
+ * sẵn mã chỗ nghỉ (`htid`) không. Chưa chọn chỗ nghỉ trong phiên thì Expedia đá đi chỗ khác:
+ * /manageproperty/ (đo 08/10/2026) hoặc /supply/inbox (máy Maison Trường Thịnh, 09/10/2026).
+ */
+export function expediaLanding(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return { onReviews: false, htid: null, path: String(url ?? "") };
+  }
+  const htid = u.searchParams.get("htid");
+  return { onReviews: /\/supply\/reviews\//i.test(u.pathname), htid: /^\d+$/.test(htid ?? "") ? htid : null, path: u.pathname };
+}
+
+/** Expedia — trên trang chọn chỗ nghỉ (/manageproperty/) hay trang khác: mã các chỗ nghỉ có link trên trang. */
 export function expediaPropertiesInPage() {
   const ids = [...document.querySelectorAll('a[href*="htid="]')]
     .map((a) => new URL(a.href, location.href).searchParams.get("htid"))
