@@ -46,8 +46,9 @@ Các loại không có tiền tố kênh bắt đầu bằng `SHEET` (gửi Shee
 | `-MULTI` | Tài khoản thấy nhiều chỗ nghỉ, extension không biết chọn cái nào | Điền mã khách sạn của kênh trong ô cài đặt | Thông điệp lỗi liệt kê sẵn các mã thấy được |
 | `-NOID` | Không dò được mã khách sạn (Agoda, Expedia) | Điền mã của kênh đó trong ô cài đặt | Agoda: trang chủ đổi đường dẫn ⇒ sửa `scanAgoda`. Expedia: trang đích không có `htid` trong URL lẫn trong link ⇒ xem `scanExpedia` (cả hai trong `background.js`) |
 | `-PAGE` | Trang kênh tự chuyển đi chỗ khác thay vì trang review, hoặc chuyển đi giữa lúc đang quét | Mở trang review của kênh xem có vào được không; kênh có ô mã khách sạn thì kiểm lại ô đó | Thông điệp ghi đường dẫn trang đích. Ví dụ Expedia đá sang `/supply/inbox` khi chưa chọn chỗ nghỉ (09/10/2026) |
+| `-OPEN` | Trang kênh không mở được: tab vẫn trống sau hai lượt mở, hoặc Chrome hiện trang lỗi của nó | Đừng bấm dừng hay đóng tab mà extension tự mở. Vẫn lỗi thì mở kênh đó trong Chrome này xem có vào được không | Tab trống: người dùng bấm ✕/Esc trên tab trắng, hoặc lượt mở bị huỷ (tiện ích chặn, phần mềm bảo mật, trang trả 204). Trang lỗi: mất mạng hoặc bị chặn. Extension đã tự mở lại một lần trước khi báo |
 | `-TIMEOUT` | Trang không tải xong trong 45 giây | Kiểm mạng, bấm Quét ngay | Lặp lại ở một kênh: kênh chậm hoặc chặn tab nền |
-| `-TAB` | Tab nền bị đóng giữa chừng | Đừng đóng tab mà extension tự mở | Thường do người dùng đóng tay; không cần sửa mã |
+| `-TAB` | Tab nền bị đóng giữa chừng, kể cả lúc trang đang tải (từ 0.8.2; trước đó ca này báo nhầm `-TIMEOUT` sau 45 giây) | Đừng đóng tab mà extension tự mở | Thường do người dùng đóng tay; không cần sửa mã |
 | `-CAPTURE` | Không bắt được request review của trang | Mở trang review của kênh xem có tải được không | Xem cột *Trang lúc lỗi*: trang bị chuyển hướng đi đâu. Kênh đổi giao diện ⇒ sửa `scanners.js` hoặc mẫu trong `capture.js` |
 | `-HTTP` | API review của kênh trả mã HTTP lỗi | Gửi mã lỗi | 401/403: phiên hỏng nửa chừng. 400: kênh đổi định dạng yêu cầu ⇒ sửa `scanners.js` |
 | `-API` | Kênh trả lời nhưng báo lỗi trong nội dung | Gửi mã lỗi | Thông điệp chứa nguyên văn lỗi của kênh |

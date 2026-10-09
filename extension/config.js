@@ -4,7 +4,7 @@ export { CHANNEL_LABEL };
 
 // Cấu hình của một bản cài (một khách sạn), lưu trong chrome.storage.local.
 
-export const VERSION = "0.8.1";
+export const VERSION = "0.8.2";
 
 export const CHANNELS = ["booking", "agoda", "trip", "expedia", "traveloka", "go2joy"];
 

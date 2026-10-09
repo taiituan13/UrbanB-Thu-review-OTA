@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "UrbanB — Thu review OTA",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Đọc review từ extranet Booking, Agoda, Trip, Expedia, Traveloka, Go2Joy bằng phiên đăng nhập sẵn có và gom vào Google Sheet. Chỉ đọc.",
   "permissions": ["storage", "alarms", "scripting", "tabs"],
   "host_permissions": [

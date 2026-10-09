@@ -17,6 +17,7 @@ import { SheetError, makeLogEntry, parseSheetReply, withRetry } from "./report.j
 import { normalizeBatch } from "./normalize.js";
 import { HubError, hubBatches, hubEndpoint, hubSummaryText, parseHubReply, sumHubReplies } from "./hub.js";
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
+import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
 import {
   bookingSessionInPage,
   scanAgodaInPage,
@@ -109,8 +110,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
 
 // ---------- Tab ----------
 
+/**
+ * Chờ tab tải xong. Trả lời hứa kèm `arm()`: gọi SAU khi đã ra lệnh mở trang thì còn tự hỏi tab mỗi
+ * 0,5 giây xem lượt mở có bị bỏ không. Cần vì lượt mở bị huỷ trên tab đã "tải xong" từ trước (lần
+ * mở lại trong go()) thì Chrome không báo "complete" lần nữa: đo 09/10/2026, chờ đủ 45 giây rồi
+ * báo nhầm "Hết giờ chờ trang tải".
+ */
 function waitForLoad(tabId, timeoutMs = 45000) {
-  return new Promise((resolve, reject) => {
+  let arm;
+  const done = new Promise((resolve, reject) => {
+    let poll = null;
     const timer = setTimeout(() => {
       cleanup();
       reject(new Error("Hết giờ chờ trang tải"));
@@ -121,27 +130,65 @@ function waitForLoad(tabId, timeoutMs = 45000) {
         resolve();
       }
     }
+    // Đóng tab lúc đang tải ⇒ báo ngay, đừng chờ 45 giây rồi báo nhầm thành mạng chậm.
+    function onRemoved(id) {
+      if (id === tabId) {
+        cleanup();
+        reject(new Error(TAB_CLOSED_MESSAGE));
+      }
+    }
     function cleanup() {
       clearTimeout(timer);
+      clearInterval(poll);
       chrome.tabs.onUpdated.removeListener(onUpdated);
+      chrome.tabs.onRemoved.removeListener(onRemoved);
     }
+    arm = () => {
+      poll = setInterval(async () => {
+        try {
+          const t = await chrome.tabs.get(tabId);
+          if (t.status === "complete" && !t.pendingUrl && isBlankTab(t.url)) {
+            cleanup();
+            resolve();
+          }
+        } catch {} // tab mất: onRemoved lo
+      }, 500);
+    };
     chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.onRemoved.addListener(onRemoved);
   });
+  done.catch(() => {}); // tabs.update ném trước ⇒ lời hứa này không được ai chờ nữa
+  return Object.assign(done, { arm });
 }
 
-/** Mở (hoặc chuyển) tab tới url, chờ tải xong và chờ thêm cho trang tự chuyển hướng; trả URL cuối. */
+/**
+ * Mở (hoặc chuyển) tab tới url, chờ tải xong và chờ thêm cho trang tự chuyển hướng; trả URL cuối.
+ * Tab vẫn trống sau khi "tải xong" (lượt mở bị dừng hoặc bị huỷ, xem nav.js) ⇒ mở lại một lần.
+ */
 async function go(tabId, url) {
-  const loaded = waitForLoad(tabId);
-  await chrome.tabs.update(tabId, { url });
-  await loaded;
-  await sleep(2500);
-  const tab = await chrome.tabs.get(tabId);
-  return tab.url ?? "";
+  for (let attempt = 1; ; attempt++) {
+    const loaded = waitForLoad(tabId);
+    await chrome.tabs.update(tabId, { url });
+    loaded.arm();
+    await loaded;
+    await sleep(2500);
+    const now = (await chrome.tabs.get(tabId)).url ?? "";
+    if (!isBlankTab(now)) return now;
+    if (attempt >= 2) throw new Error(blankTabMessage(url));
+  }
 }
 
 async function runInPage(tabId, func, args = []) {
-  const [first] = await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func, args });
-  return first?.result;
+  try {
+    const [first] = await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func, args });
+    return first?.result;
+  } catch (e) {
+    let tabUrl = "";
+    try {
+      tabUrl = (await chrome.tabs.get(tabId)).url ?? "";
+    } catch {}
+    throw new Error(explainInjectError(e?.message ?? e, tabUrl));
+  }
 }
 
 const LOGIN_PATTERNS = {
