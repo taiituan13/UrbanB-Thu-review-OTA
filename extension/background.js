@@ -1,4 +1,4 @@
-// Tiến trình nền: hẹn giờ, mở tab extranet trong nền, quét, chuẩn hoá, gửi về Google Sheet.
+// Tiến trình nền: hẹn giờ, mở tab extranet trong nền, quét, chuẩn hoá, gửi về Google Sheet và Hub.
 
 import {
   CHANNELS,
@@ -14,6 +14,7 @@ import {
 } from "./config.js";
 import { SheetError, makeLogEntry, parseSheetReply, withRetry } from "./report.js";
 import { normalizeBatch } from "./normalize.js";
+import { HubError, hubBatches, hubEndpoint, hubSummaryText, parseHubReply, sumHubReplies } from "./hub.js";
 import { isNewer } from "./update.js";
 import {
   bookingSessionInPage,
@@ -276,16 +277,89 @@ async function postSheet(cfg, payload) {
 
 async function pingSheet() {
   const cfg = await loadConfig();
+  const hub = await pingHub(cfg);
   if (!cfg.sheetUrl || !cfg.secret) {
     const entry = makeLogEntry({ stage: "gửi Sheet", error: "Chưa điền URL Sheet hoặc mã bí mật" });
     await queueLog(entry);
-    return { ok: false, error: entry.message, ref: entry.ref, code: entry.code };
+    return { ok: false, error: entry.message, ref: entry.ref, code: entry.code, hub };
   }
   try {
-    return await postSheet(cfg, { action: "ping" });
+    return { ...(await postSheet(cfg, { action: "ping" })), hub };
   } catch (e) {
-    return { ok: false, error: String(e?.message ?? e), ref: e.logEntry?.ref, code: e.logEntry?.code };
+    return { ok: false, error: String(e?.message ?? e), ref: e.logEntry?.ref, code: e.logEntry?.code, hub };
   }
+}
+
+// ---------- Gửi lên Hub ----------
+
+/** Một request tới Hub; lỗi mạng và 5xx thì thử lại như gửi Sheet. Token chỉ nằm trong header. */
+async function postHub(cfg, body) {
+  const url = hubEndpoint(cfg.hubUrl);
+  return withRetry(
+    async () => {
+      let res;
+      try {
+        res = await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${cfg.hubToken}` },
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        throw new HubError(`Không gọi được Hub: ${e?.message ?? e}`, true);
+      }
+      return parseHubReply(res.status, await res.text());
+    },
+    { sleep },
+  );
+}
+
+/** Chưa điền URL Hub ⇒ máy này không gửi Hub. Có URL mà thiếu token ⇒ báo lỗi để người cài thấy. */
+function hubConfigured(cfg) {
+  return !!String(cfg.hubUrl ?? "").trim();
+}
+
+/** Lỗi Hub thành dòng nhật ký (lên tab "Nhật ký lỗi" của Sheet như mọi lỗi khác). */
+async function hubFailure(channel, error, detail) {
+  const entry = makeLogEntry({ channel, stage: "gửi Hub", error, detail });
+  await queueLog(entry);
+  return entry;
+}
+
+/** Thử đường lên Hub bằng action "ping" (Hub không ghi gì). Không điền URL Hub ⇒ null. */
+async function pingHub(cfg) {
+  if (!hubConfigured(cfg)) return null;
+  try {
+    if (!cfg.hubToken) throw new HubError("Chưa điền Token Hub.", false);
+    await postHub(cfg, { action: "ping" });
+    return { ok: true };
+  } catch (e) {
+    const entry = await hubFailure("", e);
+    return { ok: false, error: entry.message, ref: entry.ref, code: entry.code };
+  }
+}
+
+/**
+ * Gửi các bài của một kênh lên Hub, chia lô. Không bao giờ ném: kết quả (hoặc lỗi) nằm trong
+ * trạng thái kênh, còn lượt gửi Sheet đi tiếp như cũ. Một lô hỏng thì dừng, các lô đã gửi vẫn giữ.
+ */
+async function sendHub(cfg, channel, reviews, at) {
+  if (!hubConfigured(cfg)) return null;
+  const replies = [];
+  try {
+    if (!cfg.hubToken) throw new HubError("Chưa điền Token Hub.", false);
+    for (const body of hubBatches(reviews)) replies.push(await postHub(cfg, body));
+  } catch (e) {
+    const sentNote = replies.length ? ` (đã gửi ${replies.length} lô trước đó)` : "";
+    const entry = await hubFailure(channel, `${e?.message ?? e}${sentNote}`);
+    return { at, ok: false, text: entry.message, error: errorBrief(entry) };
+  }
+  const total = sumHubReplies(replies);
+  let error = null;
+  if (total.errors.length) {
+    const detail = total.errors.slice(0, 5).map((x) => `#${x.index} ${x.key ?? ""} ${x.error ?? ""}`).join("\n");
+    error = errorBrief(await hubFailure(channel, `${total.errors.length} bài Hub không nhận`, detail));
+  }
+  return { at, ok: !error, text: hubSummaryText(total), error };
 }
 
 /** Phần của dòng nhật ký mà ô bật lên cần: mã để sao chép và cách xử lý. */
@@ -325,6 +399,7 @@ async function scanOne(channel, cfg, trigger) {
   const startedAt = new Date().toISOString();
   const run = { at: startedAt, hotel: cfg.hotel, channel, trigger, version: VERSION, status: "", count: 0, note: "" };
   let tab = null;
+  let hub = null;
   let stage = "mở tab";
   try {
     tab = await chrome.tabs.create({ url: "about:blank", active: false });
@@ -351,6 +426,9 @@ async function scanOne(channel, cfg, trigger) {
       run.note += ` · ${partial.ref}`;
     }
 
+    // Hub trước Sheet: sendHub không ném, nên lỗi Hub không chặn Sheet và ngược lại.
+    hub = await sendHub(cfg, channel, batch.reviews, startedAt);
+
     stage = "gửi Sheet";
 
     const sent = await postSheet(cfg, {
@@ -366,6 +444,7 @@ async function scanOne(channel, cfg, trigger) {
       count: batch.reviews.length,
       message: `${sent.inserted} mới · ${sent.updated} đổi`,
       error: partial && errorBrief(partial),
+      hub,
     });
   } catch (e) {
     const login = e instanceof LoginRequired;
@@ -389,6 +468,7 @@ async function scanOne(channel, cfg, trigger) {
       count: 0,
       message: String(e?.message ?? e),
       error: errorBrief(entry),
+      hub,
     });
     // Ghi lượt lỗi (kèm nhật ký lỗi) vào Sheet; gửi hỏng thì lỗi nằm lại hàng đợi cho lượt sau.
     try {
@@ -411,10 +491,13 @@ async function setBadge(text) {
   await chrome.action.setBadgeBackgroundColor({ color: "#8c3226" });
 }
 
-/** "!" khi chưa điền đủ cài đặt hoặc một kênh ĐANG BẬT không ổn. Kênh đã tắt không tính. */
+/** "!" khi chưa điền đủ cài đặt, hoặc một kênh ĐANG BẬT không ổn hay gửi Hub hỏng. Kênh đã tắt không tính. */
 async function refreshBadge() {
   const [cfg, status] = await Promise.all([loadConfig(), loadStatus()]);
   const missing = !cfg.sheetUrl || !cfg.secret || !cfg.hotel;
-  const bad = CHANNELS.some((ch) => cfg.enabled[ch] && status[ch] && status[ch].state !== "ok");
+  const bad = CHANNELS.some((ch) => {
+    const s = status[ch];
+    return cfg.enabled[ch] && s && (s.state !== "ok" || (hubConfigured(cfg) && s.hub && !s.hub.ok));
+  });
   await setBadge(missing || bad ? "!" : "");
 }

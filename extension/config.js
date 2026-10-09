@@ -4,7 +4,7 @@ export { CHANNEL_LABEL };
 
 // Cấu hình của một bản cài (một khách sạn), lưu trong chrome.storage.local.
 
-export const VERSION = "0.7.0";
+export const VERSION = "0.8.0";
 
 export const CHANNELS = ["booking", "agoda", "trip", "expedia", "traveloka", "go2joy"];
 
@@ -12,6 +12,8 @@ export const DEFAULT_CONFIG = {
   sheetUrl: "", // URL Web App của Apps Script (…/exec)
   secret: "", // chuỗi bí mật in ra khi chạy setup() trong Apps Script
   hotel: "", // tên khách sạn, ghi vào cột "Khách sạn"
+  hubUrl: "", // gốc Hub UrbanB, ví dụ https://hub.urbanb.vn; để trống ⇒ không gửi Hub (hub.js)
+  hubToken: "", // token nhận review của Hub; chỉ đi trong header Authorization
   bookingHotelId: "", // bắt buộc nếu tài khoản Booking thấy nhiều chỗ nghỉ
   agodaPropertyId: "", // để trống ⇒ tự dò từ trang chủ Agoda
   expediaPropertyId: "", // để trống ⇒ tự dò khi tài khoản chỉ có một khách sạn

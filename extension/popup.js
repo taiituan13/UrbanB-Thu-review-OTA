@@ -2,7 +2,7 @@ import { CHANNELS, CHANNEL_LABEL, VERSION, getDeviceId, loadConfig, loadLastErro
 import { formatErrorReport } from "./report.js";
 
 const $ = (id) => document.getElementById(id);
-const FIELDS = ["hotel", "sheetUrl", "secret", "bookingHotelId", "agodaPropertyId", "expediaPropertyId", "intervalHours"];
+const FIELDS = ["hotel", "sheetUrl", "secret", "hubUrl", "hubToken", "bookingHotelId", "agodaPropertyId", "expediaPropertyId", "intervalHours"];
 const STATE_TEXT = { ok: "ổn", error: "lỗi", login: "cần đăng nhập lại" };
 
 /** Dòng chữ dưới nút Quét ngay; `where` = "settingsNote" cho dòng trong khối Cài đặt. */
@@ -84,6 +84,15 @@ async function renderStatus() {
       div.querySelector(".body").appendChild(errorBox(s.error));
       shown.add(s.error.ref);
     }
+    // Kết quả gửi Hub của lượt đó; máy chưa điền URL Hub thì không hiện dòng này.
+    if (cfg.hubUrl && s?.hub) {
+      const hub = document.createElement("div");
+      hub.className = "hub" + (s.hub.ok ? "" : " bad");
+      // Câu lỗi Hub tự nhắc chữ "Hub" rồi; chỉ thêm tiền tố khi chưa có.
+      hub.textContent = /Hub/.test(s.hub.text) ? s.hub.text : `Hub: ${s.hub.text}`;
+      div.querySelector(".body").appendChild(hub);
+      if (s.hub.error?.ref && !s.hub.ok) div.querySelector(".body").appendChild(errorBox(s.hub.error));
+    }
     box.appendChild(div);
   }
   // Lỗi gửi Sheet không thuộc kênh nào (Thử Sheet, báo sống) chỉ hiện ở đây; gửi được lại thì tự mất.
@@ -119,7 +128,10 @@ $("save").onclick = async () => {
 async function ping() {
   note("Đang thử…", "settingsNote");
   const r = await chrome.runtime.sendMessage({ type: "pingSheet" });
-  note(r?.ok ? `Sheet trả lời: ${r.sheet ?? "ok"}` : `Lỗi${r?.ref ? " " + r.ref : ""}: ${r?.error ?? "không rõ"}`, "settingsNote");
+  const sheet = r?.ok ? `Sheet trả lời: ${r.sheet ?? "ok"}` : `Lỗi Sheet${r?.ref ? " " + r.ref : ""}: ${r?.error ?? "không rõ"}`;
+  // r.hub = null khi máy không gửi Hub (ô URL Hub để trống).
+  const hub = !r?.hub ? "" : r.hub.ok ? " · Hub: ổn" : ` · Lỗi Hub ${r.hub.ref ?? ""}: ${r.hub.error ?? "không rõ"}`;
+  note(sheet + hub, "settingsNote");
   await renderStatus();
 }
 

@@ -61,13 +61,16 @@ bằng cách chạy lại lệnh. Cách tay dưới đây dùng khi thử trên 
    - **Tên khách sạn**: ghi vào cột "Khách sạn", và là tên của máy trong tab `Máy cài`.
      Mỗi máy một tên, viết thống nhất.
    - **URL Web App** và **Mã bí mật**: lấy từ bước 1.
+   - **URL Hub** và **Token Hub**: chỉ điền khi khách sạn gửi review lên Hub UrbanB
+     (mục 6). Để trống URL Hub thì máy chỉ gửi Sheet.
    - **Kênh quét**: bỏ chọn kênh mà khách sạn không có. Expedia, Traveloka và Go2Joy mặc
      định **tắt**; khách sạn có các kênh này thì tick vào.
    - **Mã Booking**: chỉ cần điền khi tài khoản Booking thấy nhiều chỗ nghỉ.
    - **Mã Agoda**: để trống thì extension tự dò.
    - **Mã Expedia**: để trống thì extension tự dò khi tài khoản chỉ có một khách sạn; tài
      khoản quản nhiều khách sạn thì điền mã (số `htid` trên thanh địa chỉ).
-4. Bấm **Thử Sheet**. Đúng thì hiện tên Sheet.
+4. Bấm **Thử Sheet**. Đúng thì hiện tên Sheet; máy có điền URL Hub thì dòng đó có thêm
+   "Hub: ổn".
 5. Bấm **Quét ngay**. Extension mở từng extranet trong một tab nền, đọc review, đóng
    tab, rồi gửi lên Sheet. Mỗi kênh mất khoảng nửa phút đến vài phút.
 
@@ -98,7 +101,7 @@ Người quản lý không cần tới tận máy:
   2 × chu kỳ quét (Chrome tắt, máy tắt, hoặc extension bị gỡ). Cột **Cảnh báo** báo
   khi hai máy khác nhau cùng khai một tên, hoặc một máy đã đổi tên sang tên khác.
 - **Nhật ký lỗi**: mỗi lỗi một dòng — mã lỗi, loại lỗi, kênh, giai đoạn (mở tab · đăng nhập · quét ·
-  chuẩn hoá · gửi Sheet), thông điệp, trang lúc lỗi, chi tiết kỹ thuật. Lọc theo cột
+  chuẩn hoá · gửi Hub · gửi Sheet), thông điệp, trang lúc lỗi, chi tiết kỹ thuật. Lọc theo cột
   *Khách sạn* để xem riêng một máy. Giữ 5.000 dòng mới nhất.
 - **Lượt quét**: mọi lượt của mọi khách sạn, kể cả lượt lỗi.
 
@@ -151,3 +154,37 @@ tự quy mọi điểm về thang 10.
   bài có phản hồi, 08/10/2026).
 - Endpoint là API nội bộ của extranet, đo ngày 07–08/10/2026. Kênh đổi giao diện thì
   extension sẽ báo đỏ, và phải sửa `extension/scanners.js`.
+
+## 6. Gửi lên Hub UrbanB
+
+Từ bản 0.8.0, extension gửi được review lên Hub UrbanB, song song với Sheet. Sheet vẫn nhận
+đủ như cũ; Hub là đích thứ hai.
+
+**Bật cho một máy:** trong khối Cài đặt, điền **URL Hub** và **Token Hub**, rồi bấm
+**Thử Sheet**. Dòng kết quả có "Hub: ổn" là đường lên Hub thông (lệnh thử không ghi gì
+lên Hub).
+
+- URL Hub chỉ nhận `https://hub.urbanb.vn` (production) hoặc `https://urbanb.xyz` (bãi
+  thử). Gửi tới tên miền khác thì Chrome chặn, vì manifest chỉ xin quyền hai tên miền này.
+- Token Hub là chuỗi `REVIEWS_INGEST_TOKEN` trong tệp `.env` của máy chủ Hub. Người quản
+  lý chép từ đó và gửi riêng; không dán token vào nhóm chung.
+
+**Extension gửi gì:**
+
+- Mỗi lượt quét, mỗi kênh: toàn bộ bài vừa đọc, chia lô tối đa 200 bài
+  (Hub nhận tối đa 500 bài và 2 MiB mỗi lần). Hub chống trùng theo kênh và mã review, và
+  dùng cột "Mã nội dung" để biết bài đổi, nên gửi lại bài cũ không tạo bài mới.
+- Chỉ các trường: kênh, mã review, mã khách sạn trên kênh, tên khách sạn, mã đặt phòng,
+  ngày review, điểm và thang, tiêu đề, điểm khen, điểm chê, nhận xét, phản hồi, ngày phản
+  hồi, mã nội dung. Không gửi JSON gốc, không gửi mã bí mật của Sheet. Tên khách đã bị gỡ
+  từ trước.
+- Token chỉ đi trong header `Authorization`, không nằm trong thân request.
+
+**Đọc kết quả:** dưới mỗi kênh trong ô bật lên có dòng
+"Hub: 3 mới · 1 đổi · 662 chưa ghép". *Chưa ghép* là bài của mã khách sạn mà Admin Hub
+chưa ghép với chi nhánh: bài nằm ở bảng chờ của Hub và tự vào khi Admin ghép ở
+`/admin/review-hotel-links`.
+
+**Khi Hub hỏng:** lượt gửi Sheet vẫn chạy. Lỗi Hub có loại `HUB-…`
+(xem [ma-loi.md](ma-loi.md)), hiện khung đỏ dưới kênh và bật dấu `!` trên biểu tượng.
+Extension không xếp hàng gửi lại lên Hub: lượt quét sau gửi lại toàn bộ bài.

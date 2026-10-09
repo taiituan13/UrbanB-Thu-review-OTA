@@ -91,6 +91,16 @@ const SHEET_KINDS = [
   ["SHEET-REJECT", /./, "Gửi mã lỗi cho người quản lý."],
 ];
 
+// Gửi Hub (hub.js) hỏng không làm hỏng lượt gửi Sheet; lỗi vẫn vào nhật ký như mọi lỗi khác.
+const HUB_KINDS = [
+  ["HUB-URL", /URL Hub/i, "Kiểm lại ô URL Hub trong Cài đặt (để trống nếu chưa gửi Hub)."],
+  ["HUB-TOKEN", /token/i, "Dán lại Token Hub (lấy từ người quản lý), rồi bấm Thử Sheet."],
+  ["HUB-OFF", /chưa bật/i, "Gửi mã lỗi cho người quản lý (Hub chưa mở cửa nhận review)."],
+  ["HUB-NET", /Không gọi được Hub/i, "Kiểm tra mạng của máy; lượt quét sau sẽ tự gửi lại."],
+  ["HUB-ROWS", /bài Hub không nhận/i, "Không cần làm gì: các bài khác vẫn được gửi. Gửi mã lỗi để người quản lý sửa."],
+  ["HUB-REJECT", /./, "Gửi mã lỗi cho người quản lý."],
+];
+
 const CHANNEL_KINDS = [
   ["LOGIN", (stage) => stage === "đăng nhập", "Mở {kênh} trong Chrome này, đăng nhập lại, rồi bấm Quét ngay."],
   ["MULTI", /thấy \d+ chỗ nghỉ/i, "Điền mã khách sạn của {kênh} trong ô cài đặt, rồi bấm Quét ngay."],
@@ -111,6 +121,10 @@ function matches(rule, stage, message) {
 /** Loại lỗi + cách xử lý, suy từ kênh, giai đoạn và thông điệp. */
 export function classifyError(channel, stage, message) {
   const m = String(message ?? "");
+  if (stage === "gửi Hub") {
+    const [code, , hint] = HUB_KINDS.find(([, re]) => re.test(m));
+    return { code, hint };
+  }
   if (stage === "gửi Sheet" || !CHANNEL_PREFIX[channel]) {
     const [code, , hint] = SHEET_KINDS.find(([, re]) => re.test(m)) ?? SHEET_KINDS[SHEET_KINDS.length - 1];
     return { code, hint };

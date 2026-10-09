@@ -36,7 +36,7 @@ Lỗi gửi Sheet (sai mã bí mật, sai URL…) không thuộc kênh nào, nê
 ## Danh mục loại lỗi
 
 Tiền tố kênh: `BKG` Booking · `AGD` Agoda · `TRP` Trip · `EXP` Expedia · `TVL` Traveloka · `G2J` Go2Joy.
-Các loại không có tiền tố kênh bắt đầu bằng `SHEET`.
+Các loại không có tiền tố kênh bắt đầu bằng `SHEET` (gửi Sheet) hoặc `HUB` (gửi Hub UrbanB).
 
 ### Lỗi theo kênh (`<kênh>-…`)
 
@@ -65,9 +65,22 @@ Các loại không có tiền tố kênh bắt đầu bằng `SHEET`.
 | `SHEET-OLD` | Sheet không hiểu yêu cầu | Gửi mã lỗi | Web App đang chạy `Code.gs` cũ ⇒ triển khai **Phiên bản mới** |
 | `SHEET-REJECT` | Sheet từ chối vì lý do khác | Gửi mã lỗi | Thông điệp chứa câu trả lời của Sheet |
 
+### Lỗi gửi Hub (`HUB-…`)
+
+Chỉ có ở máy đã điền URL Hub. Lỗi Hub không làm hỏng lượt gửi Sheet.
+
+| Loại | Nghĩa | Khách sạn tự làm | Người quản lý kiểm |
+|---|---|---|---|
+| `HUB-URL` | URL Hub sai dạng, hoặc không phải `hub.urbanb.vn` / `urbanb.xyz` | Sửa ô URL Hub, hoặc để trống nếu chưa gửi Hub | Tên miền Hub mới ⇒ thêm vào `HUB_HOSTS` trong `hub.js` và `host_permissions` |
+| `HUB-TOKEN` | Thiếu Token Hub, hoặc Hub từ chối token (401) | Dán lại Token Hub, bấm Thử Sheet | Token trên máy chủ vừa đổi? Gửi token mới cho mọi máy |
+| `HUB-OFF` | Hub chưa mở cửa nhận review (404) | Gửi mã lỗi | Máy chủ thiếu `REVIEWS_INGEST_TOKEN` (hoặc ngắn hơn 32 ký tự) |
+| `HUB-NET` | Không gọi được tới Hub | Kiểm mạng; lượt sau tự gửi lại | Hub sập hoặc tên miền không phân giải được |
+| `HUB-ROWS` | Hub nhận lô nhưng từ chối một số bài | Không cần làm gì | Cột *Chi tiết* có 5 bài đầu kèm mã lỗi dòng của Hub (`SCALE_MISMATCH`, `ID_TOO_LONG`…) |
+| `HUB-REJECT` | Hub từ chối vì lý do khác (400, 413, 5xx sau 3 lần) | Gửi mã lỗi | Thông điệp chứa câu trả lời của Hub |
+
 ## Thêm một loại lỗi
 
-1. Thêm một dòng vào `SHEET_KINDS` hoặc `CHANNEL_KINDS` trong `extension/report.js`.
+1. Thêm một dòng vào `SHEET_KINDS`, `HUB_KINDS` hoặc `CHANNEL_KINDS` trong `extension/report.js`.
    Luật đầu tiên khớp sẽ thắng, nên đặt luật hẹp lên trước luật rộng.
 2. Thêm một ca vào test "Loại lỗi" trong `test/report.test.mjs`.
 3. Thêm một dòng vào bảng trên.

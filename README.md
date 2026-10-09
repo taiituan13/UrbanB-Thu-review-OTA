@@ -1,7 +1,8 @@
 # UrbanB — Thu review OTA
 
 Chrome extension đọc review của khách sạn từ extranet **Booking**, **Agoda**, **Trip**, **Expedia**, **Traveloka** và **Go2Joy**
-bằng phiên đăng nhập sẵn có trên máy, rồi gom tất cả về một Google Sheet chung.
+bằng phiên đăng nhập sẵn có trên máy, rồi gom tất cả về một Google Sheet chung. Máy nào điền
+URL Hub thì gửi thêm một bản lên Hub UrbanB (xem `docs/cai-dat.md` mục 6).
 Mỗi khách sạn cài một bản trên máy của mình.
 
 Extension chỉ đọc: nó không trả lời review và không đổi cài đặt nào trên extranet.
@@ -11,13 +12,13 @@ Tên khách bị gỡ trước khi gửi đi.
 
 | Thư mục | Nội dung |
 |---|---|
-| `extension/` | Chrome extension (Manifest V3): quét theo giờ, chuẩn hoá, gửi lên Sheet |
+| `extension/` | Chrome extension (Manifest V3): quét theo giờ, chuẩn hoá, gửi lên Sheet và Hub |
 | `apps-script/Code.gs` | Điểm nhận trên Google Apps Script: ghi không trùng, tab Thống kê, Máy cài, Nhật ký lỗi |
 | `docs/cai-dat.md` | Hướng dẫn tạo Sheet và cài extension |
 | `docs/cai-tu-xa.md` | Cài cho khách sạn trên Windows bằng một lệnh |
 | `windows/cai-dat.ps1` | Lệnh cài (và cập nhật, khi chạy lại) trên Windows |
 | `docs/ma-loi.md` | Mã lỗi: khách sạn gửi mã nào, người quản lý tra ở đâu, từng loại lỗi xử lý ra sao |
-| `test/` | Test cho phần chuẩn hoá, ghi Sheet và thống kê (`npm test`) |
+| `test/` | Test cho phần chuẩn hoá, ghi Sheet, gửi Hub và thống kê (`npm test`) |
 | `src/scripts/` | Script đo khả thi ban đầu (Playwright) |
 
 ## Bắt đầu

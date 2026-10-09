@@ -14,8 +14,10 @@ Gửi **riêng** cho người cài ba thứ:
    tên đã có trong Sheet.
 2. **URL Web App** (Triển khai › Quản lý triển khai, đuôi `/exec`) và **mã bí mật** của Sheet.
 3. **Các kênh** khách sạn có (Booking, Agoda, Trip, Expedia, Traveloka, Go2Joy).
+4. Khách sạn gửi review lên Hub UrbanB thì thêm **URL Hub** và **Token Hub**
+   (xem [cai-dat.md](cai-dat.md) mục 6). Không gửi Hub thì bỏ qua.
 
-⚠️ Ai có URL và mã bí mật đều gửi được dữ liệu vào Sheet, nên chỉ gửi qua tin nhắn riêng, không
+⚠️ Ai có URL và mã bí mật (hay token Hub) đều gửi được dữ liệu vào Sheet (hay Hub), nên chỉ gửi qua tin nhắn riêng, không
 dán vào nhóm chung.
 
 Khách sạn mà tài khoản Booking thấy nhiều chỗ nghỉ thì còn phải điền **mã Booking**
@@ -43,7 +45,8 @@ bước tiếp theo.
 4. Bấm biểu tượng mảnh ghép cạnh thanh địa chỉ, ghim **Thu review OTA**.
 
 **Bước 3: điền cài đặt.** Bấm biểu tượng Thu review OTA. Máy mới cài thì khối **Cài đặt** mở
-sẵn. Điền tên khách sạn, URL Web App, mã bí mật, tick đúng các kênh, rồi bấm **Thử Sheet**
+sẵn. Điền tên khách sạn, URL Web App, mã bí mật, URL Hub và Token Hub (nếu có), tick đúng các
+kênh, rồi bấm **Thử Sheet**
 (nút này lưu trước rồi mới thử). Dòng chữ hiện "Sheet trả lời: …" là xong.
 
 Từ lần mở sau, khối Cài đặt gập lại. Phần trên cùng chỉ hiện các kênh đang bật, nút **Quét

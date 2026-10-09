@@ -27,6 +27,8 @@
   .when { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .detail { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
   .login .detail { color: var(--warn); } .error .detail { color: var(--err); }
+  .hub { color: var(--muted); font-size: 12px; }
+  .hub.bad { color: var(--err); }
   .empty { padding: 10px 0; color: var(--muted); }
 
   .err { margin-top: 6px; padding: 6px 8px; background: #f6ebe8; border: 1px solid #e6cbc4; border-radius: 6px; font-size: 12px; }
@@ -101,7 +103,7 @@
         <circle cx="12" cy="12" r="3"/>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
       </svg>
-      <span class="text"><span class="title">Cài đặt</span><span class="sub">Tên khách sạn · Sheet · kênh quét</span></span>
+      <span class="text"><span class="title">Cài đặt</span><span class="sub">Tên khách sạn · Sheet · Hub · kênh quét</span></span>
       <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
     </summary>
     <div class="panel">
@@ -114,6 +116,12 @@
 
     <label for="secret">Mã bí mật</label>
     <input id="secret" type="password">
+
+    <label for="hubUrl">URL Hub UrbanB (để trống ⇒ không gửi Hub)</label>
+    <input id="hubUrl" type="text" placeholder="https://hub.urbanb.vn">
+
+    <label for="hubToken">Token Hub</label>
+    <input id="hubToken" type="password">
 
     <label>Kênh quét</label>
     <div class="channels">
