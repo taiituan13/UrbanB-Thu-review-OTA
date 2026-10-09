@@ -307,3 +307,38 @@ test("Cả hai dấu đều hỏng ⇒ trả rỗng, không lặp vô tận", ()
 test("Code.gs và extension biết cùng một bộ kênh", () => {
   assert.deepEqual(Object.keys(ctx.CHANNEL_NAMES).sort(), [...CHANNELS].sort());
 });
+
+// ---------- Cột ngày giờ của Máy cài (09/10/2026) ----------
+const isDate = (v) => Object.prototype.toString.call(v) === "[object Date]";
+
+test("Cột datetime: mốc ISO ghi thành Date đúng thời điểm; cột chữ giữ nguyên chuỗi", () => {
+  const { cellValue } = ctx;
+  const v = cellValue("datetime", "2026-10-09T07:50:48.463Z");
+  assert.ok(isDate(v), "phải là Date để Sheets hiện ngày giờ, không phải chữ");
+  assert.equal(v.toISOString(), "2026-10-09T07:50:48.463Z", "không lệch múi giờ");
+  assert.equal(cellValue("datetime", ""), "");
+  assert.equal(cellValue("datetime", undefined), "");
+  assert.equal(cellValue("datetime", "=HYPERLINK(1)"), "'=HYPERLINK(1)", "chuỗi lạ vẫn qua sanitizeCell");
+  assert.equal(cellValue("text", "2026-10-09T07:50:48.463Z"), "2026-10-09T07:50:48.463Z");
+});
+
+test("Ba cột giờ của Máy cài là datetime, tiêu đề không còn chữ UTC", () => {
+  const cols = Object.fromEntries(SHEETS.devices.columns.map((c) => [c[0], c]));
+  for (const f of ["lastSeen", "lastErrorAt", "firstSeen", "deadline"]) {
+    assert.equal(cols[f][2], "datetime", f);
+    assert.ok(!/UTC/.test(cols[f][1]), f);
+  }
+});
+
+test("Đổi tên cột: dữ liệu ở cột tên cũ đi theo sang tên mới, Lần đầu liên lạc không mất", () => {
+  const cols = SHEETS.devices.columns;
+  const oldHeader = cols.map((c) => Object.keys(ctx.RENAMED_LABELS).find((k) => ctx.RENAMED_LABELS[k] === c[1]) ?? c[1]);
+  assert.ok(oldHeader.includes("Lần đầu liên lạc (UTC)"), "tiêu đề giả lập phải mang tên cũ");
+  const row = cols.map((c) => `v-${c[0]}`);
+  const m = plain(migrateColumns(oldHeader, [row], cols));
+  assert.deepEqual(m.header, plain(cols.map((c) => c[1])), "tiêu đề viết lại theo SHEETS, không cột thừa");
+  assert.deepEqual(m.rows[0], plain(row), "mọi ô ở nguyên chỗ, kể cả firstSeen");
+  // Mọi tên mới phải có thật trong SHEETS, không thì bảng đổi tên trỏ vào khoảng không.
+  const labels = Object.values(SHEETS).flatMap((sp) => sp.columns.map((c) => c[1]));
+  for (const to of Object.values(ctx.RENAMED_LABELS)) assert.ok(labels.includes(to), to);
+});

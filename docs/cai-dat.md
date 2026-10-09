@@ -102,6 +102,9 @@ Người quản lý không cần tới tận máy:
   lỗi gần nhất, phiên bản, kênh đang bật. Cột **Mất liên lạc** tự hiện khi máy im quá
   2 × chu kỳ quét (Chrome tắt, máy tắt, hoặc extension bị gỡ). Cột **Cảnh báo** báo
   khi hai máy khác nhau cùng khai một tên, hoặc một máy đã đổi tên sang tên khác.
+  Các cột giờ (lần cuối, lần đầu liên lạc, lúc lỗi, hạn liên lạc kế tiếp) hiện theo múi giờ
+  của tệp Sheet: đặt ở **Tệp › Cài đặt › Múi giờ** là `(GMT+07:00) Bangkok, Hà Nội`. Các tab
+  chỉ thêm dòng (`Lượt quét`, `Nhật ký lỗi`) vẫn ghi mốc chữ theo giờ UTC.
 - **Nhật ký lỗi**: mỗi lỗi một dòng — mã lỗi, loại lỗi, kênh, giai đoạn (mở tab · đăng nhập · quét ·
   chuẩn hoá · gửi Hub · gửi Sheet), thông điệp, trang lúc lỗi, chi tiết kỹ thuật. Lọc theo cột
   *Khách sạn* để xem riêng một máy. Giữ 5.000 dòng mới nhất.

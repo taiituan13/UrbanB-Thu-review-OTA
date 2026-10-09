@@ -91,15 +91,15 @@ var SHEETS = {
       ["lost", "Mất liên lạc", "formula"],
       ["warning", "Cảnh báo", "text"],
       ["statusText", "Trạng thái kênh", "text"],
-      ["lastSeen", "Lần cuối liên lạc (UTC)", "text"],
+      ["lastSeen", "Lần cuối liên lạc", "datetime"],
       ["lastAction", "Việc lần cuối", "text"],
       ["lastError", "Lỗi gần nhất", "text"],
-      ["lastErrorAt", "Lúc lỗi (UTC)", "text"],
+      ["lastErrorAt", "Lúc lỗi", "datetime"],
       ["version", "Phiên bản", "text"],
       ["channels", "Kênh bật", "text"],
       ["intervalHours", "Chu kỳ quét (giờ)", "number"],
       ["devices", "Mã máy · lần cuối thấy", "text"],
-      ["firstSeen", "Lần đầu liên lạc (UTC)", "text"],
+      ["firstSeen", "Lần đầu liên lạc", "datetime"],
       ["deadline", "Hạn liên lạc kế tiếp", "datetime"],
     ],
   },
@@ -124,6 +124,17 @@ var SHEETS = {
   },
 };
 
+/**
+ * Tiêu đề cột đã đổi tên: tên cũ ⇒ tên mới. migrateColumns khớp cột theo tên, nên thiếu dòng ở đây
+ * thì cột cũ bị dời ra cuối như cột lạ, còn cột mới để trống. "Lần đầu liên lạc" chỉ ghi một lần
+ * lúc máy mới cài ⇒ sẽ mất hẳn. 09/10/2026: ba cột giờ của Máy cài thôi ghi chữ UTC, ghi ngày giờ thật.
+ */
+var RENAMED_LABELS = {
+  "Lần cuối liên lạc (UTC)": "Lần cuối liên lạc",
+  "Lúc lỗi (UTC)": "Lúc lỗi",
+  "Lần đầu liên lạc (UTC)": "Lần đầu liên lạc",
+};
+
 /** Số dòng nhật ký lỗi giữ lại; vượt thì xoá dòng cũ nhất. */
 var LOG_KEEP = 5000;
 
@@ -139,6 +150,22 @@ function sanitizeCell(value) {
   if (value === null || value === undefined) return "";
   if (typeof value === "string" && /^[=+\-@]/.test(value)) return "'" + value;
   return value;
+}
+
+/**
+ * Giá trị ghi vào ô theo loại cột. Cột "datetime" nhận mốc ISO (UTC) ⇒ ghi Date, để Sheets hiện
+ * ngày giờ theo múi giờ của tệp (Tệp › Cài đặt). Ghi thẳng chuỗi ISO vào ô dạng ngày thì Sheets tự
+ * đoán và bỏ chữ Z ⇒ lệch 7 giờ. readObjects đổi Date về ISO nên mã so sánh bên trong không đổi.
+ */
+function cellValue(type, value) {
+  if (type === "datetime") {
+    if (value instanceof Date) return value;
+    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
+      var d = new Date(value);
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+  return sanitizeCell(value);
 }
 
 function sameValue(a, b) {
@@ -493,10 +520,12 @@ function lastErrorText(log) {
  */
 function migrateColumns(oldHeader, rows, columns) {
   var labels = columns.map(function (c) { return c[1]; });
-  var old = oldHeader.map(function (h) { return String(h).trim(); });
-  while (old.length && old[old.length - 1] === "") old.pop();
+  var raw = oldHeader.map(function (h) { return String(h).trim(); });
+  while (raw.length && raw[raw.length - 1] === "") raw.pop();
   // Khớp khi các cột đầu đúng SHEETS; cột thừa ở cuối là cột người dùng tự thêm, để yên.
-  if (labels.every(function (l, i) { return old[i] === l; })) return null;
+  if (labels.every(function (l, i) { return raw[i] === l; })) return null;
+  // Tên cũ của cột đã đổi tên được coi như tên mới; tiêu đề vẫn được viết lại theo SHEETS.
+  var old = raw.map(function (h) { return RENAMED_LABELS[h] || h; });
   // Không tên nào trùng ⇒ không biết cột nào là cột nào: để nguyên còn hơn xếp sai.
   if (!old.some(function (h) { return labels.indexOf(h) >= 0; })) return null;
   // Cột không có trong SHEETS mà có tên hoặc có dữ liệu ⇒ giữ, dời ra cuối.
@@ -611,7 +640,9 @@ function migrateSheet(sh, spec) {
   sh.getRange(1, 1, 1, m.header.length).setValues([m.header]).setFontWeight("bold");
   if (m.rows.length) {
     ensureRows(sh, spec, m.rows.length + 1);
-    sh.getRange(2, 1, m.rows.length, m.header.length).setValues(m.rows.map(function (r) { return r.map(sanitizeCell); }));
+    sh.getRange(2, 1, m.rows.length, m.header.length).setValues(m.rows.map(function (r) {
+      return r.map(function (v, i) { return cellValue((spec.columns[i] || [])[2], v); });
+    }));
   }
   sh.setFrozenRows(1);
   return true;
@@ -728,10 +759,9 @@ function writeDevices(ss, objs) {
   var sh = ensureSheetLight(ss, spec);
   var fields = spec.columns.map(function (c) { return c[0]; });
   var rows = objs.map(function (o) {
-    return fields.map(function (f) {
-      if (f === "deadline") return o.deadline ? new Date(o.deadline) : "";
-      if (f === "lost") return "";
-      return sanitizeCell(o[f] === undefined || o[f] === null ? "" : o[f]);
+    return spec.columns.map(function (c) {
+      if (c[0] === "lost") return "";
+      return cellValue(c[2], o[c[0]]);
     });
   });
   ensureRows(sh, spec, rows.length + 1);
