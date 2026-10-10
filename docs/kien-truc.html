@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiến trúc thu review</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 24px; background: #fff; color: #111; }
+  h2 { margin: 32px 0 8px; font-size: 18px; }
+  p.note { margin: 0 0 12px; color: #555; font-size: 14px; }
+  .legend span { display: inline-block; padding: 2px 8px; margin-right: 8px; border-radius: 4px; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1 style="font-size:22px;margin:0">Kiến trúc thu và tập trung review OTA</h1>
+<p class="legend">
+  <span style="background:#d1fae5">CÓ sẵn</span>
+  <span style="background:#dbeafe">MỚI — sẽ viết</span>
+  <span style="background:#fef3c7">CHỜ chốt</span>
+</p>
+
+<h2>1. Toàn cảnh: thu → tập trung → chuẩn hoá → dùng</h2>
+<p class="note">Trình duyệt chỉ là tay đi lấy. Kho chung giữ mọi thứ. Hub chỉ nhận phần dính tiền và người.</p>
+<pre class="mermaid">
+flowchart TB
+  subgraph NGUON["① Nguồn: extranet kênh"]
+    BK["Booking<br/>1 tài khoản nhóm, nhiều KS"]
+    AG["Agoda<br/>1 người dùng cấp nhiều KS"]
+    TR["Trip<br/>1 tài khoản / 1 KS"]
+  end
+
+  subgraph THU["② Thu: Chrome extension (chỉ đọc, tự chạy theo giờ)"]
+    VP["Máy văn phòng<br/>Booking + Agoda"]
+    LT["Máy lễ tân KS 1…15<br/>Trip"]
+  end
+
+  subgraph KHO["③ Tập trung + chuẩn hoá (urbanb-reviews)"]
+    IN["POST /ingest<br/>mỗi máy 1 token,<br/>chỉ gửi cho KS của nó"]
+    C1["① Định danh<br/>kênh + mã review<br/>mã KS → chi nhánh"]
+    C2["② Thang điểm<br/>giữ gốc + quy về 1 thang"]
+    C3["③ Hạng mục + ngôn ngữ<br/>bảng ánh xạ tên gốc → hạng mục chung"]
+    DB[("Kho chung<br/>ota_hotels · ota_reviews<br/>ota_review_scores · sync_runs")]
+    AI["Phân tích AI<br/>review_analysis"]
+  end
+
+  subgraph HUB["④ Hub UrbanB (Epic 28)"]
+    HI["/api/reviews/ingest"]
+    HR[("bảng reviews<br/>luồng tiền, xác minh")]
+    DS["Dashboard · cảnh báo"]
+  end
+
+  BK -- đọc --> VP
+  AG -- đọc --> VP
+  TR -- đọc --> LT
+  VP -- JSON --> IN
+  LT -- JSON --> IN
+  IN --> C1 --> C2 --> C3 --> DB
+  DB --> AI --> DB
+  DB --> DS
+  DB -- "bài đủ điều kiện" --> HI --> HR
+
+  classDef co fill:#d1fae5,stroke:#059669;
+  classDef moi fill:#dbeafe,stroke:#2563eb;
+  classDef cho fill:#fef3c7,stroke:#d97706;
+  class BK,AG,TR,HR co;
+  class VP,LT,IN,C1,C2,DB,AI moi;
+  class C3,HI,DS cho;
+</pre>
+
+<h2>2. Một lượt đồng bộ</h2>
+<p class="note">Bài trùng bị bỏ, bài khách sửa được cập nhật, phiên hết hạn thì báo đăng nhập lại.</p>
+<pre class="mermaid">
+sequenceDiagram
+  participant E as Extension
+  participant X as Extranet (Booking/Agoda/Trip)
+  participant K as Kho chung (/ingest)
+  E->>E: 1. Tới giờ hẹn
+  E->>X: 2. Liệt kê khách sạn
+  X-->>E: Danh sách mã KS
+  loop Mỗi khách sạn (1–2 lần gọi)
+    E->>X: 3. Lấy review mới
+    X-->>E: JSON review
+  end
+  E->>K: 4. Gửi lên kèm token máy
+  K->>K: Trùng ⇒ bỏ · sửa ⇒ cập nhật · KS lạ ⇒ báo "chưa gán chi nhánh"
+  alt Bị đá về trang đăng nhập
+    E->>E: Báo "kênh X cần đăng nhập lại", dừng kênh đó
+  end
+</pre>
+
+<h2>3. Làm theo giai đoạn</h2>
+<pre class="mermaid">
+flowchart LR
+  G1["GIAI ĐOẠN 1 — máy anh/chị<br/>không cần chốt gì<br/>extension → localhost → Postgres local<br/>thử Secret Garden: 86 / 89 / 142 bài"]
+  G2["GIAI ĐOẠN 2 — chạy thật<br/>CHỜ H-675, H-676<br/>15 KS · máy văn phòng + máy lễ tân<br/>kho: service riêng hoặc bảng ota_* trong Hub"]
+  G3["GIAI ĐOẠN 3 — nối luồng tiền<br/>CHỜ Q-6<br/>kho → Hub reviews (AUTO_RECORDED)"]
+  G1 --> G2 --> G3
+  classDef moi fill:#dbeafe,stroke:#2563eb;
+  classDef cho fill:#fef3c7,stroke:#d97706;
+  class G1 moi;
+  class G2,G3 cho;
+</pre>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { htmlLabels: true } });
+</script>
+</body>
+</html>
