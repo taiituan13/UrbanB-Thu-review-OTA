@@ -151,14 +151,57 @@ $("save").onclick = async () => {
   note("Đã lưu.", "settingsNote");
 };
 
-async function ping() {
-  note("Đang thử…", "settingsNote");
-  const r = await chrome.runtime.sendMessage({ type: "pingSheet" });
+/** Một dòng kết quả Thử Sheet (kèm Hub nếu máy gửi Hub). */
+function pingText(r) {
   const sheet = r?.ok ? `Sheet trả lời: ${r.sheet ?? "ok"}` : `Lỗi Sheet${r?.ref ? " " + r.ref : ""}: ${r?.error ?? "không rõ"}`;
   // r.hub = null khi máy không gửi Hub (ô URL Hub để trống).
   const hub = !r?.hub ? "" : r.hub.ok ? " · Hub: ổn" : ` · Lỗi Hub ${r.hub.ref ?? ""}: ${r.hub.error ?? "không rõ"}`;
-  note(sheet + hub, "settingsNote");
+  return sheet + hub;
+}
+
+/** Kết quả áp mã cài đặt (background.js applySetupText). */
+function setupText(r) {
+  if (!r?.ok) return `Không nhận được mã cài đặt: ${r?.error ?? "không rõ"}`;
+  return `Đã nhận cài đặt của ${r.hotel}. ${pingText(r.ping)}`;
+}
+
+async function ping() {
+  note("Đang thử…", "settingsNote");
+  const r = await chrome.runtime.sendMessage({ type: "pingSheet" });
+  note(pingText(r), "settingsNote");
   await renderStatus();
+}
+
+$("applyCode").onclick = async () => {
+  const code = $("setupCode").value.trim();
+  if (!code) return note("Dán mã vào ô Mã cài đặt trước.", "settingsNote");
+  $("applyCode").disabled = true;
+  note("Đang nhận mã và thử Sheet…", "settingsNote");
+  try {
+    const r = await chrome.runtime.sendMessage({ type: "applySetupCode", code });
+    if (r?.ok) {
+      $("setupCode").value = "";
+      await fill();
+    }
+    note(setupText(r), "settingsNote");
+  } finally {
+    $("applyCode").disabled = false;
+  }
+  await renderStatus();
+};
+
+/**
+ * Lệnh cài kèm mã: extension tự áp lúc nạp. Lần mở ô đầu tiên sau đó báo lại kết quả một lần,
+ * để người cài thấy máy đã nhận đúng khách sạn.
+ */
+async function showSetupFromFile() {
+  await chrome.runtime.sendMessage({ type: "importSetupFile" }).catch(() => {});
+  const { setupResult } = await chrome.storage.local.get("setupResult");
+  if (setupResult?.from !== "tệp" || setupResult.shown) return;
+  await chrome.storage.local.set({ setupResult: { ...setupResult, shown: true } });
+  await fill();
+  const next = setupResult.ping?.ok ? " Bước tiếp: đăng nhập các extranet trong Chrome này rồi bấm Quét ngay." : "";
+  note(setupText(setupResult) + next);
 }
 
 $("ping").onclick = async () => {
@@ -191,6 +234,7 @@ $("updateCmd").value = UPDATE_COMMAND;
 fill();
 renderStatus();
 renderUpdate();
+showSetupFromFile();
 chrome.runtime.sendMessage({ type: "checkUpdate" }).catch(() => {});
 getDeviceId().then((id) => {
   $("device").textContent = `Mã máy ${id.slice(0, 8)} · phiên bản ${VERSION}`;

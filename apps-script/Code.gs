@@ -547,12 +547,47 @@ function migrateColumns(oldHeader, rows, columns) {
   };
 }
 
+// ---------- Mã cài đặt cho extension (extension/setup-code.js) ----------
+
+var SETUP_PREFIX = "URB1.";
+/** Lệnh cài trên Windows; phần sau "$UrbanBMa=…; " trùng nguyên văn UPDATE_COMMAND của update.js. */
+var INSTALL_SCRIPT_URL = "https://raw.githubusercontent.com/taiituan13/UrbanB-Thu-review-OTA/main/windows/cai-dat.ps1";
+var SETUP_TEXT_FIELDS = ["hotel", "sheetUrl", "hubUrl", "hubToken", "bookingHotelId", "agodaPropertyId", "expediaPropertyId"];
+
+/** Nội dung mã từ hộp thoại "Tạo lệnh cài"; ô sai thì ném lỗi tiếng Việt cho người quản lý. */
+function setupPayload(form, secret) {
+  var p = { v: 1 };
+  SETUP_TEXT_FIELDS.forEach(function (f) { p[f] = String((form && form[f]) || "").trim(); });
+  if (!p.hotel) throw new Error("Chưa điền tên khách sạn.");
+  if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(p.sheetUrl)) {
+    throw new Error("URL Web App phải có dạng https://script.google.com/…/exec (Triển khai › Quản lý triển khai).");
+  }
+  if (!secret) throw new Error("Sheet chưa có mã bí mật: chạy hàm setup một lần.");
+  p.secret = secret;
+  p.channels = ((form && form.channels) || []).filter(function (ch) { return CHANNEL_NAMES[ch]; });
+  if (!p.channels.length) throw new Error("Chọn ít nhất một kênh.");
+  if (p.hubUrl && !p.hubToken) throw new Error("Có URL Hub thì phải điền Token Hub.");
+  if (!p.hubUrl) p.hubToken = "";
+  return p;
+}
+
+/** "URB1." + base64url(JSON UTF-8), bỏ dấu = ở cuối cho lệnh gọn. */
+function encodeSetupCode(payload) {
+  var b64 = Utilities.base64EncodeWebSafe(JSON.stringify(payload), Utilities.Charset.UTF_8);
+  return SETUP_PREFIX + b64.replace(/=+$/, "");
+}
+
+function installCommand(code) {
+  return "$UrbanBMa='" + code + "'; irm " + INSTALL_SCRIPT_URL + " | iex";
+}
+
 // ---------- Phần chạy trên Google ----------
 
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Review OTA")
     .addItem("Cập nhật thống kê", "refreshStatsMenu")
+    .addItem("Tạo lệnh cài cho khách sạn", "setupCommandMenu")
     .addToUi();
 }
 
@@ -613,6 +648,134 @@ function setup() {
   }
   Logger.log("Mã bí mật (dán vào extension): " + secret);
 }
+
+// Hộp thoại "Tạo lệnh cài cho khách sạn": người quản lý chọn khách sạn và kênh, nhận một lệnh
+// PowerShell kèm mã cài đặt. Người ở khách sạn chỉ dán lệnh và nạp extension vào Chrome; extension
+// tự điền Cài đặt và tự thử Sheet (docs/cai-tu-xa.md). Script Properties WEBAPP_URL, HUB_URL,
+// HUB_TOKEN chỉ để điền sẵn lần sau.
+
+function setupCommandMenu() {
+  var html = HtmlService.createHtmlOutput(SETUP_DIALOG_HTML.join("\n")).setWidth(480).setHeight(660);
+  SpreadsheetApp.getUi().showModalDialog(html, "Tạo lệnh cài cho khách sạn");
+}
+
+function setupDialogData() {
+  var props = PropertiesService.getScriptProperties();
+  var url = props.getProperty("WEBAPP_URL") || "";
+  if (!url) {
+    try {
+      var service = ScriptApp.getService().getUrl() || "";
+      if (/\/exec$/.test(service)) url = service;
+    } catch (err) {}
+  }
+  var hotels = readObjects(SpreadsheetApp.getActiveSpreadsheet(), SHEETS.devices)
+    .map(function (d) { return String(d.hotel || ""); })
+    .filter(function (h, i, all) { return h && all.indexOf(h) === i; });
+  return {
+    hotels: hotels,
+    sheetUrl: url,
+    hubUrl: props.getProperty("HUB_URL") || "",
+    hubToken: props.getProperty("HUB_TOKEN") || "",
+    hasSecret: !!props.getProperty("SECRET"),
+    channels: Object.keys(CHANNEL_NAMES).map(function (id) { return { id: id, name: CHANNEL_NAMES[id] }; }),
+  };
+}
+
+function makeSetupCommand(form) {
+  var props = PropertiesService.getScriptProperties();
+  var payload = setupPayload(form, props.getProperty("SECRET"));
+  props.setProperty("WEBAPP_URL", payload.sheetUrl);
+  // Khách sạn không gửi Hub thì để trống ô Hub: đừng xoá giá trị nhớ cho khách sạn sau.
+  if (payload.hubUrl) props.setProperties({ HUB_URL: payload.hubUrl, HUB_TOKEN: payload.hubToken });
+  var code = encodeSetupCode(payload);
+  return { hotel: payload.hotel, code: code, command: installCommand(code) };
+}
+
+var SETUP_DIALOG_HTML = [
+  '<style>',
+  '  body { margin: 0; color: #123b37; font: 13px/1.45 Arial, sans-serif; }',
+  '  label { display: block; margin: 10px 0 3px; color: #4a6660; font-size: 12px; }',
+  '  input[type=text] { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #ddd0b0; border-radius: 6px; font: inherit; }',
+  '  .ch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px; }',
+  '  .ch label { display: flex; gap: 5px; align-items: center; margin: 0; color: #123b37; font-size: 13px; }',
+  '  textarea { width: 100%; box-sizing: border-box; height: 84px; padding: 6px; font: 11px monospace; border: 1px solid #ddd0b0; border-radius: 6px; }',
+  '  button { margin-top: 12px; min-height: 34px; padding: 0 16px; border: 0; border-radius: 8px; background: #123b37; color: #f9f7f2; font: 600 13px Arial, sans-serif; cursor: pointer; }',
+  '  button.secondary { background: #fff; color: #123b37; border: 1px solid #ddd0b0; margin-top: 6px; }',
+  '  #err { margin-top: 8px; color: #8c3226; }',
+  '  .note { margin-top: 6px; font-size: 12px; color: #4a6660; }',
+  '  .warn { margin-top: 8px; padding: 6px 8px; background: #f6efdc; border-radius: 6px; color: #7a5417; font-size: 12px; }',
+  '</style>',
+  '<label for="hotel">Tên khách sạn (máy đã có trong tab Máy cài: chọn đúng tên đó)</label>',
+  '<input id="hotel" type="text" list="hotels" autocomplete="off"><datalist id="hotels"></datalist>',
+  '<label>Kênh khách sạn có</label><div class="ch" id="channels"></div>',
+  '<label for="sheetUrl">URL Web App của Sheet này (…/exec)</label><input id="sheetUrl" type="text">',
+  '<label for="hubUrl">URL Hub UrbanB (để trống ⇒ không gửi Hub)</label><input id="hubUrl" type="text" placeholder="https://hub.urbanb.vn">',
+  '<label for="hubToken">Token Hub</label><input id="hubToken" type="text">',
+  '<label for="bookingHotelId">Mã Booking (chỉ khi tài khoản Booking thấy nhiều chỗ nghỉ)</label><input id="bookingHotelId" type="text">',
+  '<label for="agodaPropertyId">Mã Agoda (để trống ⇒ tự dò)</label><input id="agodaPropertyId" type="text">',
+  '<label for="expediaPropertyId">Mã Expedia (để trống ⇒ tự dò)</label><input id="expediaPropertyId" type="text">',
+  '<button id="make">Tạo lệnh</button>',
+  '<div id="err"></div>',
+  '<div id="out" hidden>',
+  '  <label for="command">Lệnh cài cho <b id="outHotel"></b>: người ở khách sạn dán vào Windows PowerShell</label>',
+  '  <textarea id="command" readonly></textarea>',
+  '  <button class="secondary" id="copyCommand">Chép lệnh</button>',
+  '  <label for="code">Chỉ mã: máy đã cài extension thì dán vào ô Mã cài đặt (trong Cài đặt) rồi bấm Nhận mã</label>',
+  '  <textarea id="code" readonly></textarea>',
+  '  <button class="secondary" id="copyCode">Chép mã</button>',
+  '  <div class="warn">Lệnh và mã chứa mã bí mật của Sheet: gửi qua tin nhắn riêng, không dán vào nhóm chung.</div>',
+  '</div>',
+  '<script>',
+  '  var DEFAULT_ON = { booking: true, agoda: true, trip: true };',
+  '  var FIELDS = ["hotel", "sheetUrl", "hubUrl", "hubToken", "bookingHotelId", "agodaPropertyId", "expediaPropertyId"];',
+  '  function $(id) { return document.getElementById(id); }',
+  '  function copy(id, button) {',
+  '    $(id).select();',
+  '    var ok = false;',
+  '    try { ok = document.execCommand("copy"); } catch (e) {}',
+  '    button.textContent = ok ? "Đã chép" : "Bôi đen rồi Ctrl+C";',
+  '  }',
+  '  google.script.run.withSuccessHandler(function (d) {',
+  '    d.hotels.forEach(function (h) { var o = document.createElement("option"); o.value = h; $("hotels").appendChild(o); });',
+  '    d.channels.forEach(function (c) {',
+  '      var l = document.createElement("label");',
+  '      var box = document.createElement("input");',
+  '      box.type = "checkbox";',
+  '      box.value = c.id;',
+  '      box.checked = !!DEFAULT_ON[c.id];',
+  '      l.appendChild(box);',
+  '      l.appendChild(document.createTextNode(" " + c.name));',
+  '      $("channels").appendChild(l);',
+  '    });',
+  '    $("sheetUrl").value = d.sheetUrl;',
+  '    $("hubUrl").value = d.hubUrl;',
+  '    $("hubToken").value = d.hubToken;',
+  '    if (!d.hasSecret) $("err").textContent = "Sheet chưa có mã bí mật: mở Apps Script, chạy hàm setup một lần.";',
+  '  }).setupDialogData();',
+  '  $("make").onclick = function () {',
+  '    var form = { channels: [] };',
+  '    FIELDS.forEach(function (f) { form[f] = $(f).value; });',
+  '    Array.prototype.forEach.call(document.querySelectorAll("#channels input"), function (i) { if (i.checked) form.channels.push(i.value); });',
+  '    $("err").textContent = "";',
+  '    $("make").disabled = true;',
+  '    google.script.run',
+  '      .withSuccessHandler(function (r) {',
+  '        $("make").disabled = false;',
+  '        $("outHotel").textContent = r.hotel;',
+  '        $("command").value = r.command;',
+  '        $("code").value = r.code;',
+  '        $("copyCommand").textContent = "Chép lệnh";',
+  '        $("copyCode").textContent = "Chép mã";',
+  '        $("out").hidden = false;',
+  '        $("command").scrollIntoView();',
+  '      })',
+  '      .withFailureHandler(function (e) { $("make").disabled = false; $("err").textContent = e.message || String(e); })',
+  '      .makeSetupCommand(form);',
+  '  };',
+  '  $("copyCommand").onclick = function () { copy("command", this); };',
+  '  $("copyCode").onclick = function () { copy("code", this); };',
+  '</script>',
+];
 
 function ensureSheet(ss, spec) {
   var sh = ss.getSheetByName(spec.name);

@@ -12,11 +12,13 @@ import {
   loadStatus,
   queueLog,
   saveChannelStatus,
+  saveConfig,
 } from "./config.js";
 import { SheetError, makeLogEntry, parseSheetReply, withRetry } from "./report.js";
 import { normalizeBatch } from "./normalize.js";
 import { HubError, hubBatches, hubEndpoint, hubSummaryText, parseHubReply, sumHubReplies } from "./hub.js";
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
+import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
 import {
   bookingSessionInPage,
@@ -45,15 +47,63 @@ async function schedule() {
   await chrome.alarms.create(UPDATE_ALARM, { delayInMinutes: 1, periodInMinutes: 30 });
 }
 
-chrome.runtime.onInstalled.addListener(schedule);
-chrome.runtime.onStartup.addListener(schedule);
+chrome.runtime.onInstalled.addListener(() => schedule().then(importSetupFile));
+chrome.runtime.onStartup.addListener(() => schedule().then(importSetupFile));
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM) runScan("hẹn giờ");
   if (alarm.name === UPDATE_ALARM) {
     reloadIfDiskNewer();
     checkRemoteVersion();
+    importSetupFile();
   }
 });
+
+// ---------- Mã cài đặt (setup-code.js) ----------
+
+let importing = null;
+
+/**
+ * Lệnh cài kèm mã ghi tệp ma-cai-dat.txt vào thư mục extension. Chỉ áp khi nội dung tệp khác lần
+ * đọc trước (`setupFileSeen`), để chỉnh tay hay dán mã khác trong ô Cài đặt sau đó không bị tệp
+ * cũ ghi đè. Tệp hỏng cũng chỉ báo một lần. Một lượt một lúc: lúc nạp, onInstalled và ô bật lên
+ * có thể gọi cùng lúc.
+ */
+function importSetupFile() {
+  importing ??= (async () => {
+    let text;
+    try {
+      const res = await fetch(chrome.runtime.getURL(SETUP_FILE), { cache: "no-store" });
+      text = res.ok ? (await res.text()).trim() : "";
+    } catch {
+      return null; // không có tệp: máy cài không kèm mã
+    }
+    const { setupFileSeen } = await chrome.storage.local.get("setupFileSeen");
+    if (!text || text === setupFileSeen) return null;
+    await chrome.storage.local.set({ setupFileSeen: text });
+    return applySetupText(text, "tệp");
+  })().finally(() => (importing = null));
+  return importing;
+}
+
+/**
+ * Áp mã vào cấu hình, rồi thử Sheet ngay để máy hiện trong tab "Máy cài" mà không ai phải bấm gì.
+ * Kết quả lưu ở `setupResult` để ô bật lên báo lại.
+ */
+async function applySetupText(text, from) {
+  let result;
+  try {
+    const setup = decodeSetupCode(text);
+    const cfg = applySetup(await loadConfig(), setup);
+    await saveConfig(cfg);
+    await Promise.all([schedule(), refreshBadge()]);
+    const ping = await pingSheet();
+    result = { ok: true, hotel: cfg.hotel, ping };
+  } catch (e) {
+    result = { ok: false, error: String(e?.message ?? e) };
+  }
+  await chrome.storage.local.set({ setupResult: { ...result, from, at: new Date().toISOString() } });
+  return result;
+}
 
 /**
  * Bản cài giải nén: chạy lại lệnh cài trên Windows là chép bản mới đè lên thư mục (xem update.js).
@@ -98,6 +148,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     // Mở ô bật lên: người vừa chạy lệnh cập nhật thì nạp bản mới ngay (ô tự đóng), không chờ 30 phút.
     reloadIfDiskNewer();
     checkRemoteVersion().then(() => reply({ ok: true }));
+    return true;
+  }
+  if (msg?.type === "applySetupCode") {
+    applySetupText(String(msg.code ?? ""), "dán").then(reply);
+    return true;
+  }
+  if (msg?.type === "importSetupFile") {
+    importSetupFile().then(reply);
     return true;
   }
   if (msg?.type === "reschedule") {
