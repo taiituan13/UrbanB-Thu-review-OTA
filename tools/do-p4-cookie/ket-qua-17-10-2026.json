@@ -1,0 +1,86 @@
+{
+ "coHostPermission": {
+  "getDefault": {
+   "status": 200,
+   "body": {
+    "method": "GET",
+    "cookie": "better-auth.session_token=DEVTOKEN; __Secure-better-auth.session_token=PRODTOKEN",
+    "origin": null,
+    "secFetchSite": "none",
+    "secFetchMode": "cors"
+   }
+  },
+  "getInclude": {
+   "status": 200,
+   "body": {
+    "method": "GET",
+    "cookie": "better-auth.session_token=DEVTOKEN; __Secure-better-auth.session_token=PRODTOKEN",
+    "origin": null,
+    "secFetchSite": "none",
+    "secFetchMode": "cors"
+   }
+  },
+  "postInclude": {
+   "status": 200,
+   "body": {
+    "method": "POST",
+    "cookie": "better-auth.session_token=DEVTOKEN; __Secure-better-auth.session_token=PRODTOKEN",
+    "origin": "chrome-extension://mfbbfgiedmobidhfdijjhpncpipiggjb",
+    "secFetchSite": "none",
+    "secFetchMode": "cors"
+   }
+  },
+  "contentScriptInclude": {
+   "error": "TypeError: Failed to fetch"
+  }
+ },
+ "coHostPermission_chan3p": {
+  "getDefault": {
+   "status": 200,
+   "body": {
+    "method": "GET",
+    "cookie": "better-auth.session_token=DEVTOKEN; __Secure-better-auth.session_token=PRODTOKEN",
+    "origin": null,
+    "secFetchSite": "none",
+    "secFetchMode": "cors"
+   }
+  },
+  "getInclude": {
+   "status": 200,
+   "body": {
+    "method": "GET",
+    "cookie": "better-auth.session_token=DEVTOKEN; __Secure-better-auth.session_token=PRODTOKEN",
+    "origin": null,
+    "secFetchSite": "none",
+    "secFetchMode": "cors"
+   }
+  },
+  "postInclude": {
+   "status": 200,
+   "body": {
+    "method": "POST",
+    "cookie": "better-auth.session_token=DEVTOKEN; __Secure-better-auth.session_token=PRODTOKEN",
+    "origin": "chrome-extension://mfbbfgiedmobidhfdijjhpncpipiggjb",
+    "secFetchSite": "none",
+    "secFetchMode": "cors"
+   }
+  },
+  "contentScriptInclude": {
+   "error": "TypeError: Failed to fetch"
+  }
+ },
+ "khongHostPermission": {
+  "getDefault": {
+   "error": "TypeError: Failed to fetch"
+  },
+  "getInclude": {
+   "error": "TypeError: Failed to fetch"
+  },
+  "postInclude": {
+   "error": "TypeError: Failed to fetch"
+  },
+  "contentScriptInclude": {
+   "error": "TypeError: Failed to fetch"
+  }
+ }
+}

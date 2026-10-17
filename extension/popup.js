@@ -1,6 +1,9 @@
 import { CHANNELS, CHANNEL_LABEL, VERSION, getDeviceId, loadConfig, loadLastError, loadStatus, saveConfig } from "./config.js";
 import { formatErrorReport } from "./report.js";
 import { UPDATE_COMMAND, updateNotice } from "./update.js";
+import { HUB_LABELS, HUB_ORIGINS } from "./env.js";
+import { popupPmsRow } from "./quay/hub-quay.js";
+import { reviewRow } from "./popup-model.js";
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = ["hotel", "sheetUrl", "secret", "hubUrl", "hubToken", "bookingHotelId", "agodaPropertyId", "expediaPropertyId", "intervalHours"];
@@ -11,10 +14,65 @@ function note(text, where = "note") {
   $(where).textContent = text;
 }
 
-/** Tên khách sạn trên dải đầu và dòng "Tự quét mỗi N giờ" theo cấu hình đã lưu. */
+/** Dòng "Tự quét mỗi N giờ" của thu review theo cấu hình đã lưu. */
 function renderHeader(cfg) {
-  $("hdrHotel").textContent = cfg.hotel || "Chưa đặt tên khách sạn";
-  $("auto").textContent = `Tự quét mỗi ${Math.max(1, Number(cfg.intervalHours) || 6)} giờ.`;
+  $("auto").textContent = `Thu review tự quét mỗi ${Math.max(1, Number(cfg.intervalHours) || 6)} giờ.`;
+}
+
+/** Một dòng tình trạng (chấm màu · tình trạng · việc cần làm). */
+function paintRow(prefix, row) {
+  $(prefix + "Row").className = "pch " + (row.tone || "off");
+  $(prefix + "State").textContent = row.state ?? "";
+  $(prefix + "Detail").textContent = row.detail ?? "";
+  if ($(prefix + "When")) $(prefix + "When").textContent = row.when ?? "";
+}
+
+/** Phiên Hub + mục "Khung trên PMS": đọc qua service worker (quay/sw.js statusForPopup). */
+async function renderQuay() {
+  let snap;
+  try {
+    snap = await chrome.runtime.sendMessage({ type: "quay:status" });
+  } catch {
+    snap = null;
+  }
+  const session = snap?.session ?? "out";
+  const hubLabel = HUB_LABELS[snap?.origin] ?? snap?.origin ?? "Hub";
+  $("who").textContent =
+    session === "out" ? `Chưa đăng nhập ${hubLabel}`
+    : session === "expired" ? `Phiên ${hubLabel} đã hết`
+    : snap?.net ? `Không gọi được ${hubLabel} · đang hiện lượt trước`
+    : `${snap?.notifications?.me ? snap.notifications.me + " · " : "Đã đăng nhập "}${hubLabel}${snap?.branchName ? " · " + snap.branchName : ""}`;
+  $("outBox").hidden = session !== "out";
+  $("expired").hidden = session !== "expired";
+  $("tm").hidden = !snap?.tampermonkey;
+  $("openHub").hidden = session === "out";
+  const row = popupPmsRow(snap);
+  paintRow("pms", { ...row, when: "" });
+  const subs = $("pmsSubs");
+  subs.textContent = "";
+  for (const x of row.subs) {
+    const d = document.createElement("span");
+    d.className = "d " + (x.tone === "off" ? "" : x.tone);
+    const t = document.createElement("span");
+    t.textContent = x.text;
+    const m = document.createElement("span");
+    m.className = "m";
+    m.textContent = x.at ? shortTime(x.at) : "";
+    subs.append(d, t, m);
+  }
+  const sel = $("quayHub");
+  if (!sel.options.length)
+    for (const o of HUB_ORIGINS) sel.add(new Option(HUB_LABELS[o] ?? o, o));
+  if (snap?.origin) sel.value = snap.origin;
+}
+
+/** Mục "Thu review OTA": một dòng tóm tắt; chi tiết từng kênh nằm trong "Xem từng kênh". */
+async function renderReviewRow() {
+  const [cfg, status] = await Promise.all([loadConfig(), loadStatus()]);
+  const row = reviewRow(cfg, status, CHANNELS);
+  paintRow("rv", row);
+  // Có kênh lỗi ⇒ mở sẵn danh sách kênh để thấy mã lỗi ngay.
+  if (row.tone === "err") $("rvMore").open = true;
 }
 
 async function fill() {
@@ -60,6 +118,7 @@ function shortTime(iso) {
 
 /** Chỉ hiện các kênh đang bật; kênh đã tắt giữ trạng thái cũ trong bộ nhớ nhưng không hiện. */
 async function renderStatus() {
+  renderReviewRow();
   const [cfg, status] = await Promise.all([loadConfig(), loadStatus()]);
   const box = $("status");
   box.textContent = "";
@@ -222,16 +281,27 @@ $("scan").onclick = async () => {
   await renderStatus();
 };
 
+for (const b of document.querySelectorAll("[data-login]"))
+  b.onclick = () => chrome.runtime.sendMessage({ type: "quay:openHub", path: "/login" });
+$("openHub").onclick = () => chrome.runtime.sendMessage({ type: "quay:openHub", path: "/" });
+$("quayHub").onchange = async () => {
+  await chrome.runtime.sendMessage({ type: "quay:setHub", origin: $("quayHub").value });
+  note("Đã đổi Hub. Mở lại tab PMS để khung nhận mã kết nối của Hub mới.", "settingsNote");
+  await renderQuay();
+};
+
 $("copyUpdate").onclick = () => copyCommand($("copyUpdate"));
 $("copyCmd").onclick = () => copyCommand($("copyCmd"));
 
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.status || changes.lastError || changes.config) renderStatus();
   if (changes.update) renderUpdate();
+  if (changes.quaySnap) renderQuay();
 });
 
 $("updateCmd").value = UPDATE_COMMAND;
 fill();
+renderQuay();
 renderStatus();
 renderUpdate();
 showSetupFromFile();

@@ -1,10 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "UrbanB — Thu review OTA",
-  "version": "0.9.0",
-  "description": "Đọc review từ extranet Booking, Agoda, Trip, Expedia, Traveloka, Go2Joy bằng phiên đăng nhập sẵn có và gom vào Google Sheet. Chỉ đọc.",
-  "permissions": ["storage", "alarms", "scripting", "tabs"],
+  "name": "UrbanB tại quầy",
+  "version": "1.0.0",
+  "description": "Khung UrbanB trên PMS ezCloud (Booking OTA, Khoá G2J, Chỉ báo) và thu review OTA về Google Sheet và Hub UrbanB. Đăng nhập bằng tài khoản Hub.",
+  "permissions": [
+    "storage",
+    "alarms",
+    "scripting",
+    "tabs"
+  ],
   "host_permissions": [
+    "https://pms.ezcloudhotel.com/*",
     "https://admin.booking.com/*",
     "https://account.booking.com/*",
     "https://ycs.agoda.com/*",
@@ -19,19 +25,59 @@
     "https://urbanb.xyz/*",
     "https://hub.urbanb.vn/*"
   ],
-  "background": { "service_worker": "background.js", "type": "module" },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "content_scripts": [
     {
-      "matches": ["https://tera.traveloka.com/*", "https://apps.expediapartnercentral.com/*", "https://ha.go2joy.vn/*"],
-      "js": ["capture.js"],
+      "matches": [
+        "https://tera.traveloka.com/*",
+        "https://apps.expediapartnercentral.com/*",
+        "https://ha.go2joy.vn/*",
+        "https://pms.ezcloudhotel.com/*"
+      ],
+      "js": [
+        "capture.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://pms.ezcloudhotel.com/*",
+        "https://ha.go2joy.vn/*"
+      ],
+      "js": [
+        "bridge.js"
+      ],
+      "run_at": "document_start"
     }
   ],
-  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "quay/*.js",
+        "env.js"
+      ],
+      "matches": [
+        "https://pms.ezcloudhotel.com/*",
+        "https://ha.go2joy.vn/*"
+      ]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Thu review OTA",
-    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" }
+    "default_title": "UrbanB tại quầy",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
   }
 }

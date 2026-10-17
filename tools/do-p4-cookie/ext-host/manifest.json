@@ -1,0 +1,3 @@
+{ "manifest_version": 3, "name": "p4-host", "version": "0.0.1", "host_permissions": ["http://localhost/*"],
+  "background": { "service_worker": "sw.js" },
+  "content_scripts": [{ "matches": ["http://pms.localtest/*"], "js": ["cs.js"] }] }

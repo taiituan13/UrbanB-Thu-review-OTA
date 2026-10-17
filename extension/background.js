@@ -1,4 +1,5 @@
 // Tiến trình nền: hẹn giờ, mở tab extranet trong nền, quét, chuẩn hoá, gửi về Google Sheet và Hub.
+// Phần "UrbanB tại quầy" (khung trên PMS) nằm ở quay/sw.js.
 
 import {
   CHANNELS,
@@ -20,6 +21,8 @@ import { HubError, hubBatches, hubEndpoint, hubSummaryText, parseHubReply, sumHu
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
+import { installQuay } from "./quay/sw.js";
+import { badgeText } from "./quay/notifications.js";
 import {
   bookingSessionInPage,
   scanAgodaInPage,
@@ -131,6 +134,13 @@ async function checkRemoteVersion() {
     if (latest) await chrome.storage.local.set({ update: { latest, at: new Date().toISOString() } });
   } catch {}
 }
+
+// "UrbanB tại quầy": khung trên PMS (Booking OTA · Khoá G2J · Chỉ báo) — tin nhắn quay:* (quay/sw.js).
+installQuay();
+// Số chưa đọc và phiên Hub đổi (quay/sw.js ghi quaySnap) ⇒ vẽ lại huy hiệu.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.quaySnap) refreshBadge().catch(() => {});
+});
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg?.type === "scanNow") {
@@ -637,13 +647,19 @@ async function setBadge(text) {
   await chrome.action.setBadgeBackgroundColor({ color: "#8c3226" });
 }
 
-/** "!" khi chưa điền đủ cài đặt, hoặc một kênh ĐANG BẬT không ổn hay gửi Hub hỏng. Kênh đã tắt không tính. */
+/**
+ * Số thông báo chưa đọc trên Hub (H-1264 a). Không có thì "!" khi chưa điền đủ cài đặt thu review, một kênh
+ * ĐANG BẬT không ổn hay gửi Hub hỏng (kênh đã tắt không tính), hoặc chưa đăng nhập / hết phiên Hub.
+ */
 async function refreshBadge() {
-  const [cfg, status] = await Promise.all([loadConfig(), loadStatus()]);
+  const [cfg, status, { quaySnap }] = await Promise.all([loadConfig(), loadStatus(), chrome.storage.local.get("quaySnap")]);
   const missing = !cfg.sheetUrl || !cfg.secret || !cfg.hotel;
   const bad = CHANNELS.some((ch) => {
     const s = status[ch];
     return cfg.enabled[ch] && s && (s.state !== "ok" || (hubConfigured(cfg) && s.hub && !s.hub.ok));
   });
-  await setBadge(missing || bad ? "!" : "");
+  const session = quaySnap?.session;
+  const hubProblem = session === "out" || session === "expired";
+  const unread = session !== "expired" && quaySnap?.notifications?.state === "ok" ? quaySnap.notifications.unread : 0;
+  await setBadge(badgeText({ unread, problem: missing || bad || hubProblem }));
 }
