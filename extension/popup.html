@@ -87,18 +87,56 @@
   .row { display: flex; gap: 8px; margin-top: 12px; }
   .row button { flex: 1; }
   footer { padding: 10px 14px 12px; font-size: 11px; color: var(--muted); }
+
+  /* v2 "UrbanB tại quầy": hai mục (Khung trên PMS · Thu review OTA), mỗi mục một dòng tình trạng. */
+  .pch { display: flex; gap: 8px; padding: 9px 0; border-top: 1px solid #efe7d6; }
+  .pch:first-child { border-top: 0; }
+  .pch .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .pch.ok .dot { background: var(--ok); } .pch.warn .dot { background: var(--warn); } .pch.err .dot { background: var(--err); }
+  .pch .state { font-size: 12.5px; font-weight: 600; }
+  .pch.ok .state { color: var(--ok); } .pch.warn .state { color: var(--warn); } .pch.err .state { color: var(--err); } .pch.off .state { color: var(--muted); }
+  .chl { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; font-size: 12px; padding: 4px 0 2px; }
+  .chl .d { width: 7px; height: 7px; border-radius: 50%; margin-top: 6px; background: #b8ad97; }
+  .chl .d.ok { background: var(--ok); } .chl .d.warn { background: var(--warn); } .chl .d.err { background: var(--err); }
+  .chl .m { color: var(--muted); white-space: nowrap; }
+  .pch details { margin: 2px 0 0; background: none; border: 0; border-radius: 0; }
+  .pch details summary { min-height: 24px; padding: 0; font-size: 12px; gap: 4px; border: 0; }
+  .pch details[open] summary { border: 0; }
+  .pch details .cv { font-size: 9px; transition: transform 0.15s; }
+  .pch details[open] .cv { transform: rotate(90deg); }
+  .pch details .card { border: 0; padding: 0; background: none; }
+  .band { margin-bottom: 10px; padding: 8px 10px; border-radius: 10px; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+  .band[hidden] { display: none; }
+  .band strong { font-size: 13px; }
+  .band ol { margin: 0; padding-left: 18px; }
+  .band.bad { background: #f6ebe8; border: 1px solid #e6cbc4; color: var(--err); }
+  .band.info { background: var(--surface); border: 1px solid var(--border); color: var(--fg); }
+  .band.upd { background: #f6efdc; border: 1px solid #e3cf9f; color: var(--warn); }
+  .band .row { margin-top: 2px; }
+  .band button { flex: none; min-height: 32px; }
+  .two { display: flex; gap: 8px; margin-top: 10px; }
+  .two button { flex: 1; min-height: 36px; }
+  select { width: 100%; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); font: inherit; }
+  h3.grp { margin: 14px 0 0; font-size: 12px; color: var(--fg); text-transform: uppercase; letter-spacing: 0.03em; }
 </style>
 </head>
 <body>
 <header>
   <img src="icons/icon-48.png" alt="">
-  <div>
-    <h1>Thu review OTA</h1>
-    <div class="hotel" id="hdrHotel"></div>
+  <div style="min-width:0">
+    <h1>UrbanB tại quầy</h1>
+    <div class="hotel" id="who">Đang đọc phiên Hub…</div>
   </div>
 </header>
 
 <main>
+  <!-- Userscript EZCloud OTA Sync cũ còn chạy trên PMS (khung thấy nút cam #ota-fab). -->
+  <div class="band bad" id="tm" hidden>
+    <strong>Máy này còn userscript EZCloud OTA Sync trong Tampermonkey</strong>
+    <span>Chạy cùng extension thì PMS hiện thêm nút OTA Sync cam cũ cạnh khung UrbanB, và mỗi token gửi hai lần. Tắt userscript cũ:</span>
+    <ol><li>Bấm icon Tampermonkey trên thanh Chrome, chọn <b>Bảng điều khiển</b>.</li><li>Gạt tắt dòng <b>EZCloud OTA Sync</b>.</li><li>Tải lại tab PMS.</li></ol>
+  </div>
+
   <!-- Chỉ hiện khi bản trên GitHub mới hơn bản đang chạy (popup.js). -->
   <div class="update" id="update" hidden>
     <strong id="updTitle"></strong>
@@ -110,9 +148,42 @@
     <button class="secondary" id="copyUpdate">Chép lệnh cập nhật</button>
   </div>
 
-  <!-- Dùng hằng ngày: trạng thái các kênh đang bật, Quét ngay, mã lỗi. -->
-  <div class="card" id="status"></div>
-  <button class="primary" id="scan">Quét ngay</button>
+  <!-- Hết phiên Hub (H-1245 a). -->
+  <div class="band upd" id="expired" hidden>
+    <strong>Phiên đăng nhập Hub đã hết</strong>
+    <span>Booking OTA và Khoá G2J vẫn chạy bằng cấu hình đã nhận lần trước. Chỉ báo và thông báo tạm dừng tới khi đăng nhập lại.</span>
+    <div class="row"><button class="secondary" data-login>Đăng nhập lại Hub</button></div>
+  </div>
+
+  <!-- Chưa đăng nhập Hub. -->
+  <div id="outBox" hidden>
+    <div class="band info">
+      <strong>Đăng nhập tài khoản Hub để bắt đầu</strong>
+      <span>Đăng nhập xong, khung UrbanB trên PMS tự nhận mã kết nối Booking OTA của cơ sở, hiện chỉ báo và thông báo của bạn. Không phải dán mã nào.</span>
+    </div>
+    <button class="primary" data-login style="margin-top:0">Đăng nhập Hub</button>
+    <div class="small">Mở trang đăng nhập Hub trong tab mới. Đăng nhập xong, bấm lại icon UrbanB trên thanh Chrome.</div>
+  </div>
+
+  <div class="card" id="rows" style="margin-top:10px">
+    <div class="pch off" id="pmsRow"><span class="dot"></span><div class="body">
+      <div class="line"><span class="name">Khung trên PMS</span><span class="when" id="pmsWhen"></span></div>
+      <div class="state" id="pmsState">Đang đọc…</div><div class="detail" id="pmsDetail"></div>
+      <div class="chl" id="pmsSubs"></div>
+    </div></div>
+    <div class="pch off" id="rvRow"><span class="dot"></span><div class="body">
+      <div class="line"><span class="name">Thu review OTA</span><span class="when" id="rvWhen"></span></div>
+      <div class="state" id="rvState"></div><div class="detail" id="rvDetail"></div>
+      <details id="rvMore"><summary><span class="cv">▶</span>Xem từng kênh</summary>
+        <!-- Trạng thái từng kênh đang bật, mã lỗi (giữ nguyên bản 0.9.0). -->
+        <div class="card" id="status"></div>
+      </details>
+    </div></div>
+  </div>
+  <div class="two">
+    <button class="secondary" id="scan">Quét review ngay</button>
+    <button class="secondary" id="openHub">Mở Hub</button>
+  </div>
   <div class="small" id="auto"></div>
   <div class="note" id="note"></div>
   <div id="last"></div>
@@ -124,11 +195,17 @@
         <circle cx="12" cy="12" r="3"/>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
       </svg>
-      <span class="text"><span class="title">Cài đặt</span><span class="sub">Tên khách sạn · Sheet · Hub · kênh quét</span></span>
+      <span class="text"><span class="title">Cài đặt</span><span class="sub">Hub · thu review: Sheet, kênh quét · lệnh cập nhật</span></span>
       <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
     </summary>
     <div class="panel">
 
+    <h3 class="grp">Khung trên PMS</h3>
+    <label for="quayHub">Hub để đăng nhập và nhận mã kết nối</label>
+    <select id="quayHub"></select>
+    <div class="small">Đổi Hub thì máy đọc lại phiên đăng nhập của Hub mới.</div>
+
+    <h3 class="grp">Thu review OTA</h3>
     <label for="setupCode">Mã cài đặt (người quản lý gửi, bắt đầu bằng URB1.)</label>
     <div class="cmd">
       <input id="setupCode" type="text" placeholder="URB1.…" autocomplete="off" spellcheck="false">
@@ -179,6 +256,7 @@
     </div>
     <div class="note" id="settingsNote"></div>
 
+    <h3 class="grp">Cập nhật</h3>
     <label for="updateCmd">Cập nhật: chạy lệnh này trong Windows PowerShell của máy</label>
     <div class="cmd">
       <input id="updateCmd" type="text" readonly>

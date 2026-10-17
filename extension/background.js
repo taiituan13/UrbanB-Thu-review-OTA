@@ -1,4 +1,5 @@
 // Tiến trình nền: hẹn giờ, mở tab extranet trong nền, quét, chuẩn hoá, gửi về Google Sheet và Hub.
+// Phần "UrbanB tại quầy" (khung trên PMS) nằm ở quay/sw.js.
 
 import {
   CHANNELS,
@@ -20,6 +21,7 @@ import { HubError, hubBatches, hubEndpoint, hubSummaryText, parseHubReply, sumHu
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
+import { installQuay } from "./quay/sw.js";
 import {
   bookingSessionInPage,
   scanAgodaInPage,
@@ -131,6 +133,9 @@ async function checkRemoteVersion() {
     if (latest) await chrome.storage.local.set({ update: { latest, at: new Date().toISOString() } });
   } catch {}
 }
+
+// "UrbanB tại quầy": khung trên PMS (Booking OTA · Khoá G2J · Chỉ báo) — tin nhắn quay:* (quay/sw.js).
+installQuay();
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg?.type === "scanNow") {
