@@ -1,0 +1,19 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>PMS ezCloud (giả)</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:13px/1.4 system-ui,sans-serif;background:#eef1f5;color:#222}
+.top{height:56px;background:#1f3b63;color:#fff;display:flex;align-items:center;padding:0 16px;gap:16px}
+.top select{height:32px;width:260px}.top .sp{flex:1}.top .user{font-weight:600}
+.bar{height:48px;margin-top:12px;display:flex;gap:8px;padding:0 16px}
+.bar button{height:36px;padding:0 14px;border:0;border-radius:6px;background:#2e7d32;color:#fff;font-weight:600}
+.map{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;padding:16px}
+.room{height:84px;background:#fff;border-radius:8px;border:1px solid #ccd;padding:8px}
+</style></head><body>
+<div class="top"><b>ezCloud</b><select><option>SGH Gò Vấp</option></select><span class="sp"></span><span class="user">Lễ tân ca sáng</span></div>
+<div class="bar"><button id="pms-book">+ Đặt phòng</button><button id="pms-in">Nhận phòng</button><button>Trả phòng</button></div>
+<div class="map" id="map"></div>
+<script>
+for (let i=0;i<40;i++){const d=document.createElement('div');d.className='room';d.textContent='P'+(101+i);document.getElementById('map').appendChild(d);}
+const b64u=(o)=>btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const JWT='eyJhbGciOiJIUzI1NiJ9.'+b64u({HotelId:4123,sub:'le-tan'})+'.chuky-gia';
+setTimeout(()=>fetch('/api/Room/List',{headers:{Authorization:'Bearer '+JWT}}).catch(()=>{}),300);
+</script></body></html>

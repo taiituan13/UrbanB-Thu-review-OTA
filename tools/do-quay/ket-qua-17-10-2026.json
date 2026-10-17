@@ -1,0 +1,224 @@
+{
+ "A_ok": {
+  "errors": [],
+  "dockText": "U UrbanB tại quầy Booking 2 lỗi Chỉ báo 3 đang vượt",
+  "dock": {
+   "x": 1006,
+   "y": 838,
+   "w": 416,
+   "h": 44
+  },
+  "chip": {
+   "x": 857,
+   "y": 841,
+   "w": 139,
+   "h": 38
+  },
+  "chipText": "Thông báo 2",
+  "firstRunToast": 0,
+  "overflowCollapsed": {
+   "docScrollW": 1440,
+   "docClientW": 1440,
+   "bodyScrollW": null,
+   "bodyClientW": null
+  },
+  "frame": {
+   "x": 862,
+   "y": 108,
+   "w": 560,
+   "h": 720
+  },
+  "header": "UrbanB tại quầy SGH Gò Vấp · theo PMS đang mở Tất cả thông báo Thu gọn",
+  "tabs": "Booking OTA 2 lỗi Khoá G2J Chỉ báo 3",
+  "tabBookings": {
+   "overflow": {
+    "docScrollW": 1440,
+    "docClientW": 1440,
+    "bodyScrollW": 558,
+    "bodyClientW": 558
+   },
+   "text": "Booking OTA · token ezCloud: Đã lưu token (SGH Gò Vấp) Ẩn Tìm Booking cần xử lý đứng đầu. 2 booking lỗi · 4 booking gần đây. Booking.com | BK-55102 | Trần Thị Bình EZ: ERRORG2J: - Deluxe Double | Qua đêm | 2026-10-17 14:00 đến 2026-10-19 12:00 | 650.000đ Đã th",
+   "footer": "Mã kết nối do Hub cấp Làm mới"
+  },
+  "lockBan": "G2J LOCKED: Đã khoá Deluxe Double 14:00 đến 12:00 Ẩn",
+  "tabBoard": {
+   "overflow": {
+    "docScrollW": 1440,
+    "docClientW": 1440,
+    "bodyScrollW": 558,
+    "bodyClientW": 558
+   },
+   "scroll": {
+    "scrollW": 609,
+    "clientW": 534
+   },
+   "footer": "Bảng khoá Go2Joy 14 ngày tới Làm mới"
+  },
+  "tabCb": {
+   "overflow": {
+    "docScrollW": 1440,
+    "docClientW": 1440,
+    "bodyScrollW": 558,
+    "bodyClientW": 558
+   },
+   "text": "SGH Gò Vấp hôm nay: 3 tình huống đang vượt. 05Không đủ phòng chừa Đặt vượt quỹ Ngày +2 · T2 19/10 01Hôm nay trống nhiều Hôm nay · T7 17/10 03Trống nhiều trong 7 ngày tới Ngày mai · CN 18/10 Chưa đủ dữ liệu ở 1 chỉ báo: 10 Phòng giờ dưới mức tối thiểu. Thiếu số không có nghĩa là ổn.",
+   "footer": "Lượt chạy gần nhất 10:46 · T7 17/10/2026 Mở trên Hub ↗"
+  },
+  "notiList": {
+   "overflow": {
+    "docScrollW": 1440,
+    "docClientW": 1440,
+    "bodyScrollW": 558,
+    "bodyClientW": 558
+   },
+   "text": "Thông báo · 2 chưa đọc Bấm tiêu đề để mở trên Hub. Đọc xong, bấm Đã đọc để bỏ khỏi số chưa đọc. Tài liệu SOP mới cần đọc: Nhận phòng sau 22:00 Đọc trước ca tối. Ghim Quản lý cơ sở · Trần Thị Mai 10:51 CHƯA ĐỌC Đã đọc Công việc mới giao cho bạn: Kiểm tra máy lạnh phòng 304 Hạn 15:00 hôm nay. Công việc 10:26 CHƯA ĐỌC Đã đọc Đề nghị bảo trì phòng 207 đã hoàn thành Thay vòi sen. Bảo trì Hôm qua 15:11 ",
+   "footer": "Thông báo của Lễ tân (minh hoạ) trên Hub Mọi thông báo trên Hub ↗",
+   "chip": "Thông báo 2",
+   "chipExpanded": "true"
+  },
+  "afterRead": {
+   "chip": "Thông báo 1",
+   "head": "Thông báo · 1 chưa đọc"
+  },
+  "toast": {
+   "box": {
+    "x": 490,
+    "y": 6,
+    "w": 460,
+    "h": 36,
+    "bottom": 42
+   },
+   "hits": []
+  },
+  "toastText": "Thông báo minh hoạ: đổi giờ giao ca từ 20/10 Quản lý cụm (minh hoạ) · Ca sáng 06:00–14:00. Xem ×",
+  "chipWithToast": "Thông báo 2",
+  "toastAfter10sHover": 1,
+  "toastAfterLeave": 0,
+  "chipAfterAutoHide": "Thông báo 2",
+  "stickyAfter10s": {
+   "count": 1,
+   "bar": 0
+  },
+  "stickyAfterClose": {
+   "count": 0,
+   "chip": "Thông báo 3"
+  },
+  "overflowEnd": {
+   "docScrollW": 1440,
+   "docClientW": 1440,
+   "bodyScrollW": null,
+   "bodyClientW": null
+  },
+  "popup": {
+   "scrollW": 360,
+   "clientW": 360,
+   "who": "Lễ tân (minh hoạ) · Hub giả (đo) · SGH Gò Vấp",
+   "pms": "Khung trên PMS Đang chạy · 3 tab Mở PMS ezCloud, bấm nút UrbanB tại quầy ở góc phải dưới. Booking OTA · Khoá G2J: 4 booking, 2 booking lỗi · token PMS gửi 11:11 11:11 17/10 Thông báo: 3 chưa đọc — xem ở chip trên PMS 11:11 17/10",
+   "review": "Thu review OTA Chưa cài đặt xong Mở Cài đặt bên dưới, dán Mã cài đặt người quản lý gửi (bắt đầu bằng URB1.) rồi bấm Nhận mã. ▶ Xem từng kênh",
+   "outBox": false,
+   "expired": false,
+   "tm": false,
+   "openHub": true,
+   "badge": "3"
+  },
+  "expired": {
+   "dock": "U UrbanB tại quầy Booking 2 lỗi Chỉ báo dừng cập nhật",
+   "chip": "Thông báo 3",
+   "header": "UrbanB tại quầy SGH Gò Vấp · phiên Hub đã hết Tất cả thông báo Thu gọn",
+   "bookings": "Tìm Booking cần xử lý đứng đầu. 2 booking lỗi · 4 booking gần đây. Booking.com | BK-55102 | Trần Thị Bình EZ: ERRORG2J: - Deluxe Double | Qua đêm | 2026-10-17 14:00 đến 2026-10-19 12:00 | 650.000đ Đã ",
+   "cb": "Phiên đăng nhập Hub đã hết. Chỉ báo dừng cập nhật. Booking OTA và Khoá G2J vẫn chạy bằng cấu hình đã nhận. Đăng nhập lại để xem số mới. Đăng nhập lại Hub Mở trang đăng nhập Hub trong tab mới.",
+   "popup": {
+    "scrollW": 360,
+    "clientW": 360,
+    "who": "Phiên Hub giả (đo) đã hết",
+    "pms": "Khung trên PMS Một phần dừng — phiên Hub đã hết Mở PMS ezCloud, bấm nút UrbanB tại quầy ở góc phải dưới. Booking OTA · Khoá G2J: 4 booking, 2 booking lỗi · token PMS gửi 11:11 11:11 17/10 Chỉ báo: dừng cập nhật tới khi đăng nhập lại Thông báo: tạm không nhận",
+    "review": "Thu review OTA Chưa cài đặt xong Mở Cài đặt bên dưới, dán Mã cài đặt người quản lý gửi (bắt đầu bằng URB1.) rồi bấm Nhận mã. ▶ Xem từng kênh",
+    "outBox": false,
+    "expired": true,
+    "tm": false,
+    "openHub": true,
+    "badge": "!"
+   }
+  },
+  "hubLog": [
+   "GET /api/extension/connection",
+   "GET /api/extension/connection",
+   "GET /api/extension/connection",
+   "GET /api/extension/connection",
+   "GET /api/extension/connection",
+   "GET /api/extension/connection"
+  ]
+ },
+ "B_out": {
+  "errors": [],
+  "dock": "U UrbanB tại quầy chưa đăng nhập",
+  "chip": 0,
+  "frame": "UrbanB tại quầy Chưa đăng nhập Hub Thu gọn Đăng nhập Hub để bắt đầu. Đăng nhập xong, khung tự nhận mã kết nối Booking OTA của cơ sở, hiện bảng khoá G2J, chỉ báo công suất và thông báo của bạn. Đăng nhập Hub Mở trang đăng nhập Hub trong tab mới.",
+  "overflow": {
+   "docScrollW": 1440,
+   "docClientW": 1440,
+   "bodyScrollW": 558,
+   "bodyClientW": 558
+  },
+  "popup": {
+   "scrollW": 360,
+   "clientW": 360,
+   "who": "Chưa đăng nhập Hub giả (đo)",
+   "pms": "Khung trên PMS Chưa chạy Booking OTA · Khoá G2J · Chỉ báo · Thông báo: cần đăng nhập Hub. Khung trên PMS cũng nhắc việc này.",
+   "review": "Thu review OTA Chưa cài đặt xong Mở Cài đặt bên dưới, dán Mã cài đặt người quản lý gửi (bắt đầu bằng URB1.) rồi bấm Nhận mã. ▶ Xem từng kênh",
+   "outBox": true,
+   "expired": false,
+   "tm": false,
+   "openHub": false,
+   "badge": "!"
+  }
+ },
+ "C_unlinked": {
+  "errors": [],
+  "dock": "U UrbanB tại quầy chưa biết cơ sở",
+  "chip": 1,
+  "frame": "UrbanB tại quầy Cơ sở: chưa xác định Tất cả thông báo Thu gọn Khách sạn đang mở trên PMS chưa được ghép với cơ sở nào trên Hub. Mã khách sạn ezCloud: 4123. Báo Quản trị hệ thống ghép mã này với cơ sở trên Hub; ghép xong, khung tự hiện booking và chỉ báo.",
+  "overflow": {
+   "docScrollW": 1440,
+   "docClientW": 1440,
+   "bodyScrollW": 558,
+   "bodyClientW": 558
+  },
+  "popup": {
+   "scrollW": 360,
+   "clientW": 360,
+   "who": "Lễ tân (minh hoạ) · Hub giả (đo)",
+   "pms": "Khung trên PMS Lỗi ở 2 phần — xem từng dòng Mở PMS ezCloud, bấm nút UrbanB tại quầy ở góc phải dưới. Booking OTA · Khoá G2J: khách sạn đang mở trên PMS chưa được ghép với cơ sở nào trên Hub — báo Quản trị hệ thống Chỉ báo: chưa có, vì khách sạn trên PMS chưa ghép với cơ sở Thông báo: 2 chưa đọc — xem ở chip trên PMS 11:12 17/10",
+   "review": "Thu review OTA Chưa cài đặt xong Mở Cài đặt bên dưới, dán Mã cài đặt người quản lý gửi (bắt đầu bằng URB1.) rồi bấm Nhận mã. ▶ Xem từng kênh",
+   "outBox": false,
+   "expired": false,
+   "tm": false,
+   "openHub": true,
+   "badge": "2"
+  }
+ },
+ "D_down": {
+  "errors": [],
+  "dock": "U UrbanB tại quầy không gọi được Hub",
+  "chip": 1,
+  "frame": "UrbanB tại quầy Không gọi được Hub Tất cả thông báo Thu gọn Không gọi được Hub. Khung chưa nhận được cấu hình của cơ sở lần nào trên máy này. Kiểm tra mạng của máy quầy rồi bấm Thử lại. Thử lại",
+  "overflow": {
+   "docScrollW": 1440,
+   "docClientW": 1440,
+   "bodyScrollW": 558,
+   "bodyClientW": 558
+  },
+  "popup": {
+   "scrollW": 360,
+   "clientW": 360,
+   "who": "Lễ tân (minh hoạ) · Hub giả (đo)",
+   "pms": "Khung trên PMS Lỗi ở 2 phần — xem từng dòng Mở PMS ezCloud, bấm nút UrbanB tại quầy ở góc phải dưới. Booking OTA · Khoá G2J: không gọi được Hub, máy chưa nhận mã kết nối lần nào Chỉ báo: không gọi được Hub Thông báo: 2 chưa đọc — xem ở chip trên PMS 11:12 17/10",
+   "review": "Thu review OTA Chưa cài đặt xong Mở Cài đặt bên dưới, dán Mã cài đặt người quản lý gửi (bắt đầu bằng URB1.) rồi bấm Nhận mã. ▶ Xem từng kênh",
+   "outBox": false,
+   "expired": false,
+   "tm": false,
+   "openHub": true,
+   "badge": "2"
+  }
+ }
+}

@@ -65,6 +65,8 @@ async function noteSession(cls) {
     await chrome.storage.local.set({ [K.ever]: true, [K.last]: "ok" });
   } else if (cls.state === "out") {
     await set(K.last, "out");
+    // Huy hiệu và popup đọc phiên từ ảnh trạng thái: hết phiên phải hiện ngay, không chờ khung mở lại.
+    await patchSnap({ session: H.sessionState("out", Boolean(await get(K.ever))) });
   }
 }
 
@@ -155,7 +157,8 @@ async function withCode(hotelId, params) {
 }
 
 function codeStateOf(conn, error) {
-  if (!conn?.otaSync) return "none";
+  // Không có mã mà Hub không trả lời được (chưa đăng nhập, chưa biết cơ sở, mất mạng) ⇒ chưa biết Hub có mã hay không.
+  if (!conn?.otaSync) return conn?.session === "ok" ? "none" : "unknown";
   if (error?.kind === "rejected") return "rejected";
   return "ok";
 }
@@ -317,7 +320,7 @@ export async function hello(hotelId) {
     await noteSession(cls);
     const s = await sessionNow(cls);
     const session = s === "nobranch" ? "nobranch" : s;
-    await patchSnap({ session, branchName: "" });
+    await patchSnap({ session, why: cls.why ?? "wait", branchName: "" });
     return { session, why: cls.why ?? "wait", origin, tokens };
   }
   const conn = await connection(hotelId);
@@ -327,11 +330,11 @@ export async function hello(hotelId) {
     origin,
     hotelId,
     branch: conn.branch,
-    codeState: conn.otaSync ? "ok" : "none",
+    codeState: conn.otaSync ? "ok" : conn.session === "ok" ? "none" : "unknown",
     tokens,
     cache: { bookings: await get(K.book(hotelId)), board: await get(K.board(hotelId)), indicators: await get(K.ind(hotelId)) },
   };
-  await patchSnap({ session: view.session, branchName: conn.branch?.name ?? "", hotelId, codeState: view.codeState });
+  await patchSnap({ session: view.session, why: conn.why ?? null, branchName: conn.branch?.name ?? "", hotelId, codeState: view.codeState });
   return view;
 }
 

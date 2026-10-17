@@ -96,3 +96,16 @@ test("popupPmsRow: từng phần một dòng, phần hỏng đẩy màu chung", 
   assert.equal(exp.tone, "warn");
   assert.match(exp.state, /phiên Hub đã hết/);
 });
+
+test("popupPmsRow: chưa ghép cơ sở và mất Hub KHÔNG bị đọc thành 'Hub chưa có mã kết nối'", () => {
+  const un = H.popupPmsRow({ session: "nobranch", why: "unmapped", codeState: "unknown" });
+  assert.match(un.subs[0].text, /chưa được ghép với cơ sở/);
+  assert.ok(!un.subs.some((x) => /chưa có mã kết nối/.test(x.text)));
+  const down = H.popupPmsRow({ session: "server", codeState: "unknown" });
+  assert.match(down.subs[0].text, /không gọi được Hub/);
+  assert.ok(!down.subs.some((x) => /chưa có mã kết nối/.test(x.text)));
+  // Đối chứng: Hub trả lời được mà không có mã ⇒ vẫn là "chưa có mã kết nối".
+  assert.match(H.popupPmsRow({ session: "ok", codeState: "none", branchName: "UB1" }).subs[0].text, /chưa có mã kết nối Booking OTA của UB1/);
+  assert.equal(H.frameSubtitle({ session: "server", branchName: "" }), "Không gọi được Hub");
+  assert.equal(H.frameSubtitle({ session: "server", branchName: "UB1" }), "UB1 · theo PMS đang mở");
+});

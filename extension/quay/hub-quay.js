@@ -138,6 +138,7 @@ export function reportToSend(lastReport, otaSync, outcome) {
 export function frameSubtitle({ session, branchName, why }) {
   if (session === "out") return "Chưa đăng nhập Hub";
   if (session === "nobranch" || why) return "Cơ sở: chưa xác định";
+  if (UNREACHABLE.has(session) && !branchName) return "Không gọi được Hub";
   if (session === "expired") return `${branchName || "Cơ sở đã nhận"} · phiên Hub đã hết`;
   return branchName ? `${branchName} · theo PMS đang mở` : "Đang đọc cơ sở…";
 }
@@ -265,7 +266,12 @@ export function popupPmsRow(snap) {
   const subs = [];
   const b = snap.booking;
   const branch = snap.branchName || "cơ sở";
-  if (snap.codeState === "none") subs.push({ tone: "err", text: `Booking OTA · Khoá G2J: Hub chưa có mã kết nối Booking OTA của ${branch} — báo Quản trị hệ thống`, at: b?.at });
+  const unmapped = session === "nobranch" && snap.why === "unmapped";
+  const unreachable = UNREACHABLE.has(session) || snap.codeState === "unknown";
+  if (session === "nobranch")
+    subs.push({ tone: unmapped ? "err" : "warn", text: unmapped ? "Booking OTA · Khoá G2J: khách sạn đang mở trên PMS chưa được ghép với cơ sở nào trên Hub — báo Quản trị hệ thống" : "Booking OTA · Khoá G2J: chưa biết PMS đang mở cơ sở nào", at: null });
+  else if (unreachable && !b?.count && snap.codeState !== "ok") subs.push({ tone: "err", text: "Booking OTA · Khoá G2J: không gọi được Hub, máy chưa nhận mã kết nối lần nào", at: b?.at });
+  else if (snap.codeState === "none") subs.push({ tone: "err", text: `Booking OTA · Khoá G2J: Hub chưa có mã kết nối Booking OTA của ${branch} — báo Quản trị hệ thống`, at: b?.at });
   else if (snap.codeState === "rejected") subs.push({ tone: "err", text: `Booking OTA · Khoá G2J: Apps Script từ chối mã kết nối của ${branch} — đã báo Hub`, at: b?.at });
   else if (b?.error) subs.push({ tone: "err", text: `Booking OTA · Khoá G2J: ${b.error}`, at: b.at });
   else if (b) subs.push({ tone: b.issues ? "warn" : "ok", text: `Booking OTA · Khoá G2J: ${b.count} booking${b.issues ? `, ${b.issues} booking lỗi` : ""}${snap.tokenAt ? ` · token PMS gửi ${hhmm(snap.tokenAt)}` : ""}`, at: b.at });
@@ -273,7 +279,8 @@ export function popupPmsRow(snap) {
 
   const ind = snap.indicators;
   if (session === "expired") subs.push({ tone: "warn", text: "Chỉ báo: dừng cập nhật tới khi đăng nhập lại", at: ind?.at });
-  else if (session === "nobranch") subs.push({ tone: "warn", text: "Chỉ báo: chưa biết PMS đang mở cơ sở nào", at: null });
+  else if (session === "nobranch") subs.push({ tone: unmapped ? "err" : "warn", text: unmapped ? "Chỉ báo: chưa có, vì khách sạn trên PMS chưa ghép với cơ sở" : "Chỉ báo: chưa biết PMS đang mở cơ sở nào", at: null });
+  else if (UNREACHABLE.has(session) && !ind) subs.push({ tone: "err", text: "Chỉ báo: không gọi được Hub", at: null });
   else if (ind?.stale) subs.push({ tone: "err", text: `Chỉ báo: không gọi được Hub, đang hiện số lượt ${hhmm(ind.at)}`, at: ind.failedAt });
   else if (ind) subs.push({ tone: "ok", text: `Chỉ báo: ${branch} ${ind.exceeded ? ind.exceeded + " tình huống đang vượt" : "không có tình huống đang vượt"}`, at: ind.at });
 
