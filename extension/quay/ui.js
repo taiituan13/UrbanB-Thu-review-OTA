@@ -73,6 +73,7 @@ export function mount({ bridge, plugins = [] } = {}) {
     send,
     render: () => render(),
     esc,
+    note: (n) => note(n),
     session: () => S.view?.session ?? null,
     origin: () => S.view?.origin ?? "",
     openFrame(body) {
@@ -336,8 +337,10 @@ export function mount({ bridge, plugins = [] } = {}) {
     const pluginBody = S.overlay ? plugins.map((p) => p.body?.()).find(Boolean) : null;
     let body;
     let ft = "";
+    // Thông báo đi theo người đăng nhập, không theo cơ sở ⇒ chưa biết cơ sở vẫn mở được danh sách.
+    const pluginOverBlock = pluginBody && v?.session !== "out";
     if (!S.hello) body = `<div class="ota-muted">Đang đọc phiên Hub...</div>`;
-    else if (blk) body = note(blk);
+    else if (blk && !pluginOverBlock) body = note(blk);
     else if (pluginBody) {
       body = pluginBody;
       ft = plugins.map((p) => p.footer?.()).find(Boolean) ?? "";
@@ -355,7 +358,7 @@ export function mount({ bridge, plugins = [] } = {}) {
         ft = `<div class="qf-ft"><span class="sp">${esc(when)}</span><a href="${esc(H.resultsUrl(S.ind?.origin || v?.origin || "", m.branchId))}" target="_blank" rel="noopener">Mở trên Hub ↗</a></div>`;
       }
     }
-    const headBtns = blk ? "" : plugins.map((p) => p.headerButton?.() ?? "").join("");
+    const headBtns = v?.session === "out" ? "" : plugins.map((p) => p.headerButton?.() ?? "").join("");
     return `<div class="qf" role="dialog" aria-label="UrbanB tại quầy">
       <div class="qf-hd"><div class="tt"><b>UrbanB tại quầy</b><span>${esc(sub)}</span></div>${headBtns}<button data-act="frame">Thu gọn</button></div>
       ${blk || !S.hello ? "" : tabsHTML()}<div class="qf-body">${body}</div>${ft}</div>`;

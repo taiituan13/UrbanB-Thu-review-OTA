@@ -6,6 +6,8 @@
 
 import * as B from "./booking-ota.js";
 import * as H from "./hub-quay.js";
+import * as N from "./notifications.js";
+import { DEV_FLAGS } from "../env.js";
 
 const K = {
   hub: "quayHubOrigin",
@@ -364,6 +366,38 @@ export async function tampermonkeySeen(present) {
   await patchSnap({ tampermonkey: Boolean(present) });
 }
 
+// ---------- Thông báo (hợp đồng đề xuất: notifications.js) ----------
+
+let fake = null;
+async function notiSource() {
+  // Bản dựng đo bật nguồn giả; bản phát hành DEV_FLAGS.fakeNotifications = false.
+  if (DEV_FLAGS.fakeNotifications) return (fake ??= N.fakeSource());
+  return N.hubSource(await hubOriginNow(), hubFetch);
+}
+
+export async function notifications() {
+  const r = await (await notiSource()).list();
+  if (r.state === "out") {
+    await noteSession({ state: "out" });
+    r.session = await sessionNow({ state: "out" });
+    r.state = r.session;
+  }
+  if (r.state === "ok") await set(K.ever, true);
+  await patchSnap({ notifications: { state: r.state, unread: r.state === "ok" ? r.unread : 0, me: r.me?.name ?? "", at: now() } });
+  return r;
+}
+
+export async function readNotifications(ids) {
+  const list = (Array.isArray(ids) ? ids : []).map(String).filter(Boolean).slice(0, 100);
+  if (!list.length) return { ok: false, state: "server" };
+  const r = await (await notiSource()).read(list);
+  if (r.ok && Number.isInteger(r.unread)) {
+    const snap = (await get(K.snap)) ?? {};
+    await patchSnap({ notifications: { ...(snap.notifications ?? {}), state: "ok", unread: r.unread, at: now() } });
+  }
+  return r;
+}
+
 // ---------- Tin nhắn ----------
 
 const HANDLERS = {
@@ -378,6 +412,10 @@ const HANDLERS = {
   "quay:status": () => statusForPopup(),
   "quay:setHub": (m) => setHubOrigin(String(m.origin ?? "")),
   "quay:tm": (m) => tampermonkeySeen(m.present),
+  "quay:notifications": () => notifications(),
+  "quay:notiRead": (m) => readNotifications(m.ids),
+  // Chỉ bản dựng đo: thêm một thông báo giả để thử thông báo nổi.
+  "quay:notiFakePush": (m) => (DEV_FLAGS.fakeNotifications ? notiSource().then((src) => src.push(m.partial ?? {})) : { ok: false }),
 };
 
 export function installQuay(extraHandlers = {}) {

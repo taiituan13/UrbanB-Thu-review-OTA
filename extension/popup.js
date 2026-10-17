@@ -41,7 +41,7 @@ async function renderQuay() {
     session === "out" ? `Chưa đăng nhập ${hubLabel}`
     : session === "expired" ? `Phiên ${hubLabel} đã hết`
     : snap?.net ? `Không gọi được ${hubLabel} · đang hiện lượt trước`
-    : `Đã đăng nhập ${hubLabel}${snap?.branchName ? " · " + snap.branchName : ""}`;
+    : `${snap?.notifications?.me ? snap.notifications.me + " · " : "Đã đăng nhập "}${hubLabel}${snap?.branchName ? " · " + snap.branchName : ""}`;
   $("outBox").hidden = session !== "out";
   $("expired").hidden = session !== "expired";
   $("tm").hidden = !snap?.tampermonkey;
