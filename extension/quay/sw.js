@@ -17,6 +17,8 @@ const K = {
   lastHotel: "quayLastHotel",
   memo: "quayPushMemo",
   snap: "quaySnap",
+  mine: "quayMine",
+  branch: "quayBranchId",
   conn: (h) => `quayConn:${h}`,
   report: (h) => `quayReport:${h}`,
   ind: (h) => `quayInd:${h}`,
@@ -100,37 +102,71 @@ async function rememberSettings(json) {
 }
 
 /**
- * Đọc cấu hình chung bằng lượt liệt kê `scope=mine` (chỉ đọc). Thu review gọi trước mỗi lượt quét và
- * mỗi 30 phút. Không gọi được Hub ⇒ giữ bản đã nhận lần trước. Trả `{ state, data? }`.
+ * Lượt liệt kê `scope=mine` (chỉ đọc, H-1351 c): cấu hình chung + danh sách cơ sở của người đăng nhập.
+ * Thu review gọi trước mỗi lượt quét và mỗi 30 phút; popup gọi khi mở. Không gọi được Hub ⇒ giữ bản
+ * đã nhận lần trước. Danh sách lưu không kèm mã kết nối (H.parseMine). Trả `{ state }`.
  */
 export async function refreshHubSettings() {
   const cls = H.classifyHubReply(await hubFetch(H.mineUrl(await hubOriginNow())));
   await noteSession(cls);
   if (cls.state !== "ok") return { state: await sessionNow(cls) };
   await rememberSettings(cls.data);
-  return { state: "ok", data: cls.data };
+  const branches = H.parseMine(cls.data);
+  if (branches) await set(K.mine, { branches, at: now() });
+  return { state: "ok" };
+}
+
+/** Popup: danh sách cơ sở (đọc lại từ Hub) và cơ sở máy đang dùng cho token Go2Joy. */
+export async function myBranches() {
+  const r = await refreshHubSettings();
+  const mine = await get(K.mine);
+  const chosenId = (await get(K.branch)) ?? "";
+  return { state: r.state, branches: mine?.branches ?? null, chosenId, pick: H.pickBranch(mine?.branches ?? null, chosenId) };
+}
+
+/** Người dùng chọn cơ sở trong popup. Chỉ nhận cơ sở có trong danh sách; "" ⇒ bỏ chọn. */
+export async function setBranch(branchId) {
+  const id = String(branchId ?? "");
+  if (!id) {
+    await chrome.storage.local.remove(K.branch);
+    return { ok: true };
+  }
+  const mine = await get(K.mine);
+  if (!mine?.branches?.some((b) => b.id === id)) return { ok: false, error: "Cơ sở không có trong danh sách của tài khoản đang đăng nhập." };
+  await set(K.branch, id);
+  return { ok: true };
 }
 
 // ---------- Mã kết nối theo cơ sở ----------
+
+/** Khoá bản đệm của một đích: mã khách sạn ezCloud (như 1.0.0) hoặc `b:<id cơ sở>` (H-1351 c). */
+const targetKey = (t) => (t?.branchId ? `b:${t.branchId}` : String(t?.hotelId ?? ""));
 
 /**
  * Lấy mã kết nối của cơ sở đang mở trên PMS. Bản đệm còn mới ⇒ dùng luôn, không hỏi Hub
  * (mỗi lượt hỏi ghi "máy quầy gọi lần cuối" ở Hub). `force` ⇒ hỏi lại. `report` ⇒ báo kết quả dùng mã.
  * Trả `{ session, why?, branch, otaSync, cached }`.
  */
-export async function connection(hotelId, { force = false, report = null } = {}) {
-  const cached = hotelId ? await get(K.conn(hotelId)) : null;
+export async function connection(hotelId, opts = {}) {
+  return connectionFor({ hotelId }, opts);
+}
+
+/** Như `connection`, cho một đích `{ hotelId }` hoặc `{ branchId }` (cơ sở đã chọn từ danh sách). */
+async function connectionFor(target, { force = false, report = null } = {}) {
+  const key = targetKey(target);
+  const cached = key ? await get(K.conn(key)) : null;
   if (!force && !report && cached && H.isFresh(cached, now(), H.CONNECTION_MAX_AGE_MS)) {
     return { session: "ok", branch: cached.branch, otaSync: H.usableOtaSync(undefined, cached), cached: true };
   }
   const origin = await hubOriginNow();
-  const reply = await hubFetch(H.connectionUrl(origin, hotelId, report));
+  const url = target.branchId ? H.branchConnectionUrl(origin, target.branchId, report) : H.connectionUrl(origin, target.hotelId, report);
+  const reply = await hubFetch(url);
   const cls = H.classifyHubReply(reply);
   await noteSession(cls);
   if (cls.state === "ok") {
     await rememberSettings(cls.data);
     const entry = { branch: cls.data.branch ?? null, otaSync: cls.data.otaSync ?? null, at: now() };
-    await set(K.conn(hotelId), entry);
+    await set(K.conn(key), entry);
     return { session: "ok", branch: entry.branch, otaSync: H.usableOtaSync(entry.otaSync), cached: false };
   }
   const session = await sessionNow(cls);
@@ -138,14 +174,15 @@ export async function connection(hotelId, { force = false, report = null } = {})
   return { session, why: cls.why, branch: cached?.branch ?? null, otaSync: H.usableOtaSync(undefined, cached), cached: Boolean(cached), message: cls.message };
 }
 
-/** Báo Hub kết quả dùng mã (chỉ khi kết quả đổi). Không chặn luồng chính. */
-async function reportCodeOutcome(hotelId, otaSync, outcome) {
-  if (!hotelId || !otaSync) return;
-  const last = await get(K.report(hotelId));
+/** Báo Hub kết quả dùng mã (chỉ khi kết quả đổi). Không chặn luồng chính. `target` như connectionFor. */
+async function reportCodeOutcome(target, otaSync, outcome) {
+  const key = targetKey(target);
+  if (!key || !otaSync) return;
+  const last = await get(K.report(key));
   const r = H.reportToSend(last, otaSync, outcome);
   if (!r) return;
-  const res = await connection(hotelId, { report: r });
-  if (res.session === "ok") await set(K.report(hotelId), r);
+  const res = await connectionFor(target, { report: r });
+  if (res.session === "ok") await set(K.report(key), r);
 }
 
 // ---------- Apps Script ----------
@@ -172,11 +209,11 @@ async function withCode(hotelId, params) {
   let conn = await connection(hotelId);
   try {
     const out = await scriptGet(conn.otaSync, params);
-    reportCodeOutcome(hotelId, conn.otaSync, { kind: "accepted" }).catch(() => {});
+    reportCodeOutcome({ hotelId }, conn.otaSync, { kind: "accepted" }).catch(() => {});
     return { conn, ...out };
   } catch (e) {
     if (e.kind !== "rejected") throw Object.assign(e, { conn });
-    await reportCodeOutcome(hotelId, conn.otaSync, { kind: "rejected", message: e.message });
+    await reportCodeOutcome({ hotelId }, conn.otaSync, { kind: "rejected", message: e.message });
     const again = await connection(hotelId, { force: true });
     if (!again.otaSync || again.otaSync.updatedAt === conn.otaSync?.updatedAt) throw Object.assign(e, { conn: again });
     conn = again;
@@ -273,9 +310,9 @@ export async function onToken({ kind, token, hotelSn = 0, quiet = false }, tabId
     job.quiet = job.quiet && quiet;
     return { hotelId };
   }
-  // Go2Joy không mang mã khách sạn ezCloud ⇒ dùng mã kết nối của khách sạn PMS mở gần nhất (SUY).
-  const forHotel = hotelId || (await get(K.lastHotel)) || "";
-  if (!forHotel) return { hotelId };
+  // Go2Joy không mang mã khách sạn ezCloud ⇒ cơ sở chốt lúc gửi (go2joyTarget, H-1351 c).
+  const forHotel = hotelId || (kind === "go2joy" ? "" : (await get(K.lastHotel)) || "");
+  if (!forHotel && kind !== "go2joy") return { hotelId };
   clearTimeout(job?.timer);
   pending[kind] = { token, hotelSn, quiet, since: now(), hotelId: forHotel };
   pending[kind].timer = setTimeout(() => flushToken(kind), B.PUSH_DEBOUNCE_MS);
@@ -290,7 +327,9 @@ async function flushToken(kind) {
     return;
   }
   delete pending[kind];
-  const conn = await connection(job.hotelId);
+  const target = kind === "go2joy" ? await go2joyTarget(job.quiet) : { hotelId: job.hotelId };
+  if (!target) return;
+  const conn = await connectionFor(target);
   const code = conn.otaSync;
   if (!code?.pushKey || !B.isAppsScriptUrl(code.webAppUrl)) return;
   const key = B.memoKey(kind, code.webAppUrl, job.token);
@@ -320,8 +359,8 @@ async function flushToken(kind) {
   await set(K.memo, B.remember(memo, key, ok ? "ok" : "rejected", ok ? "" : reply.message, now()));
   await set(K.tok(kind), { at: now(), outcome: reply.outcome, message: reply.message, hotel: reply.hotel });
   if (kind === "ezcloud" && ok) await patchSnap({ tokenAt: now() });
-  if (reply.codeRejected) await reportCodeOutcome(job.hotelId, code, { kind: "rejected", message: reply.message });
-  else if (ok) reportCodeOutcome(job.hotelId, code, { kind: "accepted" }).catch(() => {});
+  if (reply.codeRejected) await reportCodeOutcome(target, code, { kind: "rejected", message: reply.message });
+  else if (ok) reportCodeOutcome(target, code, { kind: "accepted" }).catch(() => {});
   // Lời báo cho lễ tân (userscript: notify): lưu mới / chờ xác nhận / bị từ chối lần đầu.
   const repeated = lastError === reply.message;
   const say =
@@ -330,6 +369,29 @@ async function flushToken(kind) {
     : reply.outcome === "rejected" && !job.quiet && !repeated ? { tone: "err", text: reply.message }
     : null;
   if (say) broadcast({ type: "quay:tokenNote", kind, ...say, hotel: reply.hotel });
+}
+
+/** Nhắc chọn cơ sở trên PMS / HA Go2Joy tối đa mỗi 10 phút một lần (hằng kỹ thuật). */
+const ASK_AGAIN_MS = 10 * 60 * 1000;
+let askedAt = 0;
+
+/**
+ * Đích của token Go2Joy (H.go2joyTarget). Danh sách cơ sở cũ hơn 30 phút ⇒ đọc lại (lượt chỉ đọc).
+ * Nhiều cơ sở mà chưa chọn ⇒ không gửi, nhắc lễ tân chọn trong popup (tối đa 10 phút một lần).
+ */
+async function go2joyTarget(quiet) {
+  let mine = await get(K.mine);
+  if (!H.isFresh(mine, now(), H.CONNECTION_MAX_AGE_MS)) {
+    await refreshHubSettings().catch(() => {});
+    mine = await get(K.mine);
+  }
+  const t = H.go2joyTarget({ branches: mine?.branches ?? null, chosenId: (await get(K.branch)) ?? "", lastHotel: (await get(K.lastHotel)) ?? "" });
+  if (!t?.ask) return t;
+  if (!quiet && now() - askedAt > ASK_AGAIN_MS) {
+    askedAt = now();
+    broadcast({ type: "quay:tokenNote", kind: "go2joy", tone: "warn", text: `Chưa gửi token Go2Joy: tài khoản Hub có ${t.count} cơ sở. Bấm icon UrbanB trên thanh Chrome, chọn cơ sở của máy này.` });
+  }
+  return null;
 }
 
 async function broadcast(msg) {
@@ -383,8 +445,8 @@ export async function statusForPopup() {
 export async function setHubOrigin(origin) {
   const o = H.hubOrigin(origin);
   await chrome.storage.local.set({ [K.hub]: o, [K.ever]: false, [K.last]: null, [K.snap]: {} });
-  // Cấu hình chung là của Hub cũ ⇒ bỏ, lượt gọi sau nhận của Hub mới.
-  await chrome.storage.local.remove(HUB_COLLECT_KEY);
+  // Cấu hình chung, danh sách cơ sở và cơ sở đã chọn là của Hub cũ ⇒ bỏ, lượt gọi sau nhận của Hub mới.
+  await chrome.storage.local.remove([HUB_COLLECT_KEY, K.mine, K.branch]);
   return o;
 }
 
@@ -451,7 +513,8 @@ const HANDLERS = {
   "quay:tabHotel": async (_m, sender) => ({ hotelId: sender?.tab?.id != null ? (await chrome.storage.session.get(`quayTab:${sender.tab.id}`).catch(() => ({})))[`quayTab:${sender.tab.id}`] ?? "" : "" }),
   "quay:openHub": (m) => openHub(String(m.path ?? "/")),
   "quay:status": () => statusForPopup(),
-  "quay:refreshSettings": () => refreshHubSettings(),
+  "quay:mine": () => myBranches(),
+  "quay:setBranch": (m) => setBranch(m.branchId),
   "quay:setHub": (m) => setHubOrigin(String(m.origin ?? "")),
   "quay:tm": (m) => tampermonkeySeen(m.present),
   "quay:notifications": () => notifications(),

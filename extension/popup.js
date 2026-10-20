@@ -2,7 +2,7 @@ import { CHANNELS, CHANNEL_LABEL, VERSION, getDeviceId, loadConfig, loadLastErro
 import { formatErrorReport } from "./report.js";
 import { UPDATE_COMMAND, updateNotice } from "./update.js";
 import { HUB_LABELS, HUB_ORIGINS } from "./env.js";
-import { popupPmsRow } from "./quay/hub-quay.js";
+import { branchPicker, popupPmsRow } from "./quay/hub-quay.js";
 import { noChannelText, reviewRow } from "./popup-model.js";
 import { loadEffectiveConfig, scheduleText } from "./hub-config.js";
 
@@ -72,6 +72,25 @@ async function renderQuay() {
   if (!sel.options.length)
     for (const o of HUB_ORIGINS) sel.add(new Option(HUB_LABELS[o] ?? o, o));
   if (snap?.origin) sel.value = snap.origin;
+}
+
+/** Ô chọn cơ sở (H-1351 c): đọc danh sách cơ sở của người đăng nhập qua lượt chỉ đọc scope=mine. */
+async function renderBranches() {
+  let r;
+  try {
+    r = await chrome.runtime.sendMessage({ type: "quay:mine" });
+  } catch {
+    r = null;
+  }
+  const model = branchPicker(r?.branches ?? null, r?.chosenId ?? "");
+  $("branchBox").hidden = !model;
+  if (!model) return;
+  $("branchBox").className = "band " + (model.ask ? "upd" : "info");
+  $("branchText").textContent = model.text;
+  const sel = $("quayBranch");
+  sel.textContent = "";
+  for (const o of model.options) sel.add(new Option(o.label, o.value));
+  sel.value = model.value;
 }
 
 /** Mục "Thu review OTA": một dòng tóm tắt; chi tiết từng kênh nằm trong "Xem từng kênh". */
@@ -295,6 +314,13 @@ $("quayHub").onchange = async () => {
   await chrome.runtime.sendMessage({ type: "quay:setHub", origin: $("quayHub").value });
   note("Đã đổi Hub. Mở lại tab PMS để khung nhận mã kết nối của Hub mới.", "settingsNote");
   await renderQuay();
+  await renderBranches();
+};
+
+$("quayBranch").onchange = async () => {
+  const r = await chrome.runtime.sendMessage({ type: "quay:setBranch", branchId: $("quayBranch").value });
+  note(r?.ok ? "Đã chọn cơ sở của máy quầy." : `Không chọn được cơ sở: ${r?.error ?? "không rõ"}`);
+  await renderBranches();
 };
 
 $("copyUpdate").onclick = () => copyCommand($("copyUpdate"));
@@ -309,8 +335,9 @@ chrome.storage.onChanged.addListener((changes) => {
 
 $("updateCmd").value = UPDATE_COMMAND;
 fill();
-// Cấu hình chung trên Hub có thể vừa đổi: hỏi lại (lượt chỉ đọc), bộ nhớ đổi thì popup tự vẽ lại.
-chrome.runtime.sendMessage({ type: "quay:refreshSettings" }).catch(() => {});
+// Cấu hình chung và danh sách cơ sở trên Hub có thể vừa đổi: hỏi lại (lượt chỉ đọc scope=mine);
+// cấu hình đổi thì popup tự vẽ lại (onChanged hubCollect).
+renderBranches();
 renderQuay();
 renderStatus();
 renderUpdate();

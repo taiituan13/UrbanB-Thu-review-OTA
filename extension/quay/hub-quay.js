@@ -4,8 +4,10 @@
 // Route (repo UrbanB, chỉ đọc):
 //   GET /api/extension/connection?ezcloudHotelId=…[&report=rejected|accepted&message=…]
 //   GET /api/extension/connection?scope=mine            (chỉ đọc: cơ sở của người đăng nhập + cấu hình chung)
+//   GET /api/extension/connection?branchId=…[&report=…]  (một cơ sở đã chọn từ danh sách; ghi lượt gọi như đường ezcloudHotelId)
 //   GET /api/extension/indicators?ezcloudHotelId=…
-// Lỗi JSON: NOT_SIGNED_IN 401 · MISSING_HOTEL 400 · HOTEL_NOT_LINKED 404 · OUT_OF_SCOPE 403 · FORBIDDEN_ORIGIN 403.
+// Lỗi JSON: NOT_SIGNED_IN 401 · MISSING_HOTEL 400 · HOTEL_NOT_LINKED 404 · OUT_OF_SCOPE 403 · FORBIDDEN_ORIGIN 403 ·
+//           BRANCH_NOT_FOUND 404 · INVALID_QUERY 400.
 
 import { DEFAULT_HUB_ORIGIN, HUB_ORIGINS } from "../env.js";
 
@@ -45,6 +47,81 @@ export function mineUrl(origin) {
   return origin + CONNECTION_PATH + "?scope=mine";
 }
 
+/** Mã kết nối của một cơ sở người dùng đã chọn (H-1351 c); `report` như đường ezcloudHotelId. */
+export function branchConnectionUrl(origin, branchId, report) {
+  const q = new URLSearchParams({ branchId });
+  if (report) {
+    q.set("report", report.kind);
+    if (report.message) q.set("message", String(report.message).slice(0, 300));
+  }
+  return origin + CONNECTION_PATH + "?" + q.toString();
+}
+
+/**
+ * Danh sách cơ sở của lượt `scope=mine` ⇒ `[{ id, name, code, ezcloudHotelId }]`. Không giữ mã kết nối
+ * ở đây: mã của cơ sở được chọn lấy qua `?branchId=` (lượt ấy Hub ghi "máy quầy gọi lần cuối").
+ * Không phải danh sách ⇒ null.
+ */
+export function parseMine(json) {
+  if (!json || json.ok !== true || !Array.isArray(json.branches)) return null;
+  return json.branches
+    .filter((b) => b && typeof b.id === "string" && b.id)
+    .map((b) => ({
+      id: b.id,
+      name: typeof b.name === "string" ? b.name : "",
+      code: typeof b.code === "string" ? b.code : "",
+      ezcloudHotelId: b.ezcloudHotelId == null ? "" : String(b.ezcloudHotelId),
+    }));
+}
+
+/**
+ * Cơ sở của máy quầy theo danh sách của người đăng nhập (H-1351 c):
+ * - `unknown`: chưa có danh sách (chưa đăng nhập, Hub cũ chưa có `scope=mine`);
+ * - `none`: tài khoản không có cơ sở nào; `one`: đúng một cơ sở ⇒ dùng luôn;
+ * - `chosen`: nhiều cơ sở, người dùng đã chọn một cơ sở còn trong danh sách; `ask`: nhiều cơ sở, chưa chọn.
+ */
+export function pickBranch(branches, chosenId) {
+  if (!Array.isArray(branches)) return { state: "unknown" };
+  if (!branches.length) return { state: "none" };
+  const chosen = chosenId && branches.find((b) => b.id === chosenId);
+  if (chosen) return { state: branches.length === 1 ? "one" : "chosen", branch: chosen };
+  if (branches.length === 1) return { state: "one", branch: branches[0] };
+  return { state: "ask" };
+}
+
+/**
+ * Token Go2Joy gửi về Apps Script của cơ sở nào. Go2Joy không mang mã khách sạn ezCloud.
+ * - Có danh sách: cơ sở duy nhất hoặc cơ sở đã chọn ⇒ `{ branchId }`; nhiều cơ sở chưa chọn ⇒ `{ ask }`
+ *   (không đoán); không có cơ sở ⇒ null.
+ * - Chưa có danh sách: cơ sở đã chọn trước đó (dùng bản đệm mã, H-1245 a), không có thì như bản 1.0.0 —
+ *   khách sạn PMS mở gần nhất.
+ */
+export function go2joyTarget({ branches, chosenId, lastHotel }) {
+  const pick = pickBranch(branches, chosenId);
+  if (pick.branch) return { branchId: pick.branch.id };
+  if (pick.state === "ask") return { ask: true, count: branches.length };
+  if (pick.state === "none") return null;
+  if (chosenId) return { branchId: chosenId };
+  return lastHotel ? { hotelId: lastHotel } : null;
+}
+
+/**
+ * Ô chọn cơ sở trong popup: chỉ hiện khi tài khoản có từ hai cơ sở. `ask` ⇒ chưa chọn, cần làm ngay.
+ */
+export function branchPicker(branches, chosenId) {
+  const pick = pickBranch(branches, chosenId);
+  if (pick.state !== "ask" && pick.state !== "chosen") return null;
+  const label = (b) => [b.code, b.name].filter(Boolean).join(" · ") || b.id;
+  return {
+    ask: pick.state === "ask",
+    value: pick.branch?.id ?? "",
+    options: [{ value: "", label: "Chọn cơ sở…" }, ...branches.map((b) => ({ value: b.id, label: label(b) }))],
+    text: pick.state === "ask"
+      ? `Tài khoản Hub của bạn có ${branches.length} cơ sở. Chọn cơ sở của máy quầy này để token Go2Joy gửi đúng Apps Script của khách sạn.`
+      : "Token Go2Joy gửi về Apps Script của cơ sở này.",
+  };
+}
+
 export function indicatorsUrl(origin, hotelId) {
   return origin + INDICATORS_PATH + "?" + new URLSearchParams({ ezcloudHotelId: hotelId }).toString();
 }
@@ -64,6 +141,7 @@ const ERROR_STATE = {
   HOTEL_NOT_LINKED: { state: "nobranch", why: "unmapped" },
   OUT_OF_SCOPE: { state: "nobranch", why: "scope" },
   FORBIDDEN_ORIGIN: { state: "forbidden" },
+  BRANCH_NOT_FOUND: { state: "nobranch", why: "gone" },
 };
 
 /**
