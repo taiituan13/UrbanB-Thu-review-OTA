@@ -8,6 +8,7 @@ import * as B from "./booking-ota.js";
 import * as H from "./hub-quay.js";
 import * as N from "./notifications.js";
 import { DEV_FLAGS } from "../env.js";
+import { HUB_COLLECT_KEY, parseHubSettings } from "../hub-config.js";
 
 const K = {
   hub: "quayHubOrigin",
@@ -88,6 +89,28 @@ async function patchSnap(patch) {
   return next;
 }
 
+// ---------- Cấu hình chung đặt trên Hub (H-1348 a) ----------
+
+/**
+ * Mọi lời đáp 200 của route `connection` mang cấu hình chung (hoặc vắng nếu Hub chưa có dòng cấu hình).
+ * Thay hẳn bản trước: trường nào Hub thôi gửi thì máy về mặc định (hub-config.js effectiveCollect).
+ */
+async function rememberSettings(json) {
+  await set(HUB_COLLECT_KEY, { ...parseHubSettings(json), at: now() });
+}
+
+/**
+ * Đọc cấu hình chung bằng lượt liệt kê `scope=mine` (chỉ đọc). Thu review gọi trước mỗi lượt quét và
+ * mỗi 30 phút. Không gọi được Hub ⇒ giữ bản đã nhận lần trước. Trả `{ state, data? }`.
+ */
+export async function refreshHubSettings() {
+  const cls = H.classifyHubReply(await hubFetch(H.mineUrl(await hubOriginNow())));
+  await noteSession(cls);
+  if (cls.state !== "ok") return { state: await sessionNow(cls) };
+  await rememberSettings(cls.data);
+  return { state: "ok", data: cls.data };
+}
+
 // ---------- Mã kết nối theo cơ sở ----------
 
 /**
@@ -105,6 +128,7 @@ export async function connection(hotelId, { force = false, report = null } = {})
   const cls = H.classifyHubReply(reply);
   await noteSession(cls);
   if (cls.state === "ok") {
+    await rememberSettings(cls.data);
     const entry = { branch: cls.data.branch ?? null, otaSync: cls.data.otaSync ?? null, at: now() };
     await set(K.conn(hotelId), entry);
     return { session: "ok", branch: entry.branch, otaSync: H.usableOtaSync(entry.otaSync), cached: false };
@@ -359,6 +383,8 @@ export async function statusForPopup() {
 export async function setHubOrigin(origin) {
   const o = H.hubOrigin(origin);
   await chrome.storage.local.set({ [K.hub]: o, [K.ever]: false, [K.last]: null, [K.snap]: {} });
+  // Cấu hình chung là của Hub cũ ⇒ bỏ, lượt gọi sau nhận của Hub mới.
+  await chrome.storage.local.remove(HUB_COLLECT_KEY);
   return o;
 }
 
@@ -390,7 +416,14 @@ export async function notifications() {
     r.session = await sessionNow({ state: "out" });
     r.state = r.session;
   }
-  if (r.state === "ok") await set(K.ever, true);
+  if (r.state === "ok") {
+    await set(K.ever, true);
+    // Route thông báo không kèm thời gian tự ẩn ⇒ dùng số route `connection` gửi (H-1348 a).
+    if (!r.toastFromHub) {
+      const hub = await get(HUB_COLLECT_KEY);
+      if (hub?.toastSeconds) r.toastSeconds = hub.toastSeconds;
+    }
+  }
   await patchSnap({ notifications: { state: r.state, unread: r.state === "ok" ? r.unread : 0, me: r.me?.name ?? "", at: now() } });
   return r;
 }
@@ -418,6 +451,7 @@ const HANDLERS = {
   "quay:tabHotel": async (_m, sender) => ({ hotelId: sender?.tab?.id != null ? (await chrome.storage.session.get(`quayTab:${sender.tab.id}`).catch(() => ({})))[`quayTab:${sender.tab.id}`] ?? "" : "" }),
   "quay:openHub": (m) => openHub(String(m.path ?? "/")),
   "quay:status": () => statusForPopup(),
+  "quay:refreshSettings": () => refreshHubSettings(),
   "quay:setHub": (m) => setHubOrigin(String(m.origin ?? "")),
   "quay:tm": (m) => tampermonkeySeen(m.present),
   "quay:notifications": () => notifications(),

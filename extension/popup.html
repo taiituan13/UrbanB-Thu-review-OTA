@@ -225,6 +225,7 @@
     <div class="small">Review gửi lên Hub đứng tên tài khoản đang đăng nhập Hub ở trên, không cần token.</div>
 
     <label>Kênh quét</label>
+    <div class="small" id="channelsFromHub" hidden>Kênh quét và chu kỳ quét đặt trên Hub (màn Kết nối › Extension máy quầy), chung cho cả chuỗi. Ô dưới đây chỉ để xem.</div>
     <div class="channels">
       <label><input type="checkbox" id="en-booking"> Booking</label>
       <label><input type="checkbox" id="en-agoda"> Agoda</label>
@@ -242,9 +243,6 @@
 
     <label for="expediaPropertyId">Mã Expedia (để trống ⇒ tự dò)</label>
     <input id="expediaPropertyId" type="text">
-
-    <label for="intervalHours">Quét mỗi (giờ)</label>
-    <input id="intervalHours" type="number" min="1" step="1">
 
     <div class="row">
       <button class="secondary" id="save">Lưu</button>

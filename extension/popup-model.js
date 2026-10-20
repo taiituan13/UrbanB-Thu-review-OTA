@@ -10,6 +10,13 @@ export function hm(iso) {
   return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
 }
 
+/** Câu khi chưa bật kênh nào: kênh đặt trên Hub thì người ở quầy không tự bật được. */
+export function noChannelText(cfg) {
+  return cfg?.collect?.fromHub?.enabled
+    ? "Cấu hình trên Hub chưa bật kênh nào. Báo Quản trị hệ thống bật kênh ở màn Kết nối › Extension máy quầy."
+    : "Mở Cài đặt, chọn kênh rồi bấm Lưu.";
+}
+
 /**
  * Dòng "Thu review OTA": chấm màu, tình trạng, một dòng nói cần làm gì.
  * `cfg` = cấu hình 0.9.0 (config.js) · `status` = trạng thái lượt quét từng kênh.
@@ -18,7 +25,7 @@ export function reviewRow(cfg, status, channels) {
   const enabled = channels.filter((ch) => cfg?.enabled?.[ch]);
   if (!cfg?.sheetUrl || !cfg?.secret || !cfg?.hotel)
     return { tone: "warn", state: "Chưa cài đặt xong", when: "", detail: "Mở Cài đặt bên dưới, dán Mã cài đặt người quản lý gửi (bắt đầu bằng URB1.) rồi bấm Nhận mã." };
-  if (!enabled.length) return { tone: "off", state: "Chưa bật kênh nào", when: "", detail: "Mở Cài đặt, chọn kênh rồi bấm Lưu." };
+  if (!enabled.length) return { tone: "off", state: "Chưa bật kênh nào", when: "", detail: noChannelText(cfg) };
   const rows = enabled.map((ch) => ({ ch, s: status?.[ch] }));
   const bad = rows.filter((r) => r.s && r.s.state !== "ok");
   const login = bad.filter((r) => r.s.state === "login");

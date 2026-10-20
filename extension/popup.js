@@ -3,10 +3,11 @@ import { formatErrorReport } from "./report.js";
 import { UPDATE_COMMAND, updateNotice } from "./update.js";
 import { HUB_LABELS, HUB_ORIGINS } from "./env.js";
 import { popupPmsRow } from "./quay/hub-quay.js";
-import { reviewRow } from "./popup-model.js";
+import { noChannelText, reviewRow } from "./popup-model.js";
+import { loadEffectiveConfig, scheduleText } from "./hub-config.js";
 
 const $ = (id) => document.getElementById(id);
-const FIELDS = ["hotel", "sheetUrl", "secret", "bookingHotelId", "agodaPropertyId", "expediaPropertyId", "intervalHours"];
+const FIELDS = ["hotel", "sheetUrl", "secret", "bookingHotelId", "agodaPropertyId", "expediaPropertyId"];
 const STATE_TEXT = { ok: "ổn", error: "lỗi", login: "cần đăng nhập lại" };
 
 /** Dòng chữ dưới nút Quét ngay; `where` = "settingsNote" cho dòng trong khối Cài đặt. */
@@ -14,9 +15,16 @@ function note(text, where = "note") {
   $(where).textContent = text;
 }
 
-/** Dòng "Tự quét mỗi N giờ" của thu review theo cấu hình đã lưu. */
-function renderHeader(cfg) {
-  $("auto").textContent = `Thu review tự quét mỗi ${Math.max(1, Number(cfg.intervalHours) || 6)} giờ.`;
+/** Dòng "Tự quét mỗi N giờ" và ô kênh quét, theo cấu hình đặt trên Hub (hub-config.js). */
+async function renderCollect() {
+  const cfg = await loadEffectiveConfig();
+  $("auto").textContent = scheduleText(cfg.collect);
+  const hub = cfg.collect.fromHub.enabled;
+  $("channelsFromHub").hidden = !hub;
+  for (const ch of CHANNELS) {
+    $(`en-${ch}`).disabled = hub;
+    if (hub) $(`en-${ch}`).checked = !!cfg.enabled[ch];
+  }
 }
 
 /** Một dòng tình trạng (chấm màu · tình trạng · việc cần làm). */
@@ -68,7 +76,7 @@ async function renderQuay() {
 
 /** Mục "Thu review OTA": một dòng tóm tắt; chi tiết từng kênh nằm trong "Xem từng kênh". */
 async function renderReviewRow() {
-  const [cfg, status] = await Promise.all([loadConfig(), loadStatus()]);
+  const [cfg, status] = await Promise.all([loadEffectiveConfig(), loadStatus()]);
   const row = reviewRow(cfg, status, CHANNELS);
   paintRow("rv", row);
   // Có kênh lỗi ⇒ mở sẵn danh sách kênh để thấy mã lỗi ngay.
@@ -79,7 +87,7 @@ async function fill() {
   const cfg = await loadConfig();
   for (const f of FIELDS) $(f).value = cfg[f] ?? "";
   for (const ch of CHANNELS) $(`en-${ch}`).checked = !!cfg.enabled[ch];
-  renderHeader(cfg);
+  await renderCollect();
   // Máy mới cài: mở sẵn khối Cài đặt để người cài thấy ngay ô phải điền.
   if (!cfg.hotel || !cfg.sheetUrl || !cfg.secret) $("settings").open = true;
 }
@@ -119,7 +127,7 @@ function shortTime(iso) {
 /** Chỉ hiện các kênh đang bật; kênh đã tắt giữ trạng thái cũ trong bộ nhớ nhưng không hiện. */
 async function renderStatus() {
   renderReviewRow();
-  const [cfg, status] = await Promise.all([loadConfig(), loadStatus()]);
+  const [cfg, status] = await Promise.all([loadEffectiveConfig(), loadStatus()]);
   const box = $("status");
   box.textContent = "";
   const shown = new Set();
@@ -127,7 +135,7 @@ async function renderStatus() {
   if (!enabled.length) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = "Chưa bật kênh nào. Mở Cài đặt, chọn kênh rồi bấm Lưu.";
+    empty.textContent = `Chưa bật kênh nào. ${noChannelText(cfg)}`;
     box.appendChild(empty);
   }
   for (const ch of enabled) {
@@ -197,11 +205,11 @@ async function renderUpdate() {
 async function save() {
   const cfg = await loadConfig();
   for (const f of FIELDS) cfg[f] = $(f).value.trim();
-  cfg.intervalHours = Math.max(1, Number(cfg.intervalHours) || 6);
-  for (const ch of CHANNELS) cfg.enabled[ch] = $(`en-${ch}`).checked;
+  // Kênh đặt trên Hub ⇒ ô bị khoá, giữ nguyên kênh của máy (dùng lại khi Hub thôi gửi cấu hình).
+  if (!$("en-booking").disabled) for (const ch of CHANNELS) cfg.enabled[ch] = $(`en-${ch}`).checked;
   await saveConfig(cfg);
   await chrome.runtime.sendMessage({ type: "reschedule" });
-  renderHeader(cfg);
+  await renderCollect();
   await renderStatus();
 }
 
@@ -293,13 +301,16 @@ $("copyUpdate").onclick = () => copyCommand($("copyUpdate"));
 $("copyCmd").onclick = () => copyCommand($("copyCmd"));
 
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes.status || changes.lastError || changes.config) renderStatus();
+  if (changes.status || changes.lastError || changes.config || changes.hubCollect) renderStatus();
+  if (changes.hubCollect) renderCollect();
   if (changes.update) renderUpdate();
   if (changes.quaySnap) renderQuay();
 });
 
 $("updateCmd").value = UPDATE_COMMAND;
 fill();
+// Cấu hình chung trên Hub có thể vừa đổi: hỏi lại (lượt chỉ đọc), bộ nhớ đổi thì popup tự vẽ lại.
+chrome.runtime.sendMessage({ type: "quay:refreshSettings" }).catch(() => {});
 renderQuay();
 renderStatus();
 renderUpdate();

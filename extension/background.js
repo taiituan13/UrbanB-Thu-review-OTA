@@ -21,7 +21,8 @@ import { hubBatches, hubSummaryText, ingestRequest, parseIngestReply, rejectedTe
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
-import { hubFetch, hubOriginNow, installQuay, noteSignedOut } from "./quay/sw.js";
+import { hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings } from "./quay/sw.js";
+import { alarmMinutes, loadEffectiveConfig } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
 import {
   bookingSessionInPage,
@@ -42,12 +43,31 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- Hẹn giờ ----------
 
+/** Đặt lại lịch (lúc nạp, áp mã cài đặt): lượt tự quét đầu tiên sau 5 phút. Chu kỳ theo cấu hình Hub. */
 async function schedule() {
-  const cfg = await loadConfig();
-  const minutes = Math.max(30, Math.round(Number(cfg.intervalHours || 6) * 60));
+  const cfg = await loadEffectiveConfig();
   await chrome.alarms.clear(ALARM);
-  await chrome.alarms.create(ALARM, { delayInMinutes: 5, periodInMinutes: minutes });
+  await chrome.alarms.create(ALARM, { delayInMinutes: 5, periodInMinutes: alarmMinutes(cfg.intervalHours) });
   await chrome.alarms.create(UPDATE_ALARM, { delayInMinutes: 1, periodInMinutes: 30 });
+}
+
+/**
+ * Chu kỳ trên Hub đổi ⇒ đổi báo thức. Chu kỳ như cũ thì để nguyên (không lùi giờ quét kế tiếp).
+ * Chu kỳ mới tính từ lúc đổi.
+ */
+async function followHubInterval() {
+  const minutes = alarmMinutes((await loadEffectiveConfig()).intervalHours);
+  const alarm = await chrome.alarms.get(ALARM);
+  if (alarm?.periodInMinutes === minutes) return;
+  await chrome.alarms.create(ALARM, { delayInMinutes: minutes, periodInMinutes: minutes });
+}
+
+/** Hỏi Hub cấu hình chung (chỉ đọc). Không gọi được Hub thì giữ bản đã nhận; không chặn lượt quét. */
+async function syncHubSettings() {
+  try {
+    await refreshHubSettings();
+  } catch {}
+  await followHubInterval().catch(() => {});
 }
 
 chrome.runtime.onInstalled.addListener(() => schedule().then(importSetupFile));
@@ -55,6 +75,7 @@ chrome.runtime.onStartup.addListener(() => schedule().then(importSetupFile));
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM) runScan("hẹn giờ");
   if (alarm.name === UPDATE_ALARM) {
+    syncHubSettings().then(refreshBadge);
     reloadIfDiskNewer();
     checkRemoteVersion();
     importSetupFile();
@@ -139,7 +160,7 @@ async function checkRemoteVersion() {
 installQuay();
 // Số chưa đọc và phiên Hub đổi (quay/sw.js ghi quaySnap) ⇒ vẽ lại huy hiệu.
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes.quaySnap) refreshBadge().catch(() => {});
+  if (area === "local" && (changes.quaySnap || changes.hubCollect)) refreshBadge().catch(() => {});
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
@@ -386,7 +407,7 @@ async function deviceInfo(cfg) {
     hotel: cfg.hotel,
     version: VERSION,
     channels: CHANNELS.filter((ch) => cfg.enabled[ch]).join(", "),
-    intervalHours: Number(cfg.intervalHours) || 6,
+    intervalHours: cfg.intervalHours,
     status: await loadStatus(),
   };
 }
@@ -430,7 +451,7 @@ async function postSheet(cfg, payload) {
 }
 
 async function pingSheet() {
-  const cfg = await loadConfig();
+  const cfg = await loadEffectiveConfig();
   const hub = await pingHub();
   if (!cfg.sheetUrl || !cfg.secret) {
     const entry = makeLogEntry({ stage: "gửi Sheet", error: "Chưa điền URL Sheet hoặc mã bí mật" });
@@ -520,7 +541,9 @@ async function runScan(trigger) {
   if (running) return "Đang có một lượt quét chạy, đợi nó xong.";
   running = true;
   try {
-    const cfg = await loadConfig();
+    // Kênh và chu kỳ theo cấu hình đặt trên Hub (H-1348 a); hỏi lại trước mỗi lượt.
+    await syncHubSettings();
+    const cfg = await loadEffectiveConfig();
     if (!cfg.sheetUrl || !cfg.secret || !cfg.hotel) {
       return "Chưa điền đủ tên khách sạn, URL Web App và mã bí mật.";
     }
@@ -641,7 +664,7 @@ async function setBadge(text) {
  * ĐANG BẬT không ổn hay gửi Hub hỏng (kênh đã tắt không tính), hoặc chưa đăng nhập / hết phiên Hub.
  */
 async function refreshBadge() {
-  const [cfg, status, { quaySnap }] = await Promise.all([loadConfig(), loadStatus(), chrome.storage.local.get("quaySnap")]);
+  const [cfg, status, { quaySnap }] = await Promise.all([loadEffectiveConfig(), loadStatus(), chrome.storage.local.get("quaySnap")]);
   const missing = !cfg.sheetUrl || !cfg.secret || !cfg.hotel;
   const bad = CHANNELS.some((ch) => {
     const s = status[ch];

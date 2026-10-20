@@ -3,6 +3,7 @@
 //
 // Route (repo UrbanB, chỉ đọc):
 //   GET /api/extension/connection?ezcloudHotelId=…[&report=rejected|accepted&message=…]
+//   GET /api/extension/connection?scope=mine            (chỉ đọc: cơ sở của người đăng nhập + cấu hình chung)
 //   GET /api/extension/indicators?ezcloudHotelId=…
 // Lỗi JSON: NOT_SIGNED_IN 401 · MISSING_HOTEL 400 · HOTEL_NOT_LINKED 404 · OUT_OF_SCOPE 403 · FORBIDDEN_ORIGIN 403.
 
@@ -37,6 +38,11 @@ export function connectionUrl(origin, hotelId, report) {
   }
   const s = q.toString();
   return origin + CONNECTION_PATH + (s ? "?" + s : "");
+}
+
+/** Lượt liệt kê cơ sở của người đăng nhập (H-1351 c). Chỉ đọc: Hub không ghi "máy quầy gọi lần cuối". */
+export function mineUrl(origin) {
+  return origin + CONNECTION_PATH + "?scope=mine";
 }
 
 export function indicatorsUrl(origin, hotelId) {

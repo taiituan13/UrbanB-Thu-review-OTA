@@ -73,11 +73,13 @@ export function parseNotifications(json) {
   const counted = items.filter((n) => !n.readAt).length;
   const unread = Number.isInteger(json.unread) && json.unread >= 0 ? json.unread : counted;
   const ts = Number(json.settings?.toastSeconds);
+  const fromHub = Number.isFinite(ts) && ts > 0;
   return {
     me: { name: str(json.me?.name) },
     items,
     unread,
-    toastSeconds: Number.isFinite(ts) && ts > 0 ? ts : TOAST_SECONDS_DEFAULT,
+    toastSeconds: fromHub ? ts : TOAST_SECONDS_DEFAULT,
+    toastFromHub: fromHub,
   };
 }
 
