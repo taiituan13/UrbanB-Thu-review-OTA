@@ -2,10 +2,14 @@
 // .design-sync/proto-extension-quay.html). Nằm trong Shadow DOM nên không lẫn với CSS của PMS.
 // Khác mockup: vị trí `fixed` theo cửa sổ (mockup đặt `absolute` trong khung 1440×900 giả lập);
 // không tải phông qua mạng (Inter / Playfair Display chỉ dùng khi máy có sẵn).
+// Dock và khung lùi vào `--dock-right` (92px) để chừa chỗ bong bóng chat của PMS ezCloud: đo 20/10/2026,
+// bong bóng ấy rộng 60px, cách mép phải 20px, và nằm đè lên nút Urban B khi dock còn ở 18px.
+// `.qz button{background:none}` mạnh hơn `.qfab{…}` (hai bộ chọn so với một), nên nền của nút Urban B
+// phải khai lại ở `.qz .qfab`; thiếu dòng ấy thì chữ kem nằm trên nền trong suốt, gần như không đọc được.
 
 export const QUAY_CSS = `
 :host{all:initial}
-.qz{--bg:#f9f7f2;--surface:#ffffff;--fg:#123b37;--fg-on:#f9f7f2;--muted-fg:#4a6660;--secondary:#ecdec0;--accent:#a68a64;--accent-text:#7d6544;
+.qz{--dock-right:92px;--bg:#f9f7f2;--surface:#ffffff;--fg:#123b37;--fg-on:#f9f7f2;--muted-fg:#4a6660;--secondary:#ecdec0;--accent:#a68a64;--accent-text:#7d6544;
   --border:#ddd0b0;--destructive:#8c3226;--success:#3c6e52;--warning:#7a5417;--r-sm:6px;--r-md:10px;--r-lg:14px;--surface-soft:#f3eee4;--line-soft:rgba(221,208,176,.58);
   --font-body:'Inter',ui-sans-serif,system-ui,'Segoe UI',sans-serif;--font-display:'Playfair Display',Georgia,ui-serif,serif;
   font-family:var(--font-body);color:var(--fg);font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -15,10 +19,10 @@ export const QUAY_CSS = `
 .qz svg{display:block;flex:none}
 .qz :focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
 .tnum{font-variant-numeric:tabular-nums}
-.qdock{position:fixed;right:18px;bottom:18px;z-index:2147483000;display:flex;align-items:center;gap:10px}
+.qdock{position:fixed;right:var(--dock-right);bottom:18px;z-index:2147483000;display:flex;align-items:center;gap:10px}
 .qfab{height:44px;display:flex;align-items:center;gap:8px;padding:0 10px 0 8px;background:var(--fg);color:var(--fg-on);border-radius:24px;
   box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:13.5px;font-weight:600;white-space:nowrap}
-.qz .qfab{color:var(--fg-on)}
+.qz .qfab{color:var(--fg-on);background:var(--fg)}
 .qfab .lg{width:28px;height:28px;border-radius:7px;background:var(--secondary);color:var(--fg);font:600 15px/28px var(--font-display);text-align:center;flex:none}
 .qfab .seg{display:inline-flex;align-items:center;gap:5px;background:rgba(249,247,242,.14);border-radius:12px;padding:3px 9px;font-size:12px;font-weight:600}
 .qfab .seg.bad{background:#f6ebe8;color:var(--destructive)}
@@ -33,7 +37,7 @@ export const QUAY_CSS = `
 .qchip[aria-expanded="true"] .n{background:var(--fg-on);color:var(--fg)}
 .qchip.bump{animation:qbump .5s ease-out}
 @keyframes qbump{0%{transform:scale(1)}35%{transform:scale(1.12)}100%{transform:scale(1)}}
-.qf{position:fixed;right:18px;bottom:72px;width:560px;max-width:calc(100vw - 36px);height:min(720px,calc(100vh - 104px));min-height:320px;z-index:2147483001;background:var(--bg);border:1px solid var(--border);
+.qf{position:fixed;right:var(--dock-right);bottom:72px;width:560px;max-width:calc(100vw - var(--dock-right) - 18px);height:min(720px,calc(100vh - 104px));min-height:320px;z-index:2147483001;background:var(--bg);border:1px solid var(--border);
   border-radius:var(--r-lg);box-shadow:0 14px 40px -10px rgba(18,59,55,.45);display:flex;flex-direction:column;overflow:hidden}
 .qf-hd{background:var(--fg);color:var(--fg-on);padding:10px 12px 10px 14px;display:flex;align-items:center;gap:8px;flex:none}
 .qf-hd .tt{flex:1;min-width:0;display:flex;flex-direction:column}
