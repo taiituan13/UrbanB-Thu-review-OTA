@@ -4,8 +4,11 @@
 // không tải phông qua mạng (Inter / Playfair Display chỉ dùng khi máy có sẵn).
 // Dock và khung lùi vào `--dock-right` (92px) để chừa chỗ bong bóng chat của PMS ezCloud: đo 20/10/2026,
 // bong bóng ấy rộng 60px, cách mép phải 20px, và nằm đè lên nút Urban B khi dock còn ở 18px.
-// `.qz button{background:none}` mạnh hơn `.qfab{…}` (hai bộ chọn so với một), nên nền của nút Urban B
-// phải khai lại ở `.qz .qfab`; thiếu dòng ấy thì chữ kem nằm trên nền trong suốt, gần như không đọc được.
+// Các dòng xoá mặc định (margin, padding, nền nút…) bọc trong `:where()` nên có độ mạnh bằng 0: mọi
+// quy tắc của từng khối đều thắng, bất kể thứ tự thẻ <style>. Đo 20/10/2026: CSS thông báo (ui-notify.js)
+// được chèn TRƯỚC tệp này, nên `.qz *{padding:0}` cùng độ mạnh với `.qn{padding:…}` mà đứng sau và thắng —
+// thẻ tin mất padding, nút "Mở trên Hub" dính sát viền. Khung nằm trong Shadow DOM nên CSS của PMS không
+// lọt vào được; độ mạnh 0 không mở cửa cho nó.
 
 export const QUAY_CSS = `
 :host{all:initial}
@@ -13,10 +16,10 @@ export const QUAY_CSS = `
   --border:#ddd0b0;--destructive:#8c3226;--success:#3c6e52;--warning:#7a5417;--r-sm:6px;--r-md:10px;--r-lg:14px;--surface-soft:#f3eee4;--line-soft:rgba(221,208,176,.58);
   --font-body:'Inter',ui-sans-serif,system-ui,'Segoe UI',sans-serif;--font-display:'Playfair Display',Georgia,ui-serif,serif;
   font-family:var(--font-body);color:var(--fg);font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
-.qz *{box-sizing:border-box;margin:0;padding:0}
-.qz button{font:inherit;color:inherit;cursor:pointer;border:none;background:none;text-align:left}
-.qz a{color:inherit}
-.qz svg{display:block;flex:none}
+:where(.qz *){box-sizing:border-box;margin:0;padding:0}
+:where(.qz button){font:inherit;color:inherit;cursor:pointer;border:none;background:none;text-align:left}
+:where(.qz a){color:inherit}
+:where(.qz svg){display:block;flex:none}
 .qz :focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
 .tnum{font-variant-numeric:tabular-nums}
 .qdock{position:fixed;right:var(--dock-right);bottom:18px;z-index:2147483000;display:flex;align-items:center;gap:10px}
