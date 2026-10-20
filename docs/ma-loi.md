@@ -43,8 +43,8 @@ Các loại không có tiền tố kênh bắt đầu bằng `SHEET` (gửi Shee
 | Loại | Nghĩa | Khách sạn tự làm | Người quản lý kiểm |
 |---|---|---|---|
 | `-LOGIN` | Extranet đá về trang đăng nhập (phiên hết hạn) | Đăng nhập lại kênh đó trong cùng Chrome, bấm Quét ngay | Lặp lại liên tục ở Booking: phiên Booking hết sau khoảng 2 giờ không dùng (xem `cai-dat.md` §5) |
-| `-MULTI` | Tài khoản thấy nhiều chỗ nghỉ, extension không biết chọn cái nào | Điền mã khách sạn của kênh trong ô cài đặt | Thông điệp lỗi liệt kê sẵn các mã thấy được |
-| `-NOID` | Không dò được mã khách sạn (Agoda, Expedia) | Điền mã của kênh đó trong ô cài đặt | Agoda: trang chủ đổi đường dẫn ⇒ sửa `scanAgoda`. Expedia: trang đích không có `htid` trong URL lẫn trong link ⇒ xem `scanExpedia` (cả hai trong `background.js`) |
+| `-MULTI` | Tài khoản thấy nhiều chỗ nghỉ, extension không biết chọn cái nào | Gửi mã lỗi | Thông điệp lỗi liệt kê sẵn các mã thấy được ⇒ điền mã kênh đó của cơ sở trên Hub |
+| `-NOID` | Không dò được mã khách sạn (Agoda, Expedia) | Gửi mã lỗi | Điền mã kênh đó của cơ sở trên Hub. Agoda: trang chủ đổi đường dẫn ⇒ sửa `scanAgoda`. Expedia: trang đích không có `htid` trong URL lẫn trong link ⇒ xem `scanExpedia` (cả hai trong `background.js`) |
 | `-PAGE` | Trang kênh tự chuyển đi chỗ khác thay vì trang review, hoặc chuyển đi giữa lúc đang quét | Mở trang review của kênh xem có vào được không; kênh có ô mã khách sạn thì kiểm lại ô đó | Thông điệp ghi đường dẫn trang đích. Ví dụ Expedia đá sang `/supply/inbox` khi chưa chọn chỗ nghỉ (09/10/2026) |
 | `-OPEN` | Trang kênh không mở được: tab vẫn trống sau hai lượt mở, hoặc Chrome hiện trang lỗi của nó | Đừng bấm dừng hay đóng tab mà extension tự mở. Vẫn lỗi thì mở kênh đó trong Chrome này xem có vào được không | Tab trống: người dùng bấm ✕/Esc trên tab trắng, hoặc lượt mở bị huỷ (tiện ích chặn, phần mềm bảo mật, trang trả 204). Trang lỗi: mất mạng hoặc bị chặn. Extension đã tự mở lại một lần trước khi báo |
 | `-TIMEOUT` | Trang không tải xong trong 45 giây | Kiểm mạng, bấm Quét ngay | Lặp lại ở một kênh: kênh chậm hoặc chặn tab nền |
@@ -59,8 +59,8 @@ Các loại không có tiền tố kênh bắt đầu bằng `SHEET` (gửi Shee
 
 | Loại | Nghĩa | Khách sạn tự làm | Người quản lý kiểm |
 |---|---|---|---|
-| `SHEET-CONFIG` | Chưa điền đủ tên khách sạn, URL, mã bí mật | Điền đủ, bấm Thử Sheet | — |
-| `SHEET-SECRET` | Sheet từ chối mã bí mật | Dán lại mã bí mật đúng | Mã bí mật vừa đổi? Gửi lại mã mới cho mọi máy |
+| `SHEET-CONFIG` | Máy chưa có đủ Sheet thu review, mã bí mật, tên khách sạn (Hub chưa có cấu hình thu review, hoặc máy chưa đăng nhập Hub) | Đăng nhập Hub, chọn cơ sở nếu được hỏi, bấm Thử Sheet | Điền Sheet thu review ở màn Kết nối › Extension máy quầy trên Hub |
+| `SHEET-SECRET` | Sheet từ chối mã bí mật | Gửi mã lỗi | Mã bí mật trên Hub khớp Script Property `SECRET` của Sheet? Sửa trên Hub, máy tự nhận lại |
 | `SHEET-NET` | Không gọi được tới Google | Kiểm mạng | — |
 | `SHEET-URL` | Google trả trang lỗi thay vì JSON, cả 3 lần gửi | Kiểm URL kết thúc bằng `/exec` | Đúng URL mà vẫn lỗi: bản triển khai bị lưu trữ, hoặc quyền không còn là "Bất kỳ ai" |
 | `SHEET-BUSY` | Sheet đang bận (khoá ghi quá 60 giây) | Không cần làm gì, lượt sau tự gửi | Lặp lại nhiều: quá nhiều máy quét cùng lúc |
@@ -69,8 +69,8 @@ Các loại không có tiền tố kênh bắt đầu bằng `SHEET` (gửi Shee
 
 ### Lỗi gửi Hub (`HUB-…`)
 
-Từ bản 1.1.0 review lên Hub theo phiên đăng nhập Hub của người dùng máy (Hub đang chọn trong ô
-"Hub để đăng nhập"), không còn URL Hub hay Token Hub. Lỗi Hub không làm hỏng lượt gửi Sheet.
+Từ bản 1.1.0 review lên Hub theo phiên đăng nhập Hub của người dùng máy, không còn URL Hub hay Token
+Hub. Từ bản 1.2.0 máy dùng Hub của trang Cài extension mở gần nhất (ô bật lên ghi "Hub đang dùng"). Lỗi Hub không làm hỏng lượt gửi Sheet.
 
 | Loại | Nghĩa | Khách sạn tự làm | Người quản lý kiểm |
 |---|---|---|---|

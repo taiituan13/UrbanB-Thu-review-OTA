@@ -36,7 +36,8 @@ Hướng dẫn cho AI: `CLAUDE.md`. Các công cụ UrbanB khác: `../UrbanB-too
 Tạo Sheet theo [docs/cai-dat.md](docs/cai-dat.md), rồi cài cho từng khách sạn theo
 [docs/cai-tu-xa.md](docs/cai-tu-xa.md): menu **Review OTA › Tạo lệnh cài cho khách sạn** trong
 Sheet sinh một lệnh PowerShell riêng cho khách sạn đó; người ở khách sạn dán lệnh, nạp extension
-vào Chrome là extension tự điền Cài đặt và tự thử Sheet.
+vào Chrome rồi đăng nhập Hub là extension tự nhận Sheet thu review, tên cơ sở và mã chỗ nghỉ từ Hub
+(từ bản 1.2.0).
 
 Lệnh cài tải mã từ nhánh `main` của repo này. Ra bản mới thì tăng phiên bản ở cả
 `extension/manifest.json` lẫn `VERSION` trong `extension/config.js`: extension chỉ tự nạp lại khi

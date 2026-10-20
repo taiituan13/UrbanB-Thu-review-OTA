@@ -4,6 +4,12 @@ Cách cài này không qua Chrome Web Store. Từ bản 0.9.0, người quản l
 từng khách sạn** trong Sheet. Người ở khách sạn chỉ dán lệnh đó và bấm **bốn bước** trong Chrome;
 extension tự điền Cài đặt và tự thử Sheet. Muốn cập nhật thì chạy lệnh cài thường (không cần mã).
 
+**Từ bản 1.2.0** (`H-1527` a) Sheet thu review, tên khách sạn và mã chỗ nghỉ đặt trên Hub (màn Kết nối ›
+Extension máy quầy); máy tự nhận khi lễ tân đăng nhập Hub, ô bật lên không còn ô nhập tay hay ô Mã cài
+đặt (xem [cai-dat.md](cai-dat.md) mục 2). Lệnh có mã vẫn chạy được: máy nhận mã từ tệp
+`ma-cai-dat.txt` như cũ, nhưng cấu hình trong mã chỉ dùng khi Hub chưa có Sheet thu review. Hub đã có
+thì chỉ cần lệnh chung.
+
 Người cài có thể là nhân viên khách sạn tự làm theo trang này, hoặc người quản lý vào máy qua
 UltraViewer/TeamViewer. Mỗi máy mất khoảng 3 phút.
 
@@ -26,9 +32,9 @@ UltraViewer/TeamViewer. Mỗi máy mất khoảng 3 phút.
 ⚠️ Lệnh chứa mã bí mật của Sheet (và token Hub). Ai có lệnh đều gửi được dữ liệu vào Sheet, nên
 chỉ gửi qua tin nhắn riêng, không dán vào nhóm chung.
 
-Máy **đã cài** extension (0.9.0 trở lên) chỉ cần đổi cài đặt: gửi phần **Chỉ mã** ở dưới lệnh.
-Người ở máy mở Thu review OTA › Cài đặt, dán vào ô **Mã cài đặt**, bấm **Nhận mã**. Hoặc chạy lại
-cả lệnh có mã: extension nhận mã mới trong vòng 30 phút, hoặc ngay khi mở ô Thu review OTA.
+Máy **đã cài** extension muốn đổi cài đặt: từ bản 1.2.0 đổi trên Hub (màn Kết nối › Extension máy
+quầy). Hub chưa có Sheet thu review thì chạy lại cả lệnh có mã: extension nhận mã mới trong vòng 30
+phút, hoặc ngay khi mở ô bật lên. Phần **Chỉ mã** chỉ dán được vào máy còn chạy bản trước 1.2.0.
 
 Mã mang **đủ** cài đặt: ô nào để trống trong hộp thoại thì áp vào máy cũng thành trống, kênh không
 tick thì tắt. Chu kỳ quét của máy giữ nguyên.
@@ -37,7 +43,7 @@ tick thì tắt. Chu kỳ quét của máy giữ nguyên.
 
 **Bước 1: chạy lệnh cài.** Bấm phím Windows, gõ `PowerShell`, mở **Windows PowerShell** (không cần
 "Run as administrator"), dán lệnh người quản lý gửi rồi bấm Enter. Không có lệnh riêng thì dùng
-lệnh chung dưới đây (khi đó phải tự điền Cài đặt ở bước 3):
+lệnh chung dưới đây (cấu hình thu review khi đó lấy từ Hub ở bước 3):
 
 ```powershell
 irm https://raw.githubusercontent.com/taiituan13/UrbanB-Thu-review-OTA/main/windows/cai-dat.ps1 | iex
@@ -56,19 +62,17 @@ in ra bốn bước tiếp theo.
    vào ô địa chỉ rồi bấm **Chọn thư mục**.
 4. Bấm biểu tượng mảnh ghép cạnh thanh địa chỉ, ghim **Thu review OTA**.
 
-**Bước 3: kiểm cài đặt.** Bấm biểu tượng Thu review OTA.
+**Bước 3: kiểm cài đặt.** Bấm biểu tượng UrbanB, bấm **Đăng nhập Hub** và đăng nhập bằng tài khoản
+lễ tân của cơ sở (hoặc mở màn **Cài extension** trên Hub). Tài khoản nhiều cơ sở thì chọn cơ sở của
+máy. Khối **Cài đặt**, mục **Thu review OTA**, cho biết Sheet, tên khách sạn, kênh và mã chỗ nghỉ lấy
+từ Hub hay từ cấu hình cũ. Bấm **Thử Sheet**: dòng chữ hiện "Sheet trả lời: …" là xong.
 
-- **Lệnh có mã:** dải trên cùng hiện tên khách sạn, dưới nút Quét ngay có dòng *"Đã nhận cài đặt
-  của … Sheet trả lời: …"*. Không phải điền gì. Máy cũng đã hiện trong tab `Máy cài`.
-- **Lệnh chung:** khối **Cài đặt** mở sẵn. Có mã thì dán vào ô **Mã cài đặt**, bấm **Nhận mã**.
-  Không có mã thì điền tên khách sạn, URL Web App, mã bí mật, tick
-  đúng các kênh, rồi bấm **Thử Sheet** (nút này lưu trước rồi mới thử). Dòng chữ hiện
-  "Sheet trả lời: …" là xong.
+- Ô bật lên báo **"Hub chưa có cấu hình thu review"**: Quản trị hệ thống chưa điền Sheet thu review
+  trên Hub. Máy có cấu hình cũ (lệnh có mã) thì vẫn chạy bằng cấu hình đó.
+- Dòng báo **Lỗi Sheet** thay vì "Sheet trả lời": URL Web App trên Hub sai, hoặc Web App chưa để
+  quyền "Bất kỳ ai".
 
-Dòng báo **Lỗi Sheet** thay vì "Sheet trả lời": URL Web App trong hộp thoại sai, hoặc Web App chưa
-để quyền "Bất kỳ ai". Sửa trong Sheet, tạo lại mã, gửi phần Chỉ mã.
-
-Từ lần mở sau, khối Cài đặt gập lại. Phần trên cùng chỉ hiện các kênh đang bật, nút **Quét
+Đủ cấu hình thì từ lần mở sau khối Cài đặt gập lại. Phần trên cùng chỉ hiện các kênh đang bật, nút **Quét
 ngay**, và mã lỗi kèm nút **Sao chép** khi có kênh hỏng.
 
 **Bước 4: quét lần đầu.** Đăng nhập sẵn các extranet trong **cùng Chrome đó**, rồi bấm
@@ -102,7 +106,7 @@ tác vụ đó bị gỡ.
 | Dấu hiệu | Kiểm |
 |---|---|
 | Lệnh cài in chữ đỏ "Cài không xong" | Dòng cuối của `C:\UrbanB\cai-dat.log` ghi lý do. Thường là máy không vào được `github.com`, hoặc lệnh có mã bị cắt khi chép (chép lại nguyên dòng) |
-| Mở Thu review OTA mà không thấy "Đã nhận cài đặt" | Chrome nạp extension từ thư mục khác `C:\UrbanB\extension`, hoặc lệnh chạy không có mã. Dán mã vào ô Mã cài đặt |
+| Ô bật lên báo "Chưa nhận cấu hình thu review từ Hub" | Lễ tân chưa đăng nhập Hub trên máy. Bấm Đăng nhập Hub, hoặc mở màn Cài extension trên Hub |
 | Tab `Máy cài` vẫn ở phiên bản cũ sau khi chạy lại lệnh cài | Chờ 30 phút, hoặc bấm nạp lại trong `chrome://extensions`. Vẫn cũ ⇒ Chrome đang nạp extension từ thư mục khác `C:\UrbanB\extension` |
 | Extension biến mất hoặc xám trong `chrome://extensions` | Ai đó tắt Chế độ dành cho nhà phát triển. Bật lại là extension chạy lại, cài đặt còn nguyên |
 | Chrome hiện cảnh báo về tiện ích ở chế độ nhà phát triển | Bấm đóng. Đừng bấm tắt tiện ích |

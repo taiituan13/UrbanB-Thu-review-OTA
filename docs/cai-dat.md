@@ -51,27 +51,31 @@ cũng không cần làm gì: dấu đã nhớ hỏng thì lượt ghi kế tiế
 
 ## 2. Cài extension trên máy từng khách sạn
 
-Máy Windows: dùng cách ở [cai-tu-xa.md](cai-tu-xa.md). Cách đó cài bằng một lệnh Sheet tạo riêng
-cho từng khách sạn (menu **Review OTA › Tạo lệnh cài cho khách sạn**), extension tự điền các ô
-dưới đây. Cách tay dưới đây dùng khi thử trên máy khác, và để hiểu các ô. Có mã cài đặt thì
-dán vào ô **Mã cài đặt** đầu khối Cài đặt, bấm **Nhận mã**, khỏi điền từng ô.
+Máy Windows: dùng cách ở [cai-tu-xa.md](cai-tu-xa.md). Cách tay dưới đây dùng khi thử trên máy khác.
+
+**Từ bản 1.2.0 máy không còn ô nhập tay** (`H-1527` a): không còn ô Mã cài đặt, tên khách sạn, URL
+Web App, mã bí mật, kênh quét hay mã Booking/Agoda/Expedia trong ô bật lên. Máy tự nhận từ Hub sau
+khi lễ tân đăng nhập Hub (mục 6):
+
+- **Sheet thu review** (URL Web App và mã bí mật): Quản trị hệ thống điền một lần cho cả chuỗi ở
+  màn Kết nối › Extension máy quầy trên Hub.
+- **Tên khách sạn** = tên cơ sở đang dùng trên Hub (tài khoản nhiều cơ sở thì chọn cơ sở trong ô
+  bật lên). Tên này ghi vào cột "Khách sạn" và là tên của máy trong tab `Máy cài`.
+- **Mã Booking / Agoda / Expedia** của từng cơ sở: điền trên Hub khi cần. Để trống thì extension
+  tự dò. Booking cần mã khi tài khoản thấy nhiều chỗ nghỉ; Expedia cần mã khi tài khoản quản nhiều
+  khách sạn (số `htid` trên thanh địa chỉ), và điền sẵn là cách chắc nhất vì có tài khoản bị
+  Expedia đá sang hộp thư (`/supply/inbox`) thay vì trang review.
+- **Kênh quét** và chu kỳ: đặt trên Hub (mục 6).
+
+Hub có Sheet thu review thì Hub thắng cấu hình cũ trong máy. Hub chưa có thì máy chạy tiếp bằng
+cấu hình cũ (từ mã cài đặt hay ô nhập của bản trước), và ô bật lên báo "Hub chưa có cấu hình thu
+review". Ô bật lên chỉ cho biết từng mục lấy từ đâu, không hiện URL Sheet hay mã bí mật.
 
 1. Chép thư mục `extension/` sang máy.
 2. Mở `chrome://extensions`, bật **Chế độ dành cho nhà phát triển**, bấm
    **Tải tiện ích đã giải nén** rồi chọn thư mục `extension/`.
-3. Ghim biểu tượng "Thu review OTA", bấm vào rồi điền:
-   - **Tên khách sạn**: ghi vào cột "Khách sạn", và là tên của máy trong tab `Máy cài`.
-     Mỗi máy một tên, viết thống nhất.
-   - **URL Web App** và **Mã bí mật**: lấy từ bước 1.
-   - **Kênh quét**: bỏ chọn kênh mà khách sạn không có. Expedia, Traveloka và Go2Joy mặc
-     định **tắt**; khách sạn có các kênh này thì tick vào. Khi Hub đã đặt kênh quét cho cả
-     chuỗi (mục 6), ô này bị khoá và chỉ để xem.
-   - **Mã Booking**: chỉ cần điền khi tài khoản Booking thấy nhiều chỗ nghỉ.
-   - **Mã Agoda**: để trống thì extension tự dò.
-   - **Mã Expedia**: để trống thì extension tự dò khi tài khoản chỉ có một khách sạn; tài
-     khoản quản nhiều khách sạn thì điền mã (số `htid` trên thanh địa chỉ). Điền sẵn cũng là
-     cách chắc nhất: có tài khoản bị Expedia đá sang hộp thư (`/supply/inbox`) thay vì trang
-     review, và trang đó không phải lúc nào cũng mang mã.
+3. Ghim biểu tượng UrbanB, bấm vào, bấm **Đăng nhập Hub** và đăng nhập bằng tài khoản lễ tân
+   (hoặc mở màn **Cài extension** trên Hub). Khối Cài đặt, mục **Thu review OTA**, cho biết máy đã nhận gì.
 4. Bấm **Thử Sheet**. Đúng thì hiện tên Sheet; máy đã đăng nhập Hub thì dòng đó có thêm
    "Hub: ổn".
 5. Bấm **Quét ngay**. Extension mở từng extranet trong một tab nền, đọc review, đóng
@@ -171,8 +175,8 @@ hay Token Hub (quyết định `H-1233` a). Bài đứng tên người đang đ�
 *thêm review* theo cơ sở người ấy được gán.
 
 **Bật cho một máy:** bấm biểu tượng UrbanB, bấm **Đăng nhập Hub** và đăng nhập bằng tài khoản
-lễ tân. Hub đăng nhập là Hub chọn ở ô **Hub để đăng nhập** trong Cài đặt (`hub.urbanb.vn`, hoặc
-`urbanb.xyz` để thử). Bấm **Thử Sheet**: dòng kết quả có "Hub: ổn" là đường lên Hub thông (lệnh
+lễ tân. Từ bản 1.2.0 máy dùng Hub nào là theo trang **Cài extension** (`/extension`) mở gần nhất
+trên `hub.urbanb.vn` hay `urbanb.xyz` (để thử); ô bật lên chỉ hiện "Hub đang dùng", không còn ô chọn. Bấm **Thử Sheet**: dòng kết quả có "Hub: ổn" là đường lên Hub thông (lệnh
 thử không ghi gì lên Hub). Chưa đăng nhập hay hết phiên thì Sheet vẫn nhận, ô bật lên báo
 "Review chưa lên Hub · cần đăng nhập Hub".
 
@@ -180,11 +184,12 @@ thử không ghi gì lên Hub). Chưa đăng nhập hay hết phiên thì Sheet 
 một cấu hình cho cả chuỗi:
 
 - **Kênh quét** và **chu kỳ tự quét**. Máy hỏi Hub trước mỗi lượt quét và mỗi 30 phút. Có cấu
-  hình trên Hub thì ô Kênh quét bị khoá; dưới nút Quét có dòng "tự quét mỗi N giờ (theo cấu hình
-  trên Hub)". Máy không còn ô nhập chu kỳ.
+  hình trên Hub thì dưới nút Quét có dòng "tự quét mỗi N giờ (theo cấu hình trên Hub)". Máy không
+  còn ô nhập chu kỳ hay ô Kênh quét.
+- **Sheet thu review** và **mã Booking/Agoda/Expedia của từng cơ sở** (`H-1527` a, xem mục 2).
 - **Thời gian tự ẩn thông báo nổi** trên PMS.
-- Hub chưa có cấu hình (hoặc máy chưa đăng nhập Hub lần nào): kênh theo mã cài đặt hay ô Kênh
-  quét của máy, chu kỳ 6 giờ.
+- Hub chưa có cấu hình (hoặc máy chưa đăng nhập Hub lần nào): kênh theo cấu hình cũ của máy (mã
+  cài đặt hay ô Kênh quét của bản trước), chu kỳ 6 giờ.
 
 **Tài khoản có nhiều cơ sở** (`H-1351` c): ô bật lên hiện ô chọn **cơ sở của máy quầy**. Token
 Go2Joy gửi về Apps Script của cơ sở đã chọn; chưa chọn thì token Go2Joy chưa gửi và trang Go2Joy
