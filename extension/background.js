@@ -17,11 +17,11 @@ import {
 } from "./config.js";
 import { SheetError, makeLogEntry, parseSheetReply, withRetry } from "./report.js";
 import { normalizeBatch } from "./normalize.js";
-import { HubError, hubBatches, hubEndpoint, hubSummaryText, parseHubReply, sumHubReplies } from "./hub.js";
+import { hubBatches, hubSummaryText, ingestRequest, parseIngestReply, rejectedText, sumHubReplies } from "./hub.js";
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
-import { installQuay } from "./quay/sw.js";
+import { hubFetch, hubOriginNow, installQuay, noteSignedOut } from "./quay/sw.js";
 import { badgeText } from "./quay/notifications.js";
 import {
   bookingSessionInPage,
@@ -431,7 +431,7 @@ async function postSheet(cfg, payload) {
 
 async function pingSheet() {
   const cfg = await loadConfig();
-  const hub = await pingHub(cfg);
+  const hub = await pingHub();
   if (!cfg.sheetUrl || !cfg.secret) {
     const entry = makeLogEntry({ stage: "gửi Sheet", error: "Chưa điền URL Sheet hoặc mã bí mật" });
     await queueLog(entry);
@@ -446,30 +446,19 @@ async function pingSheet() {
 
 // ---------- Gửi lên Hub ----------
 
-/** Một request tới Hub; lỗi mạng và 5xx thì thử lại như gửi Sheet. Token chỉ nằm trong header. */
-async function postHub(cfg, body) {
-  const url = hubEndpoint(cfg.hubUrl);
-  return withRetry(
-    async () => {
-      let res;
-      try {
-        res = await fetch(url, {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${cfg.hubToken}` },
-          body: JSON.stringify(body),
-        });
-      } catch (e) {
-        throw new HubError(`Không gọi được Hub: ${e?.message ?? e}`, true);
-      }
-      return parseHubReply(res.status, await res.text());
-    },
-    { sleep },
-  );
-}
-
-/** Chưa điền URL Hub ⇒ máy này không gửi Hub. Có URL mà thiếu token ⇒ báo lỗi để người cài thấy. */
-function hubConfigured(cfg) {
-  return !!String(cfg.hubUrl ?? "").trim();
+/**
+ * Một request tới Hub theo phiên đăng nhập (H-1233 a): cookie phiên, không token. Hub là gốc đang chọn
+ * trong ô "Hub để đăng nhập" (cùng Hub của khung trên PMS). Lỗi mạng và 5xx thì thử lại như gửi Sheet.
+ */
+async function postHub(body) {
+  const { url, init } = ingestRequest(await hubOriginNow(), body);
+  try {
+    return await withRetry(async () => parseIngestReply(await hubFetch(url, init)), { sleep });
+  } catch (e) {
+    // Hết phiên ⇒ huy hiệu và popup đổi ngay, không chờ khung trên PMS mở lại.
+    if (e?.session === "out") await noteSignedOut().catch(() => {});
+    throw e;
+  }
 }
 
 /** Lỗi Hub thành dòng nhật ký (lên tab "Nhật ký lỗi" của Sheet như mọi lỗi khác). */
@@ -479,12 +468,10 @@ async function hubFailure(channel, error, detail) {
   return entry;
 }
 
-/** Thử đường lên Hub bằng action "ping" (Hub không ghi gì). Không điền URL Hub ⇒ null. */
-async function pingHub(cfg) {
-  if (!hubConfigured(cfg)) return null;
+/** Thử đường lên Hub bằng action "ping" (Hub không ghi gì; kiểm phiên và quyền thêm review). */
+async function pingHub() {
   try {
-    if (!cfg.hubToken) throw new HubError("Chưa điền Token Hub.", false);
-    await postHub(cfg, { action: "ping" });
+    await postHub({ action: "ping" });
     return { ok: true };
   } catch (e) {
     const entry = await hubFailure("", e);
@@ -496,19 +483,21 @@ async function pingHub(cfg) {
  * Gửi các bài của một kênh lên Hub, chia lô. Không bao giờ ném: kết quả (hoặc lỗi) nằm trong
  * trạng thái kênh, còn lượt gửi Sheet đi tiếp như cũ. Một lô hỏng thì dừng, các lô đã gửi vẫn giữ.
  */
-async function sendHub(cfg, channel, reviews, at) {
-  if (!hubConfigured(cfg)) return null;
+async function sendHub(channel, reviews, at) {
   const replies = [];
   try {
-    if (!cfg.hubToken) throw new HubError("Chưa điền Token Hub.", false);
-    for (const body of hubBatches(reviews)) replies.push(await postHub(cfg, body));
+    for (const body of hubBatches(reviews)) replies.push(await postHub(body));
   } catch (e) {
     const sentNote = replies.length ? ` (đã gửi ${replies.length} lô trước đó)` : "";
     const entry = await hubFailure(channel, `${e?.message ?? e}${sentNote}`);
-    return { at, ok: false, text: entry.message, error: errorBrief(entry) };
+    return { at, ok: false, text: entry.message, error: errorBrief(entry), login: e?.session === "out" };
   }
   const total = sumHubReplies(replies);
   let error = null;
+  if (total.rejected.length) {
+    const detail = total.rejected.map((x) => `${x.channel} ${x.channelHotelId} ${x.error}`).join("\n");
+    error = errorBrief(await hubFailure(channel, rejectedText(total.rejected), detail));
+  }
   if (total.errors.length) {
     const detail = total.errors.slice(0, 5).map((x) => `#${x.index} ${x.key ?? ""} ${x.error ?? ""}`).join("\n");
     error = errorBrief(await hubFailure(channel, `${total.errors.length} bài Hub không nhận`, detail));
@@ -583,7 +572,7 @@ async function scanOne(channel, cfg, trigger) {
     }
 
     // Hub trước Sheet: sendHub không ném, nên lỗi Hub không chặn Sheet và ngược lại.
-    hub = await sendHub(cfg, channel, batch.reviews, startedAt);
+    hub = await sendHub(channel, batch.reviews, startedAt);
 
     stage = "gửi Sheet";
 
@@ -656,7 +645,7 @@ async function refreshBadge() {
   const missing = !cfg.sheetUrl || !cfg.secret || !cfg.hotel;
   const bad = CHANNELS.some((ch) => {
     const s = status[ch];
-    return cfg.enabled[ch] && s && (s.state !== "ok" || (hubConfigured(cfg) && s.hub && !s.hub.ok));
+    return cfg.enabled[ch] && s && (s.state !== "ok" || (s.hub && !s.hub.ok));
   });
   const session = quaySnap?.session;
   const hubProblem = session === "out" || session === "expired";

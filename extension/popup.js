@@ -6,7 +6,7 @@ import { popupPmsRow } from "./quay/hub-quay.js";
 import { reviewRow } from "./popup-model.js";
 
 const $ = (id) => document.getElementById(id);
-const FIELDS = ["hotel", "sheetUrl", "secret", "hubUrl", "hubToken", "bookingHotelId", "agodaPropertyId", "expediaPropertyId", "intervalHours"];
+const FIELDS = ["hotel", "sheetUrl", "secret", "bookingHotelId", "agodaPropertyId", "expediaPropertyId", "intervalHours"];
 const STATE_TEXT = { ok: "ổn", error: "lỗi", login: "cần đăng nhập lại" };
 
 /** Dòng chữ dưới nút Quét ngay; `where` = "settingsNote" cho dòng trong khối Cài đặt. */
@@ -144,8 +144,8 @@ async function renderStatus() {
       div.querySelector(".body").appendChild(errorBox(s.error));
       shown.add(s.error.ref);
     }
-    // Kết quả gửi Hub của lượt đó; máy chưa điền URL Hub thì không hiện dòng này.
-    if (cfg.hubUrl && s?.hub) {
+    // Kết quả gửi Hub (theo phiên đăng nhập) của lượt đó.
+    if (s?.hub) {
       const hub = document.createElement("div");
       hub.className = "hub" + (s.hub.ok ? "" : " bad");
       // Câu lỗi Hub tự nhắc chữ "Hub" rồi; chỉ thêm tiền tố khi chưa có.
@@ -213,7 +213,6 @@ $("save").onclick = async () => {
 /** Một dòng kết quả Thử Sheet (kèm Hub nếu máy gửi Hub). */
 function pingText(r) {
   const sheet = r?.ok ? `Sheet trả lời: ${r.sheet ?? "ok"}` : `Lỗi Sheet${r?.ref ? " " + r.ref : ""}: ${r?.error ?? "không rõ"}`;
-  // r.hub = null khi máy không gửi Hub (ô URL Hub để trống).
   const hub = !r?.hub ? "" : r.hub.ok ? " · Hub: ổn" : ` · Lỗi Hub ${r.hub.ref ?? ""}: ${r.hub.error ?? "không rõ"}`;
   return sheet + hub;
 }

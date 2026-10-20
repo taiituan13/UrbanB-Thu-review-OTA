@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
-import { DEFAULT_CONFIG } from "../extension/config.js";
+import { DEFAULT_CONFIG, withDefaults } from "../extension/config.js";
 import { UPDATE_COMMAND } from "../extension/update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode, encodeSetupCode } from "../extension/setup-code.js";
 
@@ -23,10 +23,25 @@ vm.runInContext(readFileSync(new URL("../apps-script/Code.gs", import.meta.url),
 test("Mã giữ nguyên tên khách sạn tiếng Việt và mọi ô", () => {
   const setup = decodeSetupCode(encodeSetupCode({ ...base, hubUrl: "https://hub.urbanb.vn", hubToken: "t", agodaPropertyId: "123" }));
   assert.equal(setup.hotel, "Secret Garden Bình Thạnh");
-  assert.equal(setup.hubToken, "t");
   assert.equal(setup.agodaPropertyId, "123");
   assert.equal(setup.bookingHotelId, "");
   assert.deepEqual(setup.channels, ["booking", "go2joy"]);
+});
+
+test("🔴 Mã v1 do Sheet cũ tạo còn mang hubUrl/hubToken: vẫn đọc được, nhưng máy không giữ token (H-1233 a)", () => {
+  const setup = decodeSetupCode(encodeSetupCode({ ...base, hubUrl: "https://hub.urbanb.vn", hubToken: "tok-cu" }));
+  assert.equal(setup.hotel, base.hotel);
+  assert.ok(!("hubToken" in setup) && !("hubUrl" in setup));
+  const next = applySetup({ ...DEFAULT_CONFIG, hubToken: "tok-cu", hubUrl: "https://urbanb.xyz" }, setup);
+  assert.ok(!JSON.stringify(next).includes("tok-cu"), "token cũ còn nằm trong cấu hình");
+});
+
+test("Cấu hình bản 1.0.0 còn hubUrl/hubToken trong bộ nhớ ⇒ đọc ra là bỏ", () => {
+  const cfg = withDefaults({ hotel: "UB1", hubUrl: "https://hub.urbanb.vn", hubToken: "tok-cu", enabled: { go2joy: true } });
+  assert.equal(cfg.hotel, "UB1");
+  assert.ok(!("hubToken" in cfg) && !("hubUrl" in cfg));
+  assert.equal(cfg.enabled.go2joy, true);
+  assert.equal(cfg.enabled.booking, true, "kênh không lưu ⇒ mặc định");
 });
 
 test("Chép dán có xuống dòng, khoảng trắng hay dấu = vẫn đọc được", () => {
@@ -46,11 +61,10 @@ test("Mã sai báo câu dễ hiểu", () => {
 });
 
 test("Áp mã: mọi ô theo mã, kênh ngoài mã tắt, chu kỳ quét giữ nguyên", () => {
-  const old = { ...DEFAULT_CONFIG, hotel: "Tên cũ", hubUrl: "https://urbanb.xyz", hubToken: "cũ", intervalHours: 3 };
+  const old = { ...DEFAULT_CONFIG, hotel: "Tên cũ", bookingHotelId: "cũ", intervalHours: 3 };
   const next = applySetup(old, decodeSetupCode(encodeSetupCode(base)));
   assert.equal(next.hotel, base.hotel);
-  assert.equal(next.hubUrl, "", "mã không có Hub ⇒ thôi gửi Hub");
-  assert.equal(next.hubToken, "");
+  assert.equal(next.bookingHotelId, "", "mã để trống ⇒ ô thành trống");
   assert.equal(next.intervalHours, 3);
   assert.deepEqual(next.enabled, { booking: true, agoda: false, trip: false, expedia: false, traveloka: false, go2joy: true });
 });

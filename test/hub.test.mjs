@@ -2,7 +2,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { HUB_BATCH, HUB_FIELDS, HUB_HOSTS, HUB_PATH, HubError, hubBatches, hubEndpoint, hubSummaryText, parseHubReply, sumHubReplies } from "../extension/hub.js";
+import {
+  HUB_BATCH,
+  HUB_FIELDS,
+  HUB_PATH,
+  NOT_SIGNED_IN_TEXT,
+  hubBatches,
+  hubSummaryText,
+  ingestRequest,
+  ingestUrl,
+  parseIngestReply,
+  rejectedText,
+  sumHubReplies,
+} from "../extension/hub.js";
+import { HUB_ORIGINS } from "../extension/env.js";
 import { classifyError } from "../extension/report.js";
 
 const review = (i) => ({
@@ -46,38 +59,82 @@ test("Chia lô dưới trần 500 bài của Hub: 662 bài ⇒ 200 + 200 + 200 +
   assert.deepEqual(hubBatches([]), []);
 });
 
-test("URL Hub: nhận gốc trang hoặc cả đường dẫn, chỉ https và đúng tên miền có quyền", () => {
-  assert.equal(hubEndpoint(" https://urbanb.xyz "), "https://urbanb.xyz" + HUB_PATH);
-  assert.equal(hubEndpoint("https://hub.urbanb.vn/api/ingest/reviews?x=1"), "https://hub.urbanb.vn" + HUB_PATH);
-  assert.throws(() => hubEndpoint("http://urbanb.xyz"), HubError);
-  assert.throws(() => hubEndpoint("https://evil.example"), /URL Hub phải là/);
-  assert.throws(() => hubEndpoint("urbanb.xyz"), /sai dạng/);
+test("🔴 H-1233 a: request gửi Hub KHÔNG có header Authorization (Hub chọn đường phiên theo đúng header này)", () => {
+  const { url, init } = ingestRequest("https://hub.urbanb.vn", { action: "ping" });
+  assert.equal(url, "https://hub.urbanb.vn" + HUB_PATH);
+  assert.equal(init.method, "POST");
+  const names = Object.keys(init.headers).map((h) => h.toLowerCase());
+  assert.ok(!names.includes("authorization"), "có Authorization ⇒ Hub đi đường token máy, production trả 404");
+  assert.deepEqual(names, ["content-type"]);
+  assert.deepEqual(JSON.parse(init.body), { action: "ping" });
+  assert.equal(ingestUrl("https://urbanb.xyz/"), "https://urbanb.xyz" + HUB_PATH);
 });
 
-test("Mọi tên miền Hub đều có trong host_permissions của manifest", () => {
+test("Máy không còn giữ token Hub: không tệp nào của extension gửi Bearer", () => {
+  for (const f of ["background.js", "hub.js", "quay/sw.js", "popup.js", "popup.html", "config.js", "setup-code.js"]) {
+    const text = readFileSync(new URL(`../extension/${f}`, import.meta.url), "utf8");
+    assert.ok(!/Bearer/.test(text), `${f} còn gửi Bearer`);
+    // config.js và setup-code.js nhắc tên ô cũ chỉ để bỏ nó đi (DROPPED_KEYS).
+    if (f !== "config.js" && f !== "setup-code.js") assert.ok(!/hubToken/.test(text), `${f} còn ô Token Hub`);
+  }
+  const bg = readFileSync(new URL("../extension/background.js", import.meta.url), "utf8");
+  assert.ok(!/authorization/i.test(bg), "background.js còn đặt header Authorization");
+});
+
+test("Mọi gốc Hub đều có trong host_permissions của manifest", () => {
   const manifest = JSON.parse(readFileSync(new URL("../extension/manifest.json", import.meta.url), "utf8"));
-  for (const host of HUB_HOSTS) assert.ok(manifest.host_permissions.includes(`https://${host}/*`), host);
+  for (const o of HUB_ORIGINS) assert.ok(manifest.host_permissions.includes(`${o}/*`), o);
 });
 
-test("Đọc câu trả lời Hub theo mã HTTP; chỉ lỗi mạng/máy chủ mới gửi lại", () => {
-  const ok = { ok: true, inserted: 2, updated: 0, unchanged: 1, unmatched: 3, errors: [] };
-  assert.deepEqual(parseHubReply(200, JSON.stringify(ok)), ok);
-  const fail = (status, body) => {
-    try {
-      parseHubReply(status, body);
-    } catch (e) {
-      return e;
-    }
-    assert.fail(`HTTP ${status} phải ném lỗi`);
-  };
-  assert.match(fail(401, '{"ok":false,"error":"unauthorized"}').message, /token/);
-  assert.equal(fail(401, "").retryable, false);
-  assert.match(fail(404, "").message, /chưa bật/);
-  assert.match(fail(413, "").message, /quá lớn/);
-  assert.match(fail(400, '{"ok":false,"error":"reviews phải là mảng"}').message, /reviews phải là mảng/);
-  assert.equal(fail(400, '{"ok":false}').retryable, false);
-  assert.equal(fail(502, "<html>").retryable, true);
-  assert.equal(fail(200, "<html>").retryable, true);
+const reply = (status, json, extra = {}) => ({ status, url: "https://hub.urbanb.vn" + HUB_PATH, redirected: false, json, ...extra });
+const fail = (r) => {
+  try {
+    parseIngestReply(r);
+  } catch (e) {
+    return e;
+  }
+  assert.fail(`HTTP ${r?.status} phải ném lỗi`);
+};
+
+test("Đọc lời đáp Hub (đường phiên): 200 ok trả nguyên kết quả, kể cả nhóm rejected", () => {
+  const ok = { ok: true, inserted: 2, updated: 0, unchanged: 1, unmatched: 3, errors: [], rejected: [{ channel: "AGODA", channelHotelId: "9", error: "OUT_OF_SCOPE" }] };
+  assert.deepEqual(parseIngestReply(reply(200, ok)), ok);
+});
+
+test("Chưa đăng nhập (401 NOT_SIGNED_IN, hoặc bị chuyển về /login) ⇒ câu tiếng Việt bảo mở Hub đăng nhập, không gửi lại", () => {
+  for (const r of [
+    reply(401, { ok: false, error: "NOT_SIGNED_IN" }),
+    reply(401, null),
+    reply(200, null, { redirected: true, url: "https://hub.urbanb.vn/login?next=%2Fapi" }),
+  ]) {
+    const e = fail(r);
+    assert.equal(e.message, NOT_SIGNED_IN_TEXT);
+    assert.match(e.message, /đăng nhập/);
+    assert.equal(e.retryable, false);
+    assert.equal(e.session, "out");
+  }
+});
+
+test("403: FORBIDDEN_ORIGIN và thiếu quyền thêm review là hai câu khác nhau", () => {
+  const origin = fail(reply(403, { ok: false, error: "FORBIDDEN_ORIGIN" }));
+  assert.match(origin.message, /FORBIDDEN_ORIGIN/);
+  assert.equal(origin.session, undefined);
+  const scope = fail(reply(403, { ok: false, error: "FORBIDDEN" }));
+  assert.match(scope.message, /quyền thêm review/);
+  assert.equal(scope.retryable, false);
+});
+
+test("Còn lại: 404 không JSON, 413, 400 từ chối; lỗi mạng và 5xx thì gửi lại", () => {
+  assert.match(fail(reply(404, null)).message, /chưa bật/);
+  assert.match(fail(reply(413, { ok: false, error: "thân request quá lớn" })).message, /quá lớn/);
+  const bad = fail(reply(400, { ok: false, error: "reviews phải là mảng" }));
+  assert.match(bad.message, /reviews phải là mảng/);
+  assert.equal(bad.retryable, false);
+  assert.equal(fail(reply(502, null)).retryable, true);
+  assert.equal(fail(reply(200, null)).retryable, true);
+  const net = fail({ netError: "Failed to fetch" });
+  assert.match(net.message, /Không gọi được Hub: Failed to fetch/);
+  assert.equal(net.retryable, true);
 });
 
 test("Cộng kết quả các lô; vị trí bài lỗi tính trên cả lượt", () => {
@@ -88,16 +145,28 @@ test("Cộng kết quả các lô; vị trí bài lỗi tính trên cả lượt
     ],
     200,
   );
-  assert.deepEqual({ ...t, errors: t.errors.map((e) => e.index) }, { inserted: 5, updated: 2, unchanged: 3, unmatched: 5, errors: [207] });
-  assert.equal(hubSummaryText(t), "5 mới · 2 đổi · 5 chưa ghép · 1 bài lỗi");
+  assert.deepEqual({ ...t, errors: t.errors.map((e) => e.index) }, { inserted: 5, updated: 2, unchanged: 3, unmatched: 5, errors: [207], rejected: [] });
+  assert.equal(hubSummaryText(t), "5 mới · 2 đổi · 5 chờ ghép · 1 bài lỗi");
   assert.equal(hubSummaryText(sumHubReplies([{ inserted: 0, updated: 0 }])), "0 mới · 0 đổi");
+});
+
+test("Nhóm rejected (mã ngoài phạm vi): cộng một lần mỗi mã dù nằm ở nhiều lô, hiện trong dòng tóm tắt", () => {
+  const out = { channel: "AGODA", channelHotelId: "9", error: "OUT_OF_SCOPE" };
+  const t = sumHubReplies([
+    { inserted: 1, updated: 0, rejected: [out] },
+    { inserted: 0, updated: 0, rejected: [out, { channel: "TRIP", channelHotelId: "5", error: "OUT_OF_SCOPE" }] },
+  ]);
+  assert.deepEqual(t.rejected.map((x) => x.channelHotelId), ["9", "5"]);
+  assert.equal(hubSummaryText(t), "1 mới · 0 đổi · 2 mã ngoài phạm vi");
+  assert.match(rejectedText(t.rejected), /2 mã khách sạn ngoài phạm vi \(9, 5\)/);
 });
 
 test("Lỗi gửi Hub có loại HUB-… riêng, không lẫn với lỗi Sheet hay lỗi kênh", () => {
   const kind = (message) => classifyError("go2joy", "gửi Hub", message).code;
-  assert.equal(kind("URL Hub sai dạng. Điền dạng https://hub.urbanb.vn"), "HUB-URL");
-  assert.equal(kind("Hub từ chối token (401). Dán lại Token Hub."), "HUB-TOKEN");
-  assert.equal(kind("Chưa điền Token Hub."), "HUB-TOKEN");
+  assert.equal(kind(NOT_SIGNED_IN_TEXT), "HUB-LOGIN");
+  assert.equal(kind(fail(reply(403, { ok: false, error: "FORBIDDEN" })).message), "HUB-SCOPE");
+  assert.equal(kind(fail(reply(403, { ok: false, error: "FORBIDDEN_ORIGIN" })).message), "HUB-ORIGIN");
+  assert.equal(kind(rejectedText([{ channel: "AGODA", channelHotelId: "9" }])), "HUB-SCOPE");
   assert.equal(kind("Hub chưa bật cửa nhận review (404)."), "HUB-OFF");
   assert.equal(kind("Không gọi được Hub: Failed to fetch"), "HUB-NET");
   assert.equal(kind("3 bài Hub không nhận"), "HUB-ROWS");

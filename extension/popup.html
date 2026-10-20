@@ -203,7 +203,7 @@
     <h3 class="grp">Khung trên PMS</h3>
     <label for="quayHub">Hub để đăng nhập và nhận mã kết nối</label>
     <select id="quayHub"></select>
-    <div class="small">Đổi Hub thì máy đọc lại phiên đăng nhập của Hub mới.</div>
+    <div class="small">Đổi Hub thì máy đọc lại phiên đăng nhập của Hub mới. Review thu được cũng gửi lên Hub này.</div>
 
     <h3 class="grp">Thu review OTA</h3>
     <label for="setupCode">Mã cài đặt (người quản lý gửi, bắt đầu bằng URB1.)</label>
@@ -222,11 +222,7 @@
     <label for="secret">Mã bí mật</label>
     <input id="secret" type="password">
 
-    <label for="hubUrl">URL Hub UrbanB (để trống ⇒ không gửi Hub)</label>
-    <input id="hubUrl" type="text" placeholder="https://hub.urbanb.vn">
-
-    <label for="hubToken">Token Hub</label>
-    <input id="hubToken" type="password">
+    <div class="small">Review gửi lên Hub đứng tên tài khoản đang đăng nhập Hub ở trên, không cần token.</div>
 
     <label>Kênh quét</label>
     <div class="channels">

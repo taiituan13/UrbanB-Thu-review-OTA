@@ -26,3 +26,18 @@ test("reviewRow: chạy ổn cộng số bài; kênh đã tắt không tính", (
   assert.equal(r.state, "Đang chạy · 1 kênh");
   assert.match(r.detail, /4 bài · tự quét mỗi 6 giờ/);
 });
+
+test("reviewRow: Sheet ổn mà Hub không nhận ⇒ nói rõ; chưa đăng nhập Hub là vàng, lỗi khác là đỏ", () => {
+  const at = "2026-10-20T01:00:00Z";
+  const out = reviewRow(cfg, {
+    booking: { state: "ok", count: 2, at, hub: { ok: false, login: true } },
+    agoda: { state: "ok", count: 1, at, hub: { ok: true } },
+  }, CH);
+  assert.equal(out.tone, "warn");
+  assert.match(out.state, /cần đăng nhập Hub/);
+  assert.match(out.detail, /Sheet vẫn nhận/);
+  const err = reviewRow(cfg, { booking: { state: "ok", count: 2, at, hub: { ok: false } }, agoda: { state: "ok", count: 1, at } }, CH);
+  assert.equal(err.tone, "err");
+  assert.equal(err.state, "Gửi Hub lỗi ở 1 kênh");
+  assert.equal(reviewRow(cfg, { booking: { state: "ok", count: 2, at, hub: { ok: true } }, agoda: { state: "ok", at } }, CH).tone, "ok");
+});

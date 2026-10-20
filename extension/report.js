@@ -93,8 +93,9 @@ const SHEET_KINDS = [
 
 // Gửi Hub (hub.js) hỏng không làm hỏng lượt gửi Sheet; lỗi vẫn vào nhật ký như mọi lỗi khác.
 const HUB_KINDS = [
-  ["HUB-URL", /URL Hub/i, "Kiểm lại ô URL Hub trong Cài đặt (để trống nếu chưa gửi Hub)."],
-  ["HUB-TOKEN", /token/i, "Dán lại Token Hub (lấy từ người quản lý), rồi bấm Thử Sheet."],
+  ["HUB-ORIGIN", /FORBIDDEN_ORIGIN/, "Chạy lệnh cập nhật extension; vẫn lỗi thì gửi mã lỗi cho người quản lý."],
+  ["HUB-SCOPE", /quyền thêm review|ngoài phạm vi/i, "Đăng nhập Hub đúng tài khoản lễ tân của cơ sở này. Đúng tài khoản mà vẫn lỗi thì gửi mã lỗi cho người quản lý."],
+  ["HUB-LOGIN", /Chưa đăng nhập Hub/i, "Bấm Đăng nhập Hub trong ô UrbanB, đăng nhập bằng tài khoản của bạn, rồi bấm Quét review ngay."],
   ["HUB-OFF", /chưa bật/i, "Gửi mã lỗi cho người quản lý (Hub chưa mở cửa nhận review)."],
   ["HUB-NET", /Không gọi được Hub/i, "Kiểm tra mạng của máy; lượt quét sau sẽ tự gửi lại."],
   ["HUB-ROWS", /bài Hub không nhận/i, "Không cần làm gì: các bài khác vẫn được gửi. Gửi mã lỗi để người quản lý sửa."],

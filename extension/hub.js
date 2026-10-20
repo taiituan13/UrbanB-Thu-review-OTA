@@ -1,23 +1,23 @@
-// Gửi review lên Hub UrbanB (YC-45), song song với Google Sheet. Phần thuần, test được ngoài Chrome.
+// Gửi review lên Hub UrbanB, song song với Google Sheet. Phần thuần, test được ngoài Chrome.
 //
-// Hợp đồng do phía Hub công bố 09/10/2026 (UrbanB: BAO-CAO-lane-yc45-review-ingest.md mục 4):
-// POST <hub>/api/ingest/reviews, header "Authorization: Bearer <token>", thân JSON
-// { action: "ingest" | "ping", reviews: [...] }. Tối đa 500 bài và 2 MiB mỗi request.
+// Từ 1.1.0 (YC-152 · H-1233 a): đẩy theo PHIÊN Hub của người đăng nhập trên máy quầy, không còn token
+// máy. POST <hub>/api/ingest/reviews KHÔNG kèm header Authorization, gửi cookie phiên như các route
+// extension khác (service worker gọi, quay/sw.js hubFetch). Hub ghi bài đứng tên người đăng nhập, kiểm
+// quyền "thêm review" theo cơ sở. Hợp đồng (repo UrbanB, chỉ đọc): src/app/api/ingest/reviews/route.ts.
+//   200 { ok, inserted, updated, unchanged, unmatched, errors: [{ index, key, error }],
+//         rejected: [{ channel, channelHotelId, error: "OUT_OF_SCOPE" }] }
+//   401 NOT_SIGNED_IN · 403 FORBIDDEN (không có quyền ở cơ sở nào) · 403 FORBIDDEN_ORIGIN · 413 · 400
+// Thân JSON { action: "ingest" | "ping", reviews: [...] }, tối đa 500 bài và 2 MiB mỗi request.
 // Hub chống trùng theo channel + reviewId và dùng `hash` để biết bài đổi, nên mỗi lượt quét gửi
 // lại toàn bộ bài là an toàn: bài không đổi được đếm vào `unchanged`.
 
 import { SheetError } from "./report.js";
 
 export const HUB_PATH = "/api/ingest/reviews";
+export const LOGIN_PATH = "/login";
 
 /** Ít hơn trần 500 bài của Hub, để một lô có JSON dài vẫn dưới trần 2 MiB. */
 export const HUB_BATCH = 200;
-
-/**
- * Tên miền Hub mà manifest.json cho phép gọi. Gửi tới tên miền khác thì Chrome chặn,
- * nên từ chối ngay ở ô cài đặt với câu đọc được. Thêm tên miền ⇒ sửa cả host_permissions.
- */
-export const HUB_HOSTS = ["urbanb.xyz", "hub.urbanb.vn"];
 
 /**
  * Các trường Hub nhận. Danh sách trắng: JSON gốc (`raw`) và mọi thứ khác không bao giờ rời máy
@@ -44,19 +44,24 @@ export const HUB_FIELDS = [
 /** Lỗi khi gửi Hub; cùng dạng SheetError để dùng chung withRetry. */
 export class HubError extends SheetError {}
 
-/** URL người dùng điền (gốc trang hoặc cả đường dẫn) ⇒ địa chỉ nhận review. Sai ⇒ ném HubError. */
-export function hubEndpoint(input) {
-  let u;
-  try {
-    u = new URL(String(input ?? "").trim());
-  } catch {
-    throw new HubError("URL Hub sai dạng. Điền dạng https://hub.urbanb.vn", false);
-  }
-  if (u.protocol !== "https:" || !HUB_HOSTS.includes(u.hostname)) {
-    throw new HubError(`URL Hub phải là https://${HUB_HOSTS.join(" hoặc https://")}`, false);
-  }
-  return u.origin + HUB_PATH;
+/** Địa chỉ nhận review trên Hub đang dùng (gốc đã qua danh sách cho phép ở quay/hub-quay.js hubOrigin). */
+export function ingestUrl(origin) {
+  return String(origin).replace(/\/+$/, "") + HUB_PATH;
 }
+
+/**
+ * Một request gửi Hub: chỉ content-type, KHÔNG có Authorization. Hub chọn đường theo header này: có
+ * header ⇒ đường token máy cũ (production không đặt token ⇒ 404). Cookie phiên do hubFetch kèm.
+ */
+export function ingestRequest(origin, body) {
+  return {
+    url: ingestUrl(origin),
+    init: { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
+  };
+}
+
+/** Câu báo chưa đăng nhập: lễ tân tự làm được, không phải lỗi của máy. */
+export const NOT_SIGNED_IN_TEXT = "Chưa đăng nhập Hub, hoặc phiên Hub đã hết. Mở Hub, đăng nhập bằng tài khoản của bạn rồi bấm Quét review ngay.";
 
 /** Chia bài thành các thân request, mỗi thân tối đa `size` bài và chỉ mang trường trong HUB_FIELDS. */
 export function hubBatches(reviews, size = HUB_BATCH) {
@@ -66,35 +71,72 @@ export function hubBatches(reviews, size = HUB_BATCH) {
   return out;
 }
 
-/** Đọc câu trả lời của Hub theo mã HTTP. Lỗi mạng hoặc máy chủ (5xx) thì gửi lại được. */
-export function parseHubReply(status, body) {
-  if (status === 401) throw new HubError("Hub từ chối token (401). Dán lại Token Hub.", false);
-  if (status === 404) throw new HubError("Hub chưa bật cửa nhận review (404).", false);
-  if (status === 413) throw new HubError("Lô gửi Hub quá lớn (413).", false);
-  let j = null;
+/**
+ * Đọc lời đáp của Hub cho một lô. `reply` là dạng quay/sw.js hubFetch trả:
+ * `{ status, url, redirected, json }` (json = null khi thân không phải JSON) hoặc `{ netError }`.
+ * Lỗi mạng hoặc máy chủ (5xx) thì gửi lại được; còn lại ném HubError không gửi lại.
+ * Lỗi chưa đăng nhập mang `session: "out"` để service worker ghi trạng thái phiên.
+ */
+export function parseIngestReply(reply) {
+  if (!reply || reply.netError) throw new HubError(`Không gọi được Hub: ${reply?.netError ?? "lỗi mạng"}`, true);
+  const { status, json } = reply;
+  let path = "";
   try {
-    j = JSON.parse(body);
+    path = new URL(reply.url).pathname;
   } catch {}
+  const code = json && typeof json.error === "string" ? json.error : "";
+  if ((reply.redirected && path === LOGIN_PATH) || code === "NOT_SIGNED_IN" || status === 401) {
+    throw Object.assign(new HubError(NOT_SIGNED_IN_TEXT, false), { session: "out" });
+  }
+  if (code === "FORBIDDEN_ORIGIN") {
+    throw new HubError("Hub chặn lượt gửi vì không nhận ra nguồn gửi (FORBIDDEN_ORIGIN). Cập nhật extension; vẫn lỗi thì gửi mã lỗi.", false);
+  }
+  if (status === 403) {
+    throw new HubError("Tài khoản đang đăng nhập Hub chưa có quyền thêm review ở cơ sở nào (403). Đăng nhập đúng tài khoản lễ tân của cơ sở, hoặc báo Quản trị hệ thống cấp quyền.", false);
+  }
+  if (status === 413) throw new HubError("Lô gửi Hub quá lớn (413).", false);
+  if (status === 404 && !json) throw new HubError("Hub chưa bật cửa nhận review (404).", false);
   if (status >= 500) throw new HubError(`Hub lỗi máy chủ (HTTP ${status}).`, true);
-  if (!j || typeof j !== "object") throw new HubError(`Hub trả về không phải JSON (HTTP ${status}).`, true);
-  if (status !== 200 || !j.ok) throw new HubError(`Hub từ chối: ${String(j.error ?? `HTTP ${status}`)}`, false);
-  return j;
+  if (!json || typeof json !== "object") throw new HubError(`Hub trả về không phải JSON (HTTP ${status}).`, true);
+  if (status !== 200 || json.ok !== true) throw new HubError(`Hub từ chối: ${code || `HTTP ${status}`}`, false);
+  return json;
 }
 
 /** Cộng kết quả các lô. `index` của lỗi dòng được đổi về vị trí trong cả lượt. */
 export function sumHubReplies(replies, size = HUB_BATCH) {
-  const total = { inserted: 0, updated: 0, unchanged: 0, unmatched: 0, errors: [] };
+  const total = { inserted: 0, updated: 0, unchanged: 0, unmatched: 0, errors: [], rejected: [] };
+  const seen = new Set();
   replies.forEach((r, b) => {
     for (const k of ["inserted", "updated", "unchanged", "unmatched"]) total[k] += Number(r?.[k]) || 0;
     for (const e of r?.errors ?? []) total.errors.push({ ...e, index: b * size + (Number(e?.index) || 0) });
+    // Cùng một mã khách sạn bị từ chối ở mọi lô chứa nó ⇒ đếm một lần.
+    for (const x of r?.rejected ?? []) {
+      const key = `${x?.channel}|${x?.channelHotelId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      total.rejected.push({ channel: String(x?.channel ?? ""), channelHotelId: String(x?.channelHotelId ?? ""), error: String(x?.error ?? "") });
+    }
   });
   return total;
 }
 
-/** Dòng chữ ngắn cho ô bật lên, ví dụ "3 mới · 1 đổi · 662 chưa ghép". */
+/**
+ * Dòng chữ ngắn cho ô bật lên, ví dụ "3 mới · 1 đổi · 662 chờ ghép". "Chờ ghép": mã khách sạn của kênh
+ * chưa được ghép với cơ sở nào trên Hub, bài nằm ở chỗ chờ tới khi Quản trị hệ thống ghép.
+ */
 export function hubSummaryText(t) {
   const parts = [`${t.inserted} mới`, `${t.updated} đổi`];
-  if (t.unmatched) parts.push(`${t.unmatched} chưa ghép`);
+  if (t.unmatched) parts.push(`${t.unmatched} chờ ghép`);
+  if (t.rejected?.length) parts.push(`${t.rejected.length} mã ngoài phạm vi`);
   if (t.errors.length) parts.push(`${t.errors.length} bài lỗi`);
   return parts.join(" · ");
+}
+
+/**
+ * Câu nhật ký cho nhóm bài Hub trả về `rejected`: mã khách sạn của kênh đã ghép vào một cơ sở mà
+ * người đang đăng nhập không được gán. Hub vẫn ghi các nhóm khác.
+ */
+export function rejectedText(rejected) {
+  const ids = rejected.map((x) => x.channelHotelId).join(", ");
+  return `Hub không nhận bài của ${rejected.length} mã khách sạn ngoài phạm vi (${ids}): mã đã ghép vào cơ sở mà tài khoản đang đăng nhập không được gán`;
 }

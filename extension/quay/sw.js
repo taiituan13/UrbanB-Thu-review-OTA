@@ -70,6 +70,11 @@ async function noteSession(cls) {
   }
 }
 
+/** Lượt gửi review (background.js) gặp NOT_SIGNED_IN: ghi phiên "out" như mọi route Hub khác. */
+export async function noteSignedOut() {
+  await noteSession({ state: "out" });
+}
+
 async function sessionNow(cls) {
   const ever = Boolean(await get(K.ever));
   if (cls.state === "out") return H.sessionState("out", ever);

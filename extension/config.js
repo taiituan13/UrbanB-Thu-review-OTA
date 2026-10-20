@@ -12,8 +12,6 @@ export const DEFAULT_CONFIG = {
   sheetUrl: "", // URL Web App của Apps Script (…/exec)
   secret: "", // chuỗi bí mật in ra khi chạy setup() trong Apps Script
   hotel: "", // tên khách sạn, ghi vào cột "Khách sạn"
-  hubUrl: "", // gốc Hub UrbanB, ví dụ https://hub.urbanb.vn; để trống ⇒ không gửi Hub (hub.js)
-  hubToken: "", // token nhận review của Hub; chỉ đi trong header Authorization
   bookingHotelId: "", // bắt buộc nếu tài khoản Booking thấy nhiều chỗ nghỉ
   agodaPropertyId: "", // để trống ⇒ tự dò từ trang chủ Agoda
   expediaPropertyId: "", // để trống ⇒ tự dò khi tài khoản chỉ có một khách sạn
@@ -22,13 +20,26 @@ export const DEFAULT_CONFIG = {
   intervalHours: 6,
 };
 
-export async function loadConfig() {
-  const { config } = await chrome.storage.local.get("config");
-  return {
+/**
+ * Ô của bản cũ đã bỏ. `hubUrl`, `hubToken` (tới 1.0.0): từ 1.1.0 review lên Hub theo phiên đăng nhập
+ * (H-1233 a), máy không giữ token Hub nữa ⇒ bỏ khi đọc, lần lưu sau là mất hẳn khỏi bộ nhớ.
+ */
+export const DROPPED_KEYS = ["hubUrl", "hubToken"];
+
+/** Cấu hình đã lưu ⇒ cấu hình đủ ô (thuần, test được). */
+export function withDefaults(config) {
+  const out = {
     ...DEFAULT_CONFIG,
     ...(config ?? {}),
     enabled: { ...DEFAULT_CONFIG.enabled, ...(config?.enabled ?? {}) },
   };
+  for (const k of DROPPED_KEYS) delete out[k];
+  return out;
+}
+
+export async function loadConfig() {
+  const { config } = await chrome.storage.local.get("config");
+  return withDefaults(config);
 }
 
 export async function saveConfig(config) {

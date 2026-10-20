@@ -36,6 +36,20 @@ export function reviewRow(cfg, status, channels) {
         : `${names}: xem từng kênh bên dưới, có mã lỗi để gửi người quản lý.`,
     };
   }
+  // Sheet nhận bình thường mà Hub không nhận (H-1233 a: review lên Hub theo phiên đăng nhập).
+  const hubBad = rows.filter((r) => r.s?.hub && !r.s.hub.ok);
+  if (hubBad.length) {
+    const names = hubBad.map((r) => CHANNEL_LABEL[r.ch] ?? r.ch).join(", ");
+    const login = hubBad.every((r) => r.s.hub.login);
+    return {
+      tone: login ? "warn" : "err",
+      state: login ? "Review chưa lên Hub · cần đăng nhập Hub" : `Gửi Hub lỗi ở ${hubBad.length} kênh`,
+      when: latest ? hm(latest) : "",
+      detail: login
+        ? "Sheet vẫn nhận bình thường. Bấm Đăng nhập Hub bằng tài khoản của bạn, lượt quét sau tự gửi lên Hub."
+        : `${names}: Sheet vẫn nhận; xem từng kênh bên dưới, có mã lỗi để gửi người quản lý.`,
+    };
+  }
   if (never.length === rows.length) return { tone: "off", state: `Chưa quét lần nào · ${rows.length} kênh`, when: "", detail: "Bấm Quét review ngay, hoặc chờ lượt tự quét." };
   return {
     tone: "ok",

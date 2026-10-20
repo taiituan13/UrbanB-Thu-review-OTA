@@ -7,17 +7,20 @@
 //     ma-cai-dat.txt trong thư mục extension, extension tự đọc lúc nạp, mỗi 30 phút và khi mở ô;
 //   - dán vào ô "Mã cài đặt" trong khối Cài đặt.
 //
-// Dạng mã: "URB1." + base64url(JSON UTF-8). Mã chứa mã bí mật Sheet và token Hub, nên gửi riêng
-// như gửi mã bí mật trước đây. Mã mang đủ cài đặt: ô nào mã để trống thì áp vào cũng thành trống.
+// Dạng mã: "URB1." + base64url(JSON UTF-8). Mã chứa mã bí mật Sheet, nên gửi riêng như gửi mã bí
+// mật trước đây. Mã mang đủ cài đặt: ô nào mã để trống thì áp vào cũng thành trống.
+//
+// Từ 1.1.0 mã do Sheet cũ tạo vẫn có `hubUrl`, `hubToken`: extension đọc được nhưng bỏ qua. Review lên
+// Hub theo phiên đăng nhập của người dùng máy (H-1233 a), không còn token máy.
 
-import { CHANNELS } from "./config.js";
+import { CHANNELS, DROPPED_KEYS } from "./config.js";
 
 export const SETUP_PREFIX = "URB1.";
 
 /** Tệp cai-dat.ps1 ghi mã vào, nằm trong thư mục extension (robocopy /MIR chừa tệp này ra). */
 export const SETUP_FILE = "ma-cai-dat.txt";
 
-const TEXT_FIELDS = ["hotel", "sheetUrl", "secret", "hubUrl", "hubToken", "bookingHotelId", "agodaPropertyId", "expediaPropertyId"];
+const TEXT_FIELDS = ["hotel", "sheetUrl", "secret", "bookingHotelId", "agodaPropertyId", "expediaPropertyId"];
 
 function toBase64Url(text) {
   const bytes = new TextEncoder().encode(text);
@@ -65,6 +68,7 @@ export function decodeSetupCode(text) {
 /** Cấu hình mới sau khi áp mã: mọi ô theo mã, kênh không có trong mã thì tắt; chu kỳ quét giữ nguyên. */
 export function applySetup(cfg, setup) {
   const next = { ...cfg, enabled: {} };
+  for (const k of DROPPED_KEYS) delete next[k];
   for (const f of TEXT_FIELDS) next[f] = setup[f] ?? "";
   for (const ch of CHANNELS) next.enabled[ch] = setup.channels.includes(ch);
   return next;

@@ -69,16 +69,21 @@ Các loại không có tiền tố kênh bắt đầu bằng `SHEET` (gửi Shee
 
 ### Lỗi gửi Hub (`HUB-…`)
 
-Chỉ có ở máy đã điền URL Hub. Lỗi Hub không làm hỏng lượt gửi Sheet.
+Từ bản 1.1.0 review lên Hub theo phiên đăng nhập Hub của người dùng máy (Hub đang chọn trong ô
+"Hub để đăng nhập"), không còn URL Hub hay Token Hub. Lỗi Hub không làm hỏng lượt gửi Sheet.
 
 | Loại | Nghĩa | Khách sạn tự làm | Người quản lý kiểm |
 |---|---|---|---|
-| `HUB-URL` | URL Hub sai dạng, hoặc không phải `hub.urbanb.vn` / `urbanb.xyz` | Sửa ô URL Hub, hoặc để trống nếu chưa gửi Hub | Tên miền Hub mới ⇒ thêm vào `HUB_HOSTS` trong `hub.js` và `host_permissions` |
-| `HUB-TOKEN` | Thiếu Token Hub, hoặc Hub từ chối token (401) | Dán lại Token Hub, bấm Thử Sheet | Token trên máy chủ vừa đổi? Gửi token mới cho mọi máy |
-| `HUB-OFF` | Hub chưa mở cửa nhận review (404) | Gửi mã lỗi | Máy chủ thiếu `REVIEWS_INGEST_TOKEN` (hoặc ngắn hơn 32 ký tự) |
+| `HUB-LOGIN` | Chưa đăng nhập Hub, hoặc phiên Hub đã hết (401 `NOT_SIGNED_IN`) | Bấm Đăng nhập Hub trong ô UrbanB, đăng nhập rồi bấm Quét review ngay | — |
+| `HUB-SCOPE` | Tài khoản đang đăng nhập không có quyền thêm review ở cơ sở nào (403), hoặc Hub trả nhóm `rejected`: mã khách sạn của kênh đã ghép vào cơ sở mà tài khoản không được gán | Đăng nhập đúng tài khoản lễ tân của cơ sở | Cột *Chi tiết* có kênh và mã khách sạn bị từ chối. Mã ghép sai cơ sở ⇒ đổi ghép trên Hub; người dùng thiếu quyền ⇒ gán cơ sở ở màn Phân quyền |
+| `HUB-ORIGIN` | Hub chặn vì không nhận ra nguồn gửi (403 `FORBIDDEN_ORIGIN`) | Chạy lệnh cập nhật extension | Extension gửi từ service worker nên mang `Origin: chrome-extension://…`; lỗi này nghĩa là luật chặn gọi chéo nguồn của Hub đã đổi |
+| `HUB-OFF` | Hub chưa mở cửa nhận review (404 không phải JSON) | Gửi mã lỗi | Hub đang chạy bản chưa có route `/api/ingest/reviews` |
 | `HUB-NET` | Không gọi được tới Hub | Kiểm mạng; lượt sau tự gửi lại | Hub sập hoặc tên miền không phân giải được |
 | `HUB-ROWS` | Hub nhận lô nhưng từ chối một số bài | Không cần làm gì | Cột *Chi tiết* có 5 bài đầu kèm mã lỗi dòng của Hub (`SCALE_MISMATCH`, `ID_TOO_LONG`…) |
 | `HUB-REJECT` | Hub từ chối vì lý do khác (400, 413, 5xx sau 3 lần) | Gửi mã lỗi | Thông điệp chứa câu trả lời của Hub |
+
+Bài của mã khách sạn chưa ghép với cơ sở nào không phải lỗi: Hub nhận vào chỗ chờ ghép, ô bật lên
+hiện "N chờ ghép". Quản trị hệ thống ghép mã trên Hub thì bài vào đúng cơ sở.
 
 ## Thêm một loại lỗi
 
