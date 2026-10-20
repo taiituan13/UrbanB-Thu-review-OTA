@@ -89,7 +89,7 @@
   const go = () =>
     import(chrome.runtime.getURL("quay/boot.js"))
       .then((m) => m.boot(bridge))
-      .catch((e) => console.warn("[UrbanB tại quầy] không nạp được khung:", e?.message ?? e));
+      .catch((e) => console.warn("[Urban B] không nạp được khung:", e?.message ?? e));
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", go, { once: true });
   else go();
 })();

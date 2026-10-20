@@ -359,8 +359,8 @@ export function mount({ bridge, plugins = [] } = {}) {
       }
     }
     const headBtns = v?.session === "out" ? "" : plugins.map((p) => p.headerButton?.() ?? "").join("");
-    return `<div class="qf" role="dialog" aria-label="UrbanB tại quầy">
-      <div class="qf-hd"><div class="tt"><b>UrbanB tại quầy</b><span>${esc(sub)}</span></div>${headBtns}<button data-act="frame">Thu gọn</button></div>
+    return `<div class="qf" role="dialog" aria-label="Urban B">
+      <div class="qf-hd"><div class="tt"><b>Urban B</b><span>${esc(sub)}</span></div>${headBtns}<button data-act="frame">Thu gọn</button></div>
       ${blk || !S.hello ? "" : tabsHTML()}<div class="qf-body">${body}</div>${ft}</div>`;
   }
 
@@ -379,7 +379,7 @@ export function mount({ bridge, plugins = [] } = {}) {
     }
     const segHTML = segs.map((s) => `<span class="seg ${s.bad ? "bad" : ""}">${s.dot ? `<span class="dlv ${s.dot}"></span>` : ""}${esc(s.text)}</span>`).join("");
     const before = plugins.map((p) => p.dockBefore?.() ?? "").join("");
-    return `<div class="qdock">${before}<button class="qfab" data-act="frame" aria-expanded="${S.open}"><span class="lg">U</span>UrbanB tại quầy${segHTML}</button></div>`;
+    return `<div class="qdock">${before}<button class="qfab" data-act="frame" aria-expanded="${S.open}"><span class="lg">U</span>Urban B${segHTML}</button></div>`;
   }
 
   function render() {

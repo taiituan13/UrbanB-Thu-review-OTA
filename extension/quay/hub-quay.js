@@ -388,5 +388,5 @@ export function popupPmsRow(snap) {
     worst === "err" ? (errCount > 1 ? `Lỗi ở ${errCount} phần — xem từng dòng` : "Có lỗi — xem dòng dưới")
     : session === "expired" ? "Một phần dừng — phiên Hub đã hết"
     : "Đang chạy · 3 tab";
-  return { tone: worst, state, detail: "Mở PMS ezCloud, bấm nút UrbanB tại quầy ở góc phải dưới.", subs };
+  return { tone: worst, state, detail: "Mở PMS ezCloud, bấm nút Urban B ở góc phải dưới.", subs };
 }
