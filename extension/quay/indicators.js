@@ -1,35 +1,27 @@
 // Tab Chỉ báo: đọc lời đáp của GET /api/extension/indicators (repo UrbanB) thành mô hình để vẽ.
 // Logic thuần.
 //
-// Ranh giới (luật repo UrbanB: không bịa luật nghiệp vụ, không dựng bảng mức thứ hai):
-// - MỨC của một tình huống (Cảnh báo / Chú ý) là luật của Hub (`situationLevel` → `itemLevelOf`,
-//   bảng NOTICE_POLICY). Hub ghi thẳng: "không dựng bảng mức thứ hai". Extension vì vậy CHỈ đọc mức
-//   từ trường `display.mark` nếu route trả; route hiện tại chưa trả ⇒ mức để trống, chấm màu trung tính.
+// Ranh giới (luật repo UrbanB: không bịa luật nghiệp vụ, không dựng bảng thứ hai):
+// - MỨC của một tình huống (Cảnh báo / Chú ý) là luật của Hub. Extension CHỈ đọc `display.mark`.
+// - TÊN và SỐ HIỂN THỊ của chỉ báo cũng của Hub (H-950 b: id gốc 07 in là 06, 11 in là 09…). Extension đọc
+//   `display.title`; Hub cũ chưa trả thì lùi về "Chỉ báo <id>", không giữ bảng tên chép tay (YC-159).
 // - "Đặt vượt quỹ" đọc thẳng từ hai trường route đã trả (`status = vuot`, `reason = over-capacity`),
 //   đúng phép thử `isOverCapacity` của Hub, không phải luật mới.
-// - Dòng chính (số liệu) và dòng "Việc cần làm" chỉ hiện khi route trả `display.main` / `display.todo`
-//   (H-1345 đang chờ: khe ẩn, không tự viết câu chữ nghiệp vụ).
+// - Số chính (`display.main`) và câu "Việc cần làm" của lễ tân (`display.todo`, H-1545 b) chỉ hiện khi
+//   Hub trả; extension không tự viết câu chữ nghiệp vụ.
+// - Bố cục gom theo chỉ báo như thẻ chỉ báo trang chủ app (H-1429, `groupByIndicator`): giữ thứ tự đã xếp,
+//   nhóm đứng theo dòng nặng nhất của nó.
 
-/** Tên chỉ báo, chép từ src/i18n/messages/vi.json khoá capacity.indicators.name (repo UrbanB). */
-export const INDICATOR_NAMES = {
-  "01": "Hôm nay trống nhiều",
-  "02": "Hôm nay đặt nhiều",
-  "03": "Trống nhiều trong 7 ngày tới",
-  "04": "Đặt nhiều trong 30 ngày tới",
-  "05": "Không đủ phòng chừa",
-  "07": "Biến động bất thường",
-  "09": "Công suất đặt trước 3 tháng tới",
-  "10": "Phòng giờ dưới mức tối thiểu",
-};
+/** Tiêu đề chỉ báo do Hub trả ("06 · Biến động bất thường"); Hub cũ ⇒ "Chỉ báo <id>". */
+export function titleOf(s) {
+  const t = s?.display?.title;
+  return typeof t === "string" && t.trim() ? t : `Chỉ báo ${s?.no ?? ""}`.trim();
+}
 
 /** Nhãn dấu, chép từ vi.json (capacity.results.level: warning · notice · overCapacity). */
 export const MARK_LABEL = { "over-capacity": "Đặt vượt quỹ", warning: "Cảnh báo", notice: "Chú ý" };
 const MARK_ORDER = { "over-capacity": 0, warning: 1, notice: 2 };
 const OVER_CAPACITY_REASON = "over-capacity";
-
-export function indicatorName(no) {
-  return INDICATOR_NAMES[no] ?? `Chỉ báo ${no}`;
-}
 
 /** Đang vượt và chưa có dấu Đã xử lý (cùng phép đếm "Đang vượt" của màn Kết quả). */
 export function isExceeded(s) {
@@ -102,9 +94,34 @@ export function dayLabel(target, today) {
   return `${rel} · ${date}`;
 }
 
+const str = (x) => (typeof x === "string" && x.trim() ? x : null);
+
+/**
+ * Gom các ca đã xếp theo chỉ báo (khuôn `groupByIndicator` của Hub): trong nhóm giữ thứ tự, giữa các nhóm
+ * nhóm có ca đứng trước thì đứng trước. Câu "Việc cần làm" giống nhau ở mọi dòng ⇒ hiện một lần dưới nhóm
+ * (`todo`); khác nhau theo ngày (số trong câu khác) ⇒ hiện dưới từng dòng (`rowTodo = true`).
+ */
+export function groupCases(cases) {
+  const groups = new Map();
+  for (const c of cases) {
+    const g = groups.get(c.no);
+    if (g) g.rows.push(c);
+    else groups.set(c.no, { no: c.no, title: c.title, rows: [c] });
+  }
+  return [...groups.values()].map((g) => {
+    const levels = Object.keys(MARK_ORDER)
+      .map((mark) => ({ mark, n: g.rows.filter((c) => c.mark === mark).length }))
+      .filter((l) => l.n > 0)
+      .map((l) => ({ ...l, label: `${l.n} ${MARK_LABEL[l.mark]}` }));
+    const todos = [...new Set(g.rows.map((c) => c.todo))];
+    const shared = todos.length === 1 ? todos[0] : null;
+    return { ...g, levels, todo: shared, rowTodo: todos.length > 1 };
+  });
+}
+
 /**
  * Mô hình tab Chỉ báo từ lời đáp route. `today` = YYYY-MM-DD theo giờ máy quầy.
- * Trả `{ branchName, branchId, lastRunAt, exceeded: [case], level, missing: [tên], staleSources }`.
+ * Trả `{ branchName, branchId, lastRunAt, exceeded: [case], groups, level, missing: [tên], staleSources }`.
  */
 export function indicatorsModel(data, today) {
   const situations = Array.isArray(data?.situations) ? data.situations : [];
@@ -114,24 +131,24 @@ export function indicatorsModel(data, today) {
     return {
       id: s.id,
       no: s.no,
-      name: indicatorName(s.no),
+      title: titleOf(s),
       mark,
       markLabel: mark ? MARK_LABEL[mark] : "",
       day: dayLabel(s.target, today),
-      main: typeof s.display?.main === "string" ? s.display.main : "",
-      chips: Array.isArray(s.display?.chips) ? s.display.chips.filter((x) => typeof x === "string") : [],
-      // H-1345 (chờ chốt): khe "Việc cần làm" chỉ hiện khi Hub trả câu chữ.
-      todo: typeof s.display?.todo === "string" && s.display.todo.trim() ? s.display.todo : null,
+      main: str(s.display?.main) ?? "",
+      todo: str(s.display?.todo),
     };
   });
-  const missingNos = [...new Set(situations.filter((s) => s.status === "thieu").map((s) => s.no))].sort();
+  const missing = new Map();
+  for (const s of situations) if (s.status === "thieu" && !missing.has(s.no)) missing.set(s.no, titleOf(s));
   return {
     branchName: data?.branch?.name ?? "",
     branchId: data?.branch?.id ?? "",
     lastRunAt: data?.lastRunAt ?? null,
     exceeded: cases,
+    groups: groupCases(cases),
     level: dotLevel(exceeded),
-    missing: missingNos.map((no) => `${no} ${indicatorName(no)}`),
+    missing: [...missing.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, t]) => t),
     staleSources: Array.isArray(data?.stale) ? data.stale.length : 0,
   };
 }
@@ -147,7 +164,7 @@ export function verdictText(model) {
 /** Dòng "Chưa đủ dữ liệu ở N chỉ báo: …". */
 export function missingText(model) {
   if (!model.missing.length) return null;
-  return { n: model.missing.length, list: model.missing.join(" · ") };
+  return { n: model.missing.length, list: model.missing.join("; ") };
 }
 
 /** Chân tab: "Lượt chạy gần nhất 09:30 · T6 16/10/2026"; job chưa chạy ⇒ câu riêng. Giờ theo máy quầy. */

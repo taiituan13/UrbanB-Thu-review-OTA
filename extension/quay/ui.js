@@ -280,14 +280,29 @@ export function mount({ bridge, plugins = [] } = {}) {
     return S.ind?.data ? I.indicatorsModel(S.ind.data, B.localDate(new Date())) : null;
   }
 
-  function caseHTML(c, origin) {
-    const tint = c.mark === "warning" ? "cbf" : c.mark === "notice" ? "cyf" : "";
-    const lvCls = c.mark === "warning" ? "cb" : c.mark === "notice" ? "cy" : "ov";
-    return `<a class="cb-case ${tint}" href="${esc(H.caseUrl(origin, c.id))}" target="_blank" rel="noopener" title="Xem chi tiết ${esc(c.name)} trên Hub">
-      <div class="id"><span class="nm"><span class="no">${esc(c.no)}</span>${esc(c.name)}</span>${c.markLabel ? `<span class="lv ${lvCls}">${esc(c.markLabel)}</span>` : ""}</div>
-      ${c.main ? `<div class="main">${esc(c.main)}</div>` : ""}
-      <div class="chips"><span class="tag ol">${esc(c.day)}</span>${c.chips.map((x) => `<span class="tag">${esc(x)}</span>`).join("")}</div>
-      ${c.todo ? `<div class="todo"><span class="k">Việc cần làm:</span><span>${esc(c.todo)}</span></div>` : ""}</a>`;
+  const LV_CLS = { warning: "cb", notice: "cy", "over-capacity": "ov" };
+
+  // YC-159 — gom theo chỉ báo như thẻ chỉ báo trang chủ app (H-1429): tiêu đề + viên đếm theo mức, mỗi ca một
+  // dòng "ngày · số chính" có dải màu theo mức và mở đúng tình huống trên Hub; câu "Việc cần làm" dưới nhóm.
+  function todoHTML(text, cls) {
+    return `<div class="${cls}"><span class="k">Việc cần làm</span><span>${esc(text)}</span></div>`;
+  }
+
+  function rowHTML(c, g, origin) {
+    const lvl = c.markLabel ? `<span class="sr">, ${esc(c.markLabel)}</span>` : "";
+    const line = `<span class="ln"><span class="d">${esc(c.day)}${lvl}</span>${c.main ? `<span class="m">${esc(c.main)}</span>` : ""}<span class="go" aria-hidden="true">›</span></span>`;
+    return `<a class="row" href="${esc(H.caseUrl(origin, c.id))}" target="_blank" rel="noopener" title="Xem chi tiết trên Hub">
+      <i class="bar ${LV_CLS[c.mark] ?? "lv"}" aria-hidden="true"></i>${line}${g.rowTodo && c.todo ? todoHTML(c.todo, "rtodo") : ""}</a>`;
+  }
+
+  function groupHTML(g, origin) {
+    const top = g.rows[0]?.mark;
+    const tint = top === "warning" || top === "over-capacity" ? "cbf" : top === "notice" ? "cyf" : "";
+    const pills = g.levels.map((l) => `<span class="lv ${LV_CLS[l.mark]}">${esc(l.label)}</span>`).join("");
+    return `<section class="cb-grp ${tint}" aria-label="${esc(g.title)}">
+      <div class="hd"><h3 class="tt">${esc(g.title)}</h3>${pills}</div>
+      <div class="rows">${g.rows.map((c) => rowHTML(c, g, origin)).join("")}</div>
+      ${g.todo ? todoHTML(g.todo, "todo") : ""}</section>`;
   }
 
   function cbTab() {
@@ -304,7 +319,7 @@ export function mount({ bridge, plugins = [] } = {}) {
     const mt = I.missingText(m);
     const thieu = mt ? `<div class="cb-thieu">Chưa đủ dữ liệu ở <b>${mt.n} chỉ báo</b>: ${esc(mt.list)}. Thiếu số không có nghĩa là ổn.</div>` : "";
     const origin = S.ind.origin || v?.origin || "";
-    return `${fail}<div class="${failed ? "cb-stale" : ""}" style="display:flex;flex-direction:column;gap:8px">${verdict}${m.exceeded.map((c) => caseHTML(c, origin)).join("")}</div>${thieu}`;
+    return `${fail}<div class="${failed ? "cb-stale" : ""}" style="display:flex;flex-direction:column;gap:8px">${verdict}${m.groups.map((g) => groupHTML(g, origin)).join("")}</div>${thieu}`;
   }
 
   function tabsHTML() {
