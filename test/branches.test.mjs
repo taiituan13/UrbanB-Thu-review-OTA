@@ -26,9 +26,10 @@ test("URL: scope=mine không kèm tham số nào khác; branchId nhận report n
 
 test("Danh sách cơ sở: giữ id, tên, mã, mã ezCloud; KHÔNG giữ mã kết nối", () => {
   const list = H.parseMine(mineReply);
+  const noIds = { booking: null, agoda: null, expedia: null };
   assert.deepEqual(list, [
-    { id: "br_pct", name: "Phạm Công Trứ", code: "PCT", ezcloudHotelId: "1234" },
-    { id: "br_mtt", name: "Mạc Thị Bưởi", code: "MTT", ezcloudHotelId: "" },
+    { id: "br_pct", name: "Phạm Công Trứ", code: "PCT", ezcloudHotelId: "1234", reviewIds: noIds },
+    { id: "br_mtt", name: "Mạc Thị Bưởi", code: "MTT", ezcloudHotelId: "", reviewIds: noIds },
   ]);
   assert.ok(!JSON.stringify(list).includes("pushKey"));
   assert.deepEqual(H.parseMine({ ok: true, branches: [] }), []);

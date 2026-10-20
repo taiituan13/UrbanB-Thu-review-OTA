@@ -8,7 +8,8 @@ import * as B from "./booking-ota.js";
 import * as H from "./hub-quay.js";
 import * as N from "./notifications.js";
 import { DEV_FLAGS } from "../env.js";
-import { HUB_COLLECT_KEY, parseHubSettings } from "../hub-config.js";
+import { HUB_COLLECT_KEY, loadEffectiveConfig, parseHubSettings } from "../hub-config.js";
+import { loadStatus } from "../config.js";
 
 const K = {
   hub: "quayHubOrigin",
@@ -19,6 +20,7 @@ const K = {
   snap: "quaySnap",
   mine: "quayMine",
   branch: "quayBranchId",
+  pmsSeen: "quayPmsSeen",
   conn: (h) => `quayConn:${h}`,
   report: (h) => `quayReport:${h}`,
   ind: (h) => `quayInd:${h}`,
@@ -331,6 +333,7 @@ export async function onPageHotel(hotelId, tabId) {
   const id = String(hotelId ?? "");
   if (!/^\d+$/.test(id)) return { ok: false };
   await rememberHotel(id, tabId);
+  await set(K.pmsSeen, { at: now(), hotelId: id });
   return { ok: true };
 }
 
@@ -418,6 +421,7 @@ async function broadcast(msg) {
 
 /** Khung trên PMS mở ra: phiên, cơ sở, mã, bản đệm để vẽ ngay. */
 export async function hello(hotelId) {
+  await set(K.pmsSeen, { at: now(), hotelId });
   const origin = await hubOriginNow();
   const tokens = { ezcloud: await get(K.tok("ezcloud")), go2joy: await get(K.tok("go2joy")) };
   if (!hotelId) {
@@ -455,6 +459,51 @@ export async function statusForPopup() {
   if (session === "nobranch") session = snap.session === "nobranch" ? "nobranch" : "ok";
   if (cls.state === "net") session = snap.session ?? "out";
   return { ...snap, session, origin, net: cls.state === "net" };
+}
+
+/**
+ * Màn Cài extension trên Hub (YC-156 · H-1526 a): extension theo Hub của trang. Cùng Hub ⇒ không xoá gì;
+ * Hub khác trong danh sách cho phép ⇒ đổi như ô chọn Hub cũ (setHubOrigin); ngoài danh sách ⇒ bỏ qua.
+ */
+export async function followHubPage(origin) {
+  const act = H.followHub(await get(K.hub), origin);
+  if (act === "reject") return { ok: false };
+  if (act === "switch") await setHubOrigin(origin);
+  return { ok: true, switched: act === "switch" };
+}
+
+/** Hỏi Hub scope=mine khi trang Cài extension hỏi trạng thái: không dày hơn 15 giây một lần (hằng kỹ thuật). */
+const EXT_REFRESH_MIN_MS = 15_000;
+let extRefreshedAt = 0;
+
+/**
+ * Trạng thái cho trang Hub (tin `ext:status`, H.extStatusOf). Trang ở màn Cài extension ⇒ theo Hub của
+ * trang rồi đồng bộ ngay (scope=mine, chỉ đọc): đăng nhập Hub một lần là máy nhận cơ sở và cấu hình.
+ * Trang Hub khác ⇒ chỉ đọc bộ nhớ, không gọi Hub.
+ */
+export async function extStatus(pageOrigin, path) {
+  let session = null;
+  if (H.isExtensionPage(path) && (await followHubPage(pageOrigin)).ok && now() - extRefreshedAt > EXT_REFRESH_MIN_MS) {
+    extRefreshedAt = now();
+    session = (await refreshHubSettings().catch(() => null))?.state ?? null;
+  }
+  if (session == null) {
+    const last = await get(K.last);
+    session = last === "ok" ? "ok" : last === "out" ? await sessionNow({ state: "out" }) : null;
+  }
+  const [cfg, status, mine, chosenId, pms, snap] = await Promise.all([loadEffectiveConfig(), loadStatus(), get(K.mine), get(K.branch), get(K.pmsSeen), get(K.snap)]);
+  const view = H.extStatusOf({
+    version: chrome.runtime.getManifest().version,
+    hub: await hubOriginNow(),
+    pageOrigin,
+    session,
+    branches: mine?.branches ?? null,
+    chosenId: chosenId ?? "",
+    pms,
+    snap,
+    review: { configured: Boolean(cfg.sheetUrl && cfg.secret && cfg.hotel), fromHub: false, channels: status },
+  });
+  return { ok: true, status: view };
 }
 
 export async function setHubOrigin(origin) {
@@ -532,12 +581,24 @@ const HANDLERS = {
   "quay:mine": () => myBranches(),
   "quay:setBranch": (m) => setBranch(m.branchId),
   "quay:setHub": (m) => setHubOrigin(String(m.origin ?? "")),
+  // Trang Hub (hub-bridge.js): gốc lấy từ người gửi, không lấy từ tin.
+  "quay:extStatus": (m, sender) => extStatus(senderOrigin(sender), String(m.path ?? "")),
   "quay:tm": (m) => tampermonkeySeen(m.present),
   "quay:notifications": () => notifications(),
   "quay:notiRead": (m) => readNotifications(m.ids),
   // Chỉ bản dựng đo: thêm một thông báo giả để thử thông báo nổi.
   "quay:notiFakePush": (m) => (DEV_FLAGS.fakeNotifications ? notiSource().then((src) => src.push(m.partial ?? {})) : { ok: false }),
 };
+
+/** Gốc trang của content script gửi tin; không phải tab (popup, trang extension) ⇒ "". */
+function senderOrigin(sender) {
+  if (!sender?.tab) return "";
+  try {
+    return sender.origin ?? new URL(sender.url).origin;
+  } catch {
+    return "";
+  }
+}
 
 export function installQuay(extraHandlers = {}) {
   const all = { ...HANDLERS, ...extraHandlers };

@@ -1,7 +1,7 @@
 import { CHANNELS, CHANNEL_LABEL, VERSION, getDeviceId, loadConfig, loadLastError, loadStatus, saveConfig } from "./config.js";
 import { formatErrorReport } from "./report.js";
 import { UPDATE_COMMAND, updateNotice } from "./update.js";
-import { HUB_LABELS, HUB_ORIGINS } from "./env.js";
+import { HUB_LABELS } from "./env.js";
 import { branchPicker, popupPmsRow } from "./quay/hub-quay.js";
 import { noChannelText, reviewRow } from "./popup-model.js";
 import { loadEffectiveConfig, scheduleText } from "./hub-config.js";
@@ -68,10 +68,7 @@ async function renderQuay() {
     m.textContent = x.at ? shortTime(x.at) : "";
     subs.append(d, t, m);
   }
-  const sel = $("quayHub");
-  if (!sel.options.length)
-    for (const o of HUB_ORIGINS) sel.add(new Option(HUB_LABELS[o] ?? o, o));
-  if (snap?.origin) sel.value = snap.origin;
+  $("hubNow").textContent = hubLabel;
 }
 
 /** Ô chọn cơ sở (H-1351 c): đọc danh sách cơ sở của người đăng nhập qua lượt chỉ đọc scope=mine. */
@@ -310,13 +307,6 @@ $("scan").onclick = async () => {
 for (const b of document.querySelectorAll("[data-login]"))
   b.onclick = () => chrome.runtime.sendMessage({ type: "quay:openHub", path: "/login" });
 $("openHub").onclick = () => chrome.runtime.sendMessage({ type: "quay:openHub", path: "/" });
-$("quayHub").onchange = async () => {
-  await chrome.runtime.sendMessage({ type: "quay:setHub", origin: $("quayHub").value });
-  note("Đã đổi Hub. Mở lại tab PMS để khung nhận mã kết nối của Hub mới.", "settingsNote");
-  await renderQuay();
-  await renderBranches();
-};
-
 $("quayBranch").onchange = async () => {
   const r = await chrome.runtime.sendMessage({ type: "quay:setBranch", branchId: $("quayBranch").value });
   note(r?.ok ? "Đã chọn cơ sở của máy quầy." : `Không chọn được cơ sở: ${r?.error ?? "không rõ"}`);

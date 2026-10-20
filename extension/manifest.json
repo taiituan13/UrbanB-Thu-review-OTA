@@ -52,6 +52,16 @@
         "bridge.js"
       ],
       "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://hub.urbanb.vn/*",
+        "https://urbanb.xyz/*"
+      ],
+      "js": [
+        "hub-bridge.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
