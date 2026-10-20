@@ -82,7 +82,7 @@ const CHANNEL_PREFIX = { booking: "BKG", agoda: "AGD", trip: "TRP", expedia: "EX
  * hiện ngay trong ô bật lên. Cập nhật docs/ma-loi.md khi thêm loại.
  */
 const SHEET_KINDS = [
-  ["SHEET-CONFIG", /Chưa điền/i, "Điền đủ tên khách sạn, URL Web App và mã bí mật, rồi bấm Thử Sheet."],
+  ["SHEET-CONFIG", /Chưa điền|cấu hình thu review/i, "Đăng nhập Hub rồi mở màn Cài extension; Hub chưa có Sheet thu review thì báo Quản trị hệ thống."],
   ["SHEET-SECRET", /Sai mã bí mật/i, "Dán lại mã bí mật (lấy từ người quản lý), rồi bấm Thử Sheet."],
   ["SHEET-NET", /Không gọi được Sheet/i, "Kiểm tra mạng của máy, rồi bấm Thử Sheet."],
   ["SHEET-URL", /không phải JSON/i, "Kiểm tra URL Web App (phải kết thúc bằng /exec). Đúng mà vẫn lỗi thì gửi mã lỗi."],
@@ -104,8 +104,8 @@ const HUB_KINDS = [
 
 const CHANNEL_KINDS = [
   ["LOGIN", (stage) => stage === "đăng nhập", "Mở {kênh} trong Chrome này, đăng nhập lại, rồi bấm Quét ngay."],
-  ["MULTI", /thấy \d+ chỗ nghỉ/i, "Điền mã khách sạn của {kênh} trong ô cài đặt, rồi bấm Quét ngay."],
-  ["NOID", /Không dò được mã/i, "Điền mã khách sạn của {kênh} trong ô cài đặt, rồi bấm Quét ngay."],
+  ["MULTI", /thấy \d+ chỗ nghỉ/i, "Báo Quản trị hệ thống điền mã {kênh} của cơ sở trên Hub, rồi bấm Quét ngay."],
+  ["NOID", /Không dò được mã/i, "Báo Quản trị hệ thống điền mã {kênh} của cơ sở trên Hub, rồi bấm Quét ngay."],
   ["PAGE", /chuyển sang .* (thay vì trang review|giữa lượt quét)/i, "Mở trang review của {kênh} trong Chrome này xem có vào được không. Kênh có ô mã khách sạn thì kiểm lại ô đó, rồi bấm Quét ngay; vẫn lỗi thì gửi mã lỗi."],
   ["OPEN", /Chưa mở được|không tải được/i, "Đừng bấm dừng hay đóng tab mà extension tự mở. Vẫn lỗi thì mở {kênh} trong Chrome này xem có vào được không, rồi bấm Quét ngay."],
   ["TIMEOUT", /Hết giờ chờ trang tải/i, "Trang {kênh} tải quá chậm. Kiểm tra mạng, bấm Quét ngay; lặp lại thì gửi mã lỗi."],

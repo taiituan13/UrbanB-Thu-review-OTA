@@ -22,7 +22,7 @@ import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
 import { hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings } from "./quay/sw.js";
-import { alarmMinutes, loadEffectiveConfig } from "./hub-config.js";
+import { alarmMinutes, loadEffectiveConfig, reviewMissingText } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
 import {
   bookingSessionInPage,
@@ -329,7 +329,7 @@ async function scanBooking(tabId, cfg) {
   if (!hotelId) {
     if (session.propertyIds.length !== 1) {
       throw new Error(
-        `Tài khoản Booking thấy ${session.propertyIds.length} chỗ nghỉ (${session.propertyIds.join(", ")}). Điền mã Booking trong cài đặt.`,
+        `Tài khoản Booking thấy ${session.propertyIds.length} chỗ nghỉ (${session.propertyIds.join(", ")}). Báo Quản trị hệ thống điền mã Booking của cơ sở trên Hub.`,
       );
     }
     hotelId = session.propertyIds[0];
@@ -345,7 +345,7 @@ async function scanAgoda(tabId, cfg) {
     const landed = await go(tabId, "https://ycs.agoda.com/");
     assertLoggedIn("agoda", landed);
     const m = new URL(landed).pathname.match(/\/(\d{5,})(?:\/|$)/);
-    if (!m) throw new Error("Không dò được mã khách sạn Agoda. Điền mã Agoda trong cài đặt.");
+    if (!m) throw new Error("Không dò được mã khách sạn Agoda. Báo Quản trị hệ thống điền mã Agoda của cơ sở trên Hub.");
     pid = m[1];
   }
   assertLoggedIn("agoda", await go(tabId, `https://portal.agoda.com/mldc/vi-vn/app/setting/review/${pid}`));
@@ -374,7 +374,7 @@ async function scanExpedia(tabId, cfg) {
   assertLoggedIn("expedia", landed);
   const at = expediaLanding(landed);
   if (!at.onReviews) {
-    throw new Error(`Expedia chuyển sang ${at.path} thay vì trang review của chỗ nghỉ ${pid}. Kiểm lại mã Expedia trong cài đặt.`);
+    throw new Error(`Expedia chuyển sang ${at.path} thay vì trang review của chỗ nghỉ ${pid}. Kiểm lại mã Expedia của cơ sở trên Hub.`);
   }
   return runInPage(tabId, scanExpediaInPage);
 }
@@ -454,7 +454,7 @@ async function pingSheet() {
   const cfg = await loadEffectiveConfig();
   const hub = await pingHub();
   if (!cfg.sheetUrl || !cfg.secret) {
-    const entry = makeLogEntry({ stage: "gửi Sheet", error: "Chưa điền URL Sheet hoặc mã bí mật" });
+    const entry = makeLogEntry({ stage: "gửi Sheet", error: reviewMissingText(cfg.review) });
     await queueLog(entry);
     return { ok: false, error: entry.message, ref: entry.ref, code: entry.code, hub };
   }
@@ -544,9 +544,9 @@ async function runScan(trigger) {
     // Kênh và chu kỳ theo cấu hình đặt trên Hub (H-1348 a); hỏi lại trước mỗi lượt.
     await syncHubSettings();
     const cfg = await loadEffectiveConfig();
-    if (!cfg.sheetUrl || !cfg.secret || !cfg.hotel) {
-      return "Chưa điền đủ tên khách sạn, URL Web App và mã bí mật.";
-    }
+    // Sheet, tên khách sạn, mã chỗ nghỉ theo Hub (H-1527 a); Hub chưa có thì theo cấu hình cũ của máy.
+    const missing = reviewMissingText(cfg.review);
+    if (missing) return missing;
     for (const channel of CHANNELS) {
       if (!cfg.enabled[channel]) continue;
       await scanOne(channel, cfg, trigger);
@@ -660,12 +660,12 @@ async function setBadge(text) {
 }
 
 /**
- * Số thông báo chưa đọc trên Hub (H-1264 a). Không có thì "!" khi chưa điền đủ cài đặt thu review, một kênh
+ * Số thông báo chưa đọc trên Hub (H-1264 a). Không có thì "!" khi thu review chưa đủ cấu hình, một kênh
  * ĐANG BẬT không ổn hay gửi Hub hỏng (kênh đã tắt không tính), hoặc chưa đăng nhập / hết phiên Hub.
  */
 async function refreshBadge() {
   const [cfg, status, { quaySnap }] = await Promise.all([loadEffectiveConfig(), loadStatus(), chrome.storage.local.get("quaySnap")]);
-  const missing = !cfg.sheetUrl || !cfg.secret || !cfg.hotel;
+  const missing = Boolean(reviewMissingText(cfg.review));
   const bad = CHANNELS.some((ch) => {
     const s = status[ch];
     return cfg.enabled[ch] && s && (s.state !== "ok" || (s.hub && !s.hub.ok));

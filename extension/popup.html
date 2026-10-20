@@ -81,11 +81,10 @@
     background: var(--surface); color: var(--fg); font: inherit;
   }
   input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  input[type=checkbox] { accent-color: var(--fg); margin: 0; }
-  .channels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 8px; }
-  .channels label { display: flex; gap: 5px; align-items: center; margin: 0; color: var(--fg); font-size: 13px; }
   .row { display: flex; gap: 8px; margin-top: 12px; }
   .row button { flex: 1; }
+  #reviewSrc .small { margin-top: 4px; }
+  #reviewSrc .small.warn { color: var(--warn); }
   footer { padding: 10px 14px 12px; font-size: 11px; color: var(--muted); }
 
   /* v2 "UrbanB tại quầy": hai mục (Khung trên PMS · Thu review OTA), mỗi mục một dòng tình trạng. */
@@ -194,14 +193,14 @@
   <div class="note" id="note"></div>
   <div id="last"></div>
 
-  <!-- Ít dùng: gập sẵn; máy chưa điền đủ tên, URL, mã bí mật thì popup.js tự mở. -->
+  <!-- Ít dùng: gập sẵn; thu review chưa đủ cấu hình thì popup.js tự mở. -->
   <details id="settings">
     <summary>
       <svg class="gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="3"/>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
       </svg>
-      <span class="text"><span class="title">Cài đặt</span><span class="sub">Hub · thu review: Sheet, kênh quét · lệnh cập nhật</span></span>
+      <span class="text"><span class="title">Cài đặt</span><span class="sub">Hub · thu review (theo Hub) · lệnh cập nhật</span></span>
       <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
     </summary>
     <div class="panel">
@@ -211,46 +210,10 @@
     <div class="small">Máy tự theo Hub của màn <b>Cài extension</b>: mở màn ấy trên Hub nào thì máy đăng nhập, nhận mã kết nối và gửi review lên Hub đó.</div>
 
     <h3 class="grp">Thu review OTA</h3>
-    <label for="setupCode">Mã cài đặt (người quản lý gửi, bắt đầu bằng URB1.)</label>
-    <div class="cmd">
-      <input id="setupCode" type="text" placeholder="URB1.…" autocomplete="off" spellcheck="false">
-      <button class="secondary" id="applyCode">Nhận mã</button>
-    </div>
-    <div class="small">Nhận mã là điền sẵn mọi ô dưới đây rồi tự thử Sheet. Không có mã thì điền tay.</div>
-
-    <label for="hotel">Tên khách sạn (cũng là tên máy trong tab "Máy cài")</label>
-    <input id="hotel" type="text" placeholder="Secret Garden Bình Thạnh">
-
-    <label for="sheetUrl">URL Web App của Google Sheet (…/exec)</label>
-    <input id="sheetUrl" type="text">
-
-    <label for="secret">Mã bí mật</label>
-    <input id="secret" type="password">
-
+    <!-- H-1527 a: Sheet, tên khách sạn, mã chỗ nghỉ, kênh quét lấy từ Hub; ở đây chỉ để xem. -->
+    <div id="reviewSrc"></div>
     <div class="small">Review gửi lên Hub đứng tên tài khoản đang đăng nhập Hub ở trên, không cần token.</div>
-
-    <label>Kênh quét</label>
-    <div class="small" id="channelsFromHub" hidden>Kênh quét và chu kỳ quét đặt trên Hub (màn Kết nối › Extension máy quầy), chung cho cả chuỗi. Ô dưới đây chỉ để xem.</div>
-    <div class="channels">
-      <label><input type="checkbox" id="en-booking"> Booking</label>
-      <label><input type="checkbox" id="en-agoda"> Agoda</label>
-      <label><input type="checkbox" id="en-trip"> Trip</label>
-      <label><input type="checkbox" id="en-expedia"> Expedia</label>
-      <label><input type="checkbox" id="en-traveloka"> Traveloka</label>
-      <label><input type="checkbox" id="en-go2joy"> Go2Joy</label>
-    </div>
-
-    <label for="bookingHotelId">Mã Booking (để trống nếu tài khoản chỉ có 1 chỗ nghỉ)</label>
-    <input id="bookingHotelId" type="text">
-
-    <label for="agodaPropertyId">Mã Agoda (để trống ⇒ tự dò)</label>
-    <input id="agodaPropertyId" type="text">
-
-    <label for="expediaPropertyId">Mã Expedia (để trống ⇒ tự dò)</label>
-    <input id="expediaPropertyId" type="text">
-
     <div class="row">
-      <button class="secondary" id="save">Lưu</button>
       <button class="secondary" id="ping">Thử Sheet</button>
     </div>
     <div class="note" id="settingsNote"></div>

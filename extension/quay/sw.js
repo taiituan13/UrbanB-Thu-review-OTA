@@ -8,7 +8,7 @@ import * as B from "./booking-ota.js";
 import * as H from "./hub-quay.js";
 import * as N from "./notifications.js";
 import { DEV_FLAGS } from "../env.js";
-import { HUB_COLLECT_KEY, loadEffectiveConfig, parseHubSettings } from "../hub-config.js";
+import { BRANCH_KEY, HUB_COLLECT_KEY, MINE_KEY, loadEffectiveConfig, parseHubSettings, reviewMissingText } from "../hub-config.js";
 import { loadStatus } from "../config.js";
 
 const K = {
@@ -18,8 +18,8 @@ const K = {
   lastHotel: "quayLastHotel",
   memo: "quayPushMemo",
   snap: "quaySnap",
-  mine: "quayMine",
-  branch: "quayBranchId",
+  mine: MINE_KEY,
+  branch: BRANCH_KEY,
   pmsSeen: "quayPmsSeen",
   conn: (h) => `quayConn:${h}`,
   report: (h) => `quayReport:${h}`,
@@ -501,7 +501,7 @@ export async function extStatus(pageOrigin, path) {
     chosenId: chosenId ?? "",
     pms,
     snap,
-    review: { configured: Boolean(cfg.sheetUrl && cfg.secret && cfg.hotel), fromHub: false, channels: status },
+    review: { configured: !reviewMissingText(cfg.review), fromHub: cfg.review.fromHub.sheet, channels: status },
   });
   return { ok: true, status: view };
 }
