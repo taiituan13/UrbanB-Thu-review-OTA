@@ -120,3 +120,21 @@ test("🔴 Chưa đăng nhập: chỉ ghi ảnh trạng thái khi phiên đổi 
   const note = sw.slice(sw.indexOf("async function noteSession("), sw.indexOf("\n}\n", sw.indexOf("async function noteSession(")));
   assert.match(note, /if \(patch\) await patchSnap\(patch\)/);
 });
+
+test("YC-159 — quay lại tab PMS: đọc chỉ báo ngay, trừ khi vừa đọc chưa tới 1 phút", () => {
+  const now = 1_000_000_000;
+  assert.equal(H.reloadIndicatorsOnVisible(null, now), true, "chưa đọc lần nào ⇒ đọc");
+  assert.equal(H.reloadIndicatorsOnVisible(now - 4 * 60_000, now), true, "ẩn 4 phút ⇒ đọc ngay, không chờ lượt 5 phút");
+  assert.equal(H.reloadIndicatorsOnVisible(now - H.INDICATORS_ON_VISIBLE_MIN_GAP_MS, now), true);
+  // Đối chứng: đổi tab liên tục ⇒ không dồn lượt gọi Hub.
+  assert.equal(H.reloadIndicatorsOnVisible(now - 10_000, now), false);
+});
+
+test("YC-159 — ui.js nối visibilitychange vào lượt đọc chỉ báo", () => {
+  const src = readFileSync(new URL("../extension/quay/ui.js", import.meta.url), "utf8");
+  const i = src.indexOf('addEventListener("visibilitychange"');
+  assert.ok(i > 0);
+  const body = src.slice(i, src.indexOf("});", i));
+  assert.match(body, /reloadIndicatorsOnVisible\(indAskedAt/);
+  assert.match(body, /loadIndicators\(\)/);
+});

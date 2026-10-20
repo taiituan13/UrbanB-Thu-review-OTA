@@ -123,8 +123,10 @@ export function mount({ bridge, plugins = [] } = {}) {
     render();
   }
 
+  let indAskedAt = null;
   async function loadIndicators() {
     if (!canIndicators()) return;
+    indAskedAt = Date.now();
     const r = await send({ type: "quay:indicators", hotelId: S.hotelId });
     if (r.state === "ok") S.ind = r;
     else {
@@ -466,9 +468,14 @@ export function mount({ bridge, plugins = [] } = {}) {
       loadBookings();
     }
   });
-  // Lễ tân quay lại tab PMS sau khi đăng nhập Hub ở tab khác ⇒ đọc lại phiên.
+  // Lễ tân quay lại tab PMS: sau khi đăng nhập Hub ở tab khác ⇒ đọc lại phiên; còn lại ⇒ đọc chỉ báo ngay
+  // (YC-159), lượt 5 phút tính lại từ đây. Khi tab ẩn, lượt định kỳ bỏ qua nên số có thể đã cũ.
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && S.view && (S.view.session === "out" || S.view.session === "expired")) start();
+    if (document.visibilityState !== "visible" || !S.view) return;
+    if (S.view.session === "out" || S.view.session === "expired") return start();
+    if (!H.reloadIndicatorsOnVisible(indAskedAt, Date.now())) return;
+    loadIndicators();
+    scheduleIndicators();
   });
 
   render();

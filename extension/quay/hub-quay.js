@@ -19,6 +19,17 @@ export const NOTIFICATIONS_PAGE_PATH = "/notifications";
 
 /** Khung đang mở thì đọc lại chỉ báo mỗi 5 phút (hằng kỹ thuật; job chỉ báo không chạy dày hơn thế). */
 export const INDICATORS_REFRESH_MS = 5 * 60 * 1000;
+/**
+ * Lễ tân quay lại tab PMS (sau khi đổi tab hay thu nhỏ cửa sổ) ⇒ đọc lại chỉ báo NGAY thay vì chờ lượt 5
+ * phút kế tiếp (YC-159), trừ khi vừa đọc chưa tới 1 phút — đổi tab liên tục không dồn lượt gọi Hub.
+ * Hằng kỹ thuật, không phải luật nghiệp vụ.
+ */
+export const INDICATORS_ON_VISIBLE_MIN_GAP_MS = 60 * 1000;
+
+/** `lastAt` = lúc khung hỏi chỉ báo gần nhất (ms), chưa hỏi lần nào ⇒ null. */
+export function reloadIndicatorsOnVisible(lastAt, now) {
+  return !Number.isFinite(lastAt) || now - lastAt >= INDICATORS_ON_VISIBLE_MIN_GAP_MS;
+}
 /** Mã kết nối đã nhận dùng lại tới 30 phút mới hỏi lại Hub (mỗi lượt hỏi Hub ghi "máy quầy gọi lần cuối"). */
 export const CONNECTION_MAX_AGE_MS = 30 * 60 * 1000;
 
