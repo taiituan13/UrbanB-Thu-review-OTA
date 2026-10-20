@@ -31,6 +31,15 @@ test("ezcloudHotelIdOf: claim HotelId khớp lỏng, chỉ nhận số", () => {
   assert.equal(B.ezcloudHotelIdOf("không-phải-jwt"), "");
 });
 
+test("storageTokenPushable: JWT trong bộ nhớ PMS chỉ gửi khi mang mã KS; Go2Joy như cũ", () => {
+  // PMS 10/2026: tokenWidget (widget chat) và id_token OIDC, không mang mã KS ⇒ không gửi về Apps Script.
+  assert.equal(B.storageTokenPushable("ezcloud", jwt({ channelId: "c", externalId: "e", iat: 1 })), false);
+  assert.equal(B.storageTokenPushable("ezcloud", jwt({ sub: "s", sid: "x", idp: "local" })), false);
+  assert.equal(B.storageTokenPushable("ezcloud", jwt({ HotelId: 15739 })), true);
+  assert.equal(B.storageTokenPushable("go2joy", jwt({ sub: "s" })), true);
+  assert.equal(B.storageTokenPushable("khac", jwt({ HotelId: 1 })), false);
+});
+
 test("findJwtIn: khoá có access/token xét trước", () => {
   const a = jwt({ a: 1 }), b = jwt({ b: 2 });
   assert.equal(B.findJwtIn([{ other: a, accessToken: b }]), b);

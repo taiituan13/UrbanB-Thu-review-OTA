@@ -301,11 +301,10 @@ export async function onToken({ kind, token, hotelSn = 0, quiet = false }, tabId
   let hotelId = "";
   if (kind === "ezcloud") {
     hotelId = B.ezcloudHotelIdOf(token);
-    if (hotelId) {
-      await set(K.lastHotel, hotelId);
-      if (tabId != null) await chrome.storage.session.set({ [`quayTab:${tabId}`]: hotelId }).catch(() => {});
-    }
+    if (hotelId) await rememberHotel(hotelId, tabId);
   }
+  // quiet = token đọc từ bộ nhớ trang (bridge.js), không phải token trang gửi kèm request.
+  if (quiet && !B.storageTokenPushable(kind, token)) return { hotelId };
   const job = pending[kind];
   if (job && job.token === token) {
     job.hotelSn = job.hotelSn || hotelSn;
@@ -319,6 +318,20 @@ export async function onToken({ kind, token, hotelSn = 0, quiet = false }, tabId
   pending[kind] = { token, hotelSn, quiet, since: now(), hotelId: forHotel };
   pending[kind].timer = setTimeout(() => flushToken(kind), B.PUSH_DEBOUNCE_MS);
   return { hotelId };
+}
+
+/** Cơ sở PMS đang mở: nhớ làm "khách sạn PMS mở gần nhất" (đích token) và cho tab này (quay:tabHotel). */
+async function rememberHotel(hotelId, tabId) {
+  await set(K.lastHotel, hotelId);
+  if (tabId != null) await chrome.storage.session.set({ [`quayTab:${tabId}`]: hotelId }).catch(() => {});
+}
+
+/** Mã khách sạn bridge.js đọc từ tiêu đề tab PMS (PMS 10/2026 không còn gửi token kèm request, làn yc152-ma-ks). */
+export async function onPageHotel(hotelId, tabId) {
+  const id = String(hotelId ?? "");
+  if (!/^\d+$/.test(id)) return { ok: false };
+  await rememberHotel(id, tabId);
+  return { ok: true };
 }
 
 async function flushToken(kind) {
@@ -512,6 +525,7 @@ const HANDLERS = {
   "quay:lock": (m) => lock(String(m.hotelId ?? ""), String(m.sourceKey ?? ""), Boolean(m.confirmPaid)),
   "quay:indicators": (m) => indicators(String(m.hotelId ?? "")),
   "quay:token": (m, sender) => onToken(m, sender?.tab?.id),
+  "quay:pageHotel": (m, sender) => onPageHotel(m.hotelId, sender?.tab?.id),
   "quay:tabHotel": async (_m, sender) => ({ hotelId: sender?.tab?.id != null ? (await chrome.storage.session.get(`quayTab:${sender.tab.id}`).catch(() => ({})))[`quayTab:${sender.tab.id}`] ?? "" : "" }),
   "quay:openHub": (m) => openHub(String(m.path ?? "/")),
   "quay:status": () => statusForPopup(),

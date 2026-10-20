@@ -4,6 +4,8 @@
 //   (quay/sw.js) để gửi về Apps Script của khách sạn. Service worker đọc mã khách sạn ezCloud trong
 //   token PMS và trả lại, để khung biết PMS đang mở cơ sở nào.
 // - Không thấy request nào mang token sau 10 giây ⇒ đọc JWT trong bộ nhớ trang (userscript 3.2.0 làm y vậy).
+// - PMS từ 10/2026 không còn gửi Bearer (YC-152 làn yc152-ma-ks) ⇒ mã khách sạn đọc thêm từ tiêu đề tab
+//   PMS "ezCloudHotel <mã KS> - …", chính PMS ghi theo cơ sở đang chọn. Đường token giữ nguyên cho bản PMS cũ.
 // - Trên PMS: nạp khung (quay/boot.js).
 //
 // Tin từ trang được kiểm nguồn (`event.source === window`) và kiểu dữ liệu; một script lạ trên trang
@@ -66,6 +68,24 @@
   } catch {}
 
   if (kind !== "ezcloud") return;
+
+  // Tiêu đề tab PMS: "ezCloudHotel 15739 - 67 - <tài khoản>" (đo 20/10/2026; 15739 = ezcloudHotelId của COL
+  // trong ezcloud-ota-booking-sync/hotels/COL.json). Chỉ nhận đúng dạng này. Tiêu đề đổi khi đổi cơ sở
+  // mà không tải lại trang ⇒ đọc lại mỗi 2 giây (chỉ so chuỗi, không gọi gì khi mã không đổi).
+  const TITLE_HOTEL_RE = /^\s*ezCloudHotel\s+(\d{3,9})\s+-\s/i;
+  let titleHotel = "";
+  const readTitle = () => {
+    const id = (String(document.title ?? "").match(TITLE_HOTEL_RE) || [])[1] || "";
+    if (!id || id === titleHotel) return;
+    titleHotel = id;
+    setHotel(id);
+    try {
+      chrome.runtime.sendMessage({ type: "quay:pageHotel", hotelId: id }, () => void chrome.runtime.lastError);
+    } catch {}
+  };
+  readTitle();
+  setInterval(readTitle, 2000);
+
   const go = () =>
     import(chrome.runtime.getURL("quay/boot.js"))
       .then((m) => m.boot(bridge))

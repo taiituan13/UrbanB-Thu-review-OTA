@@ -111,6 +111,17 @@ export function ezcloudHotelIdOf(token) {
   return "";
 }
 
+/**
+ * Token đọc từ bộ nhớ trang (không phải token trang gửi kèm request) có đáng gửi về Apps Script không.
+ * ezCloud: chỉ khi token mang mã khách sạn. PMS từ 10/2026 chỉ còn JWT của widget chat (`tokenWidget`)
+ * và id_token OIDC trong bộ nhớ, cả hai không mang mã KS và không gọi được API PMS (làn yc152-ma-ks).
+ * Trước kia mã KS chưa biết nên các token ấy tự bị bỏ; nay mã KS đọc từ tiêu đề tab thì phải chặn ở đây.
+ */
+export function storageTokenPushable(kind, token) {
+  if (kind === "ezcloud") return Boolean(ezcloudHotelIdOf(token));
+  return Boolean(TOKEN_KINDS[kind]) && Boolean(token);
+}
+
 /** Hàm băm ngắn cho khoá bộ nhớ (userscript: hash). Không lưu token thật. */
 export function hash(text) {
   let h = 5381;
