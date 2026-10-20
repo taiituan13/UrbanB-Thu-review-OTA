@@ -176,6 +176,15 @@ export function sessionState(lastState, everSignedIn) {
   return lastState;
 }
 
+/**
+ * Lượt gọi Hub vừa gặp "chưa đăng nhập": ảnh trạng thái cần sửa gì. Ảnh đã đúng phiên ⇒ null (không
+ * ghi). Bản 1.0.0 ghi mỗi lượt ⇒ popup đang mở vẽ lại, hỏi Hub lại, ghi lại: hàng trăm lượt gọi mỗi giây.
+ */
+export function outSessionPatch(snap, everSignedIn) {
+  const session = sessionState("out", everSignedIn);
+  return snap?.session === session ? null : { session };
+}
+
 /** Trạng thái "không hỏi được Hub" (khác với chưa đăng nhập): có bản đệm thì chạy tiếp bằng bản đệm. */
 export const UNREACHABLE = new Set(["net", "server", "forbidden", "missing"]);
 

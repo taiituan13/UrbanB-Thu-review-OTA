@@ -69,7 +69,9 @@ async function noteSession(cls) {
   } else if (cls.state === "out") {
     await set(K.last, "out");
     // Huy hiệu và popup đọc phiên từ ảnh trạng thái: hết phiên phải hiện ngay, không chờ khung mở lại.
-    await patchSnap({ session: H.sessionState("out", Boolean(await get(K.ever))) });
+    // Chỉ ghi khi phiên đổi: popup vẽ lại mỗi lần ảnh đổi và lại hỏi Hub, ghi mãi thành vòng lặp.
+    const patch = H.outSessionPatch(await get(K.snap), Boolean(await get(K.ever)));
+    if (patch) await patchSnap(patch);
   }
 }
 

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import * as H from "../extension/quay/hub-quay.js";
 
 const HUB = "https://hub.urbanb.vn";
@@ -108,4 +109,14 @@ test("popupPmsRow: chưa ghép cơ sở và mất Hub KHÔNG bị đọc thành 
   assert.match(H.popupPmsRow({ session: "ok", codeState: "none", branchName: "UB1" }).subs[0].text, /chưa có mã kết nối Booking OTA của UB1/);
   assert.equal(H.frameSubtitle({ session: "server", branchName: "" }), "Không gọi được Hub");
   assert.equal(H.frameSubtitle({ session: "server", branchName: "UB1" }), "UB1 · theo PMS đang mở");
+});
+
+test("🔴 Chưa đăng nhập: chỉ ghi ảnh trạng thái khi phiên đổi (bản 1.0.0 ghi mỗi lượt ⇒ popup gọi Hub không ngừng)", () => {
+  assert.deepEqual(H.outSessionPatch({ session: "ok" }, true), { session: "expired" });
+  assert.deepEqual(H.outSessionPatch(undefined, false), { session: "out" });
+  assert.equal(H.outSessionPatch({ session: "expired", booking: {} }, true), null);
+  assert.equal(H.outSessionPatch({ session: "out" }, false), null);
+  const sw = readFileSync(new URL("../extension/quay/sw.js", import.meta.url), "utf8");
+  const note = sw.slice(sw.indexOf("async function noteSession("), sw.indexOf("\n}\n", sw.indexOf("async function noteSession(")));
+  assert.match(note, /if \(patch\) await patchSnap\(patch\)/);
 });
