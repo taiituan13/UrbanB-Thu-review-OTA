@@ -1,8 +1,8 @@
 # UrbanB — Thu review OTA
 
 Chrome extension đọc review của khách sạn từ extranet **Booking**, **Agoda**, **Trip**, **Expedia**, **Traveloka** và **Go2Joy**
-bằng phiên đăng nhập sẵn có trên máy, rồi gom tất cả về một Google Sheet chung. Máy nào điền
-URL Hub thì gửi thêm một bản lên Hub UrbanB (xem `docs/cai-dat.md` mục 6).
+bằng phiên đăng nhập sẵn có trên máy, rồi gom tất cả về một Google Sheet chung, và gửi thêm một
+bản lên Hub UrbanB theo phiên đăng nhập Hub của người dùng máy (xem `docs/cai-dat.md` mục 6).
 Mỗi khách sạn cài một bản trên máy của mình.
 
 Extension chỉ đọc: nó không trả lời review và không đổi cài đặt nào trên extranet.

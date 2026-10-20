@@ -17,8 +17,8 @@ UltraViewer/TeamViewer. Mỗi máy mất khoảng 3 phút.
      trong danh sách gợi ý.
    - **Kênh** khách sạn có (Booking, Agoda, Trip bật sẵn).
    - **URL Web App**: điền một lần (Triển khai › Quản lý triển khai, đuôi `/exec`), lần sau tự điền.
-   - Khách sạn gửi review lên Hub UrbanB thì điền **URL Hub** và **Token Hub**
-     (xem [cai-dat.md](cai-dat.md) mục 6); lần sau tự điền. Không gửi Hub thì để trống.
+   - **URL Hub** và **Token Hub** trong hộp thoại: từ bản extension 1.1.0 không cần nữa, để trống.
+     Review lên Hub theo phiên đăng nhập Hub của lễ tân (xem [cai-dat.md](cai-dat.md) mục 6).
    - **Mã Booking** khi tài khoản Booking thấy nhiều chỗ nghỉ (xem [cai-dat.md](cai-dat.md) mục 2).
 3. Bấm **Tạo lệnh**, rồi **Chép lệnh** và gửi cho người cài. Lệnh có dạng
    `$UrbanBMa='URB1.…'; irm https://raw.githubusercontent.com/…/cai-dat.ps1 | iex`.
@@ -61,7 +61,7 @@ in ra bốn bước tiếp theo.
 - **Lệnh có mã:** dải trên cùng hiện tên khách sạn, dưới nút Quét ngay có dòng *"Đã nhận cài đặt
   của … Sheet trả lời: …"*. Không phải điền gì. Máy cũng đã hiện trong tab `Máy cài`.
 - **Lệnh chung:** khối **Cài đặt** mở sẵn. Có mã thì dán vào ô **Mã cài đặt**, bấm **Nhận mã**.
-  Không có mã thì điền tên khách sạn, URL Web App, mã bí mật, URL Hub và Token Hub (nếu có), tick
+  Không có mã thì điền tên khách sạn, URL Web App, mã bí mật, tick
   đúng các kênh, rồi bấm **Thử Sheet** (nút này lưu trước rồi mới thử). Dòng chữ hiện
   "Sheet trả lời: …" là xong.
 

@@ -63,17 +63,16 @@ dán vào ô **Mã cài đặt** đầu khối Cài đặt, bấm **Nhận mã**
    - **Tên khách sạn**: ghi vào cột "Khách sạn", và là tên của máy trong tab `Máy cài`.
      Mỗi máy một tên, viết thống nhất.
    - **URL Web App** và **Mã bí mật**: lấy từ bước 1.
-   - **URL Hub** và **Token Hub**: chỉ điền khi khách sạn gửi review lên Hub UrbanB
-     (mục 6). Để trống URL Hub thì máy chỉ gửi Sheet.
    - **Kênh quét**: bỏ chọn kênh mà khách sạn không có. Expedia, Traveloka và Go2Joy mặc
-     định **tắt**; khách sạn có các kênh này thì tick vào.
+     định **tắt**; khách sạn có các kênh này thì tick vào. Khi Hub đã đặt kênh quét cho cả
+     chuỗi (mục 6), ô này bị khoá và chỉ để xem.
    - **Mã Booking**: chỉ cần điền khi tài khoản Booking thấy nhiều chỗ nghỉ.
    - **Mã Agoda**: để trống thì extension tự dò.
    - **Mã Expedia**: để trống thì extension tự dò khi tài khoản chỉ có một khách sạn; tài
      khoản quản nhiều khách sạn thì điền mã (số `htid` trên thanh địa chỉ). Điền sẵn cũng là
      cách chắc nhất: có tài khoản bị Expedia đá sang hộp thư (`/supply/inbox`) thay vì trang
      review, và trang đó không phải lúc nào cũng mang mã.
-4. Bấm **Thử Sheet**. Đúng thì hiện tên Sheet; máy có điền URL Hub thì dòng đó có thêm
+4. Bấm **Thử Sheet**. Đúng thì hiện tên Sheet; máy đã đăng nhập Hub thì dòng đó có thêm
    "Hub: ổn".
 5. Bấm **Quét ngay**. Extension mở từng extranet trong một tab nền, đọc review, đóng
    tab, rồi gửi lên Sheet. Mỗi kênh mất khoảng nửa phút đến vài phút.
@@ -164,17 +163,32 @@ tự quy mọi điểm về thang 10.
 
 ## 6. Gửi lên Hub UrbanB
 
-Từ bản 0.8.0, extension gửi được review lên Hub UrbanB, song song với Sheet. Sheet vẫn nhận
-đủ như cũ; Hub là đích thứ hai.
+Extension gửi review lên Hub UrbanB song song với Sheet. Sheet vẫn nhận đủ như cũ; Hub là đích
+thứ hai.
 
-**Bật cho một máy:** trong khối Cài đặt, điền **URL Hub** và **Token Hub**, rồi bấm
-**Thử Sheet**. Dòng kết quả có "Hub: ổn" là đường lên Hub thông (lệnh thử không ghi gì
-lên Hub).
+**Từ bản 1.1.0 review lên Hub theo phiên đăng nhập Hub của người dùng máy**, không còn URL Hub
+hay Token Hub (quyết định `H-1233` a). Bài đứng tên người đang đăng nhập, Hub kiểm quyền
+*thêm review* theo cơ sở người ấy được gán.
 
-- URL Hub chỉ nhận `https://hub.urbanb.vn` (production) hoặc `https://urbanb.xyz` (bãi
-  thử). Gửi tới tên miền khác thì Chrome chặn, vì manifest chỉ xin quyền hai tên miền này.
-- Token Hub là chuỗi `REVIEWS_INGEST_TOKEN` trong tệp `.env` của máy chủ Hub. Người quản
-  lý chép từ đó và gửi riêng; không dán token vào nhóm chung.
+**Bật cho một máy:** bấm biểu tượng UrbanB, bấm **Đăng nhập Hub** và đăng nhập bằng tài khoản
+lễ tân. Hub đăng nhập là Hub chọn ở ô **Hub để đăng nhập** trong Cài đặt (`hub.urbanb.vn`, hoặc
+`urbanb.xyz` để thử). Bấm **Thử Sheet**: dòng kết quả có "Hub: ổn" là đường lên Hub thông (lệnh
+thử không ghi gì lên Hub). Chưa đăng nhập hay hết phiên thì Sheet vẫn nhận, ô bật lên báo
+"Review chưa lên Hub · cần đăng nhập Hub".
+
+**Cấu hình đặt trên Hub** (`H-1348` a): Quản trị hệ thống đặt ở màn Kết nối › Extension máy quầy,
+một cấu hình cho cả chuỗi:
+
+- **Kênh quét** và **chu kỳ tự quét**. Máy hỏi Hub trước mỗi lượt quét và mỗi 30 phút. Có cấu
+  hình trên Hub thì ô Kênh quét bị khoá; dưới nút Quét có dòng "tự quét mỗi N giờ (theo cấu hình
+  trên Hub)". Máy không còn ô nhập chu kỳ.
+- **Thời gian tự ẩn thông báo nổi** trên PMS.
+- Hub chưa có cấu hình (hoặc máy chưa đăng nhập Hub lần nào): kênh theo mã cài đặt hay ô Kênh
+  quét của máy, chu kỳ 6 giờ.
+
+**Tài khoản có nhiều cơ sở** (`H-1351` c): ô bật lên hiện ô chọn **cơ sở của máy quầy**. Token
+Go2Joy gửi về Apps Script của cơ sở đã chọn; chưa chọn thì token Go2Joy chưa gửi và trang Go2Joy
+nhắc chọn. Tài khoản một cơ sở thì không phải chọn.
 
 **Extension gửi gì:**
 
@@ -185,12 +199,15 @@ lên Hub).
   ngày review, điểm và thang, tiêu đề, điểm khen, điểm chê, nhận xét, phản hồi, ngày phản
   hồi, mã nội dung. Không gửi JSON gốc, không gửi mã bí mật của Sheet. Tên khách đã bị gỡ
   từ trước.
-- Token chỉ đi trong header `Authorization`, không nằm trong thân request.
+- Không có header `Authorization`: request mang cookie phiên Hub của trình duyệt. Hub nhận
+  biết đường phiên chính bằng việc vắng header này.
 
 **Đọc kết quả:** dưới mỗi kênh trong ô bật lên có dòng
-"Hub: 3 mới · 1 đổi · 662 chưa ghép". *Chưa ghép* là bài của mã khách sạn mà Admin Hub
-chưa ghép với chi nhánh: bài nằm ở bảng chờ của Hub và tự vào khi Admin ghép ở
-`/admin/review-hotel-links`.
+"Hub: 3 mới · 1 đổi · 662 chờ ghép". *Chờ ghép* là bài của mã khách sạn mà Admin Hub
+chưa ghép với cơ sở: bài nằm ở bảng chờ của Hub và tự vào khi Admin ghép ở
+`/admin/review-hotel-links`. *Mã ngoài phạm vi* là mã khách sạn đã ghép vào một cơ sở mà
+tài khoản đang đăng nhập không được gán: Hub không nhận bài của mã đó (lỗi `HUB-SCOPE`), các mã
+khác vẫn nhận.
 
 **Khi Hub hỏng:** lượt gửi Sheet vẫn chạy. Lỗi Hub có loại `HUB-…`
 (xem [ma-loi.md](ma-loi.md)), hiện khung đỏ dưới kênh và bật dấu `!` trên biểu tượng.
