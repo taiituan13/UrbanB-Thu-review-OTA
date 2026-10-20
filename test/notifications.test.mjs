@@ -112,3 +112,42 @@ test("whenText", () => {
   assert.equal(N.whenText(new Date(2026, 9, 15, 17, 40).toISOString(), now), "Hôm qua 17:40");
   assert.equal(N.whenText(new Date(2026, 9, 10, 8, 0).toISOString(), now), "10/10 08:00");
 });
+
+// ---------- H-1374 a (YC-152 mục 4): canMarkRead ----------
+
+// Đúng hình dạng Hub trả (repo UrbanB: notifications/feed.rules.ts).
+const ack = { id: "bulletin:p1", title: "SOP mới", body: "", from: "Trần Thị Mai", createdAt: "2026-10-20T01:00:00Z", readAt: null, url: "/bulletin/p1", kind: "bulletin", sticky: true, canMarkRead: false };
+const sys = { id: "notification:n1", title: "Bảo trì xong", body: "", from: "Bảo trì", createdAt: "2026-10-20T02:00:00Z", readAt: null, url: "/maintenance/m1", kind: "maintenance", sticky: false, canMarkRead: false };
+const plain = { id: "bulletin:p2", title: "Tin thường", body: "", from: "Quản lý", createdAt: "2026-10-20T03:00:00Z", readAt: null, url: "/bulletin/p2", kind: "bulletin", sticky: false, canMarkRead: true };
+
+test("canMarkRead đọc đúng; vắng (nguồn cũ) ⇒ ghi được như trước", () => {
+  assert.equal(N.normalizeItem(ack).canMarkRead, false);
+  assert.equal(N.normalizeItem(plain).canMarkRead, true);
+  const { canMarkRead, ...old } = plain;
+  assert.equal(N.normalizeItem(old).canMarkRead, true);
+});
+
+test("🔴 Tin canMarkRead: false không có nút Đã đọc; có nút mở Hub (tin Bảng tin: Xác nhận trên Hub)", () => {
+  const a = N.rowAction(N.normalizeItem(ack));
+  assert.equal(a.kind, "hub");
+  assert.equal(a.label, "Xác nhận trên Hub");
+  assert.equal(a.path, "/bulletin/p1");
+  const s = N.rowAction(N.normalizeItem(sys));
+  assert.deepEqual(s, { kind: "hub", label: "Mở trên Hub", path: "/maintenance/m1" });
+  assert.equal(N.rowAction(N.normalizeItem({ ...ack, url: null })).path, N.NOTIFICATIONS_PAGE);
+  assert.deepEqual(N.rowAction(N.normalizeItem(plain)), { kind: "read", label: "Đã đọc" });
+  assert.equal(N.rowAction(N.normalizeItem({ ...plain, readAt: "2026-10-20T04:00:00Z" })), null);
+});
+
+test("🔴 Tin không ghi được ở quầy không bao giờ đi POST …/read, kể cả qua Đánh dấu đã đọc hết", () => {
+  const items = [ack, sys, plain].map(N.normalizeItem);
+  assert.deepEqual(N.markableIds(items, ["bulletin:p1", "notification:n1", "bulletin:p2", "lạ"]), ["bulletin:p2"]);
+  assert.deepEqual(N.markableIds(items, ["bulletin:p1"]), []);
+});
+
+test("Khung trên PMS vẽ nút theo rowAction và lọc id trước khi ghi", async () => {
+  const { readFileSync } = await import("node:fs");
+  const ui = readFileSync(new URL("../extension/quay/ui-notify.js", import.meta.url), "utf8");
+  assert.match(ui, /const act = N\.rowAction\(n\)/);
+  assert.match(ui, /const ids = N\.markableIds\(T\.items, wanted\)/);
+});

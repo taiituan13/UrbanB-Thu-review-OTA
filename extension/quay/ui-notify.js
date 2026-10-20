@@ -41,6 +41,7 @@ export const NOTIFY_CSS = `
 .qn .rd{flex:none;height:32px;padding:0 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:12.5px;font-weight:600;white-space:nowrap}
 .qn .rd:hover{border-color:var(--accent)}
 .qn .rd[disabled]{opacity:.6;cursor:default}
+.qn a.rd{display:inline-flex;align-items:center;color:var(--fg);text-decoration:none}
 .qtoast{position:fixed;left:50%;top:6px;width:460px;max-width:calc(100vw - 32px);z-index:2147483002;transform:translate(-50%,0);transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .28s;
   background:var(--surface);color:var(--fg);border:1px solid var(--border);border-left:4px solid var(--destructive);border-radius:12px;
   box-shadow:0 12px 30px -10px rgba(0,0,0,.5);display:flex;gap:10px;align-items:center;padding:7px 6px 9px 10px;overflow:hidden;font-family:var(--font-body)}
@@ -173,7 +174,10 @@ export function notifyPlugin() {
 
   // ---------- Đã đọc ----------
 
-  async function read(ids) {
+  async function read(wanted) {
+    // Tin không ghi được ở quầy (H-1374 a) không bao giờ đi POST …/read.
+    const ids = N.markableIds(T.items, wanted);
+    if (!ids.length) return;
     for (const id of ids) T.busy.add(id);
     T.error = "";
     api.render();
@@ -200,7 +204,11 @@ export function notifyPlugin() {
       <span class="m">${pin}${n.from ? `<span>${esc(n.from)}</span>` : ""}<span>${esc(N.whenText(n.createdAt, new Date()))}</span>${state}</span>`;
     // Bấm tiêu đề mở trên Hub; mở KHÔNG tính là đã đọc (H-1263 b): phải bấm nút Đã đọc.
     const tx = n.url ? `<a class="tx" href="${esc(hubHref(n.url))}" target="_blank" rel="noopener" title="Mở trên Hub">${text}</a>` : `<span class="tx">${text}</span>`;
-    const btn = n.readAt ? "" : `<button class="rd" data-act="notiRead" data-id="${esc(n.id)}"${T.busy.has(n.id) ? " disabled" : ""}>${T.busy.has(n.id) ? "Đang ghi…" : "Đã đọc"}</button>`;
+    const act = N.rowAction(n);
+    const btn =
+      !act ? ""
+      : act.kind === "hub" ? `<a class="rd" href="${esc(hubHref(act.path))}" target="_blank" rel="noopener">${esc(act.label)}</a>`
+      : `<button class="rd" data-act="notiRead" data-id="${esc(n.id)}"${T.busy.has(n.id) ? " disabled" : ""}>${T.busy.has(n.id) ? "Đang ghi…" : act.label}</button>`;
     return `<div class="qn ${n.readAt ? "read" : "unread"}" data-noti="${esc(n.id)}"><span class="ic">${BELL}</span>${tx}${btn}</div>`;
   }
 
@@ -215,7 +223,7 @@ export function notifyPlugin() {
     const rows = N.sortForList(T.items);
     const empty = rows.length ? "" : `<div class="ota-muted">Chưa có thông báo nào.</div>`;
     return `<div class="qn-head"><span class="h">Thông báo${u ? ` · ${u} chưa đọc` : ""}</span>${all}</div>
-      <div class="ota-muted">Bấm tiêu đề để mở trên Hub. Đọc xong, bấm Đã đọc để bỏ khỏi số chưa đọc.</div>
+      <div class="ota-muted">Bấm tiêu đề để mở trên Hub. Đọc xong, bấm Đã đọc để bỏ khỏi số chưa đọc. Tin cần xác nhận thì bấm Xác nhận trên Hub.</div>
       ${err}${empty}${rows.map(rowHTML).join("")}`;
   }
 

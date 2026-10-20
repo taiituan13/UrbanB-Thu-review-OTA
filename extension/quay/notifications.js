@@ -12,7 +12,8 @@
 //         items: [{ id: string, title: string, body: string, from: string,
 //                   createdAt: ISO, readAt: ISO | null, url: string | null,   // url: đường trên Hub
 //                   kind: string,                                 // nhãn nguồn (bulletin, work, …) chỉ để vẽ biểu tượng
-//                   sticky: boolean }] }                          // H-1344: phải bấm mới tắt / ghim
+//                   sticky: boolean,                              // H-1344: phải bấm mới tắt / ghim
+//                   canMarkRead: boolean }] }                     // H-1374 a: false ⇒ quầy không ghi Đã đọc
 //   401 { ok:false, error:"NOT_SIGNED_IN" }
 // POST /api/extension/notifications/read  body { ids: string[] }  (Origin chrome-extension://… qua extensionWriteAllowed)
 //   200 { ok: true, unread: number }
@@ -21,6 +22,8 @@
 // Luật đã chốt áp ở đây: H-1260 a (mọi thông báo của người đăng nhập đều là loại cần đọc) · H-1262 a
 // (chip đếm theo người đăng nhập) · H-1263 b (phải bấm Đã đọc rõ ràng; mở hay đóng thông báo nổi KHÔNG
 // tính là đã đọc) · H-1264 a (huy hiệu là số chưa đọc).
+// H-1374 a (YC-152 mục 4): tin `canMarkRead: false` (tin Bảng tin bắt xác nhận, thông báo hệ thống) không
+// có nút Đã đọc ở quầy; thay bằng nút mở Hub, nơi duy nhất nhận lượt "Tôi đã đọc và hiểu".
 // Còn chờ, để thành khe/công tắc, không tự quyết:
 //   H-1343 — nút Đã đọc ghi vào đâu (Bảng tin hay notifications.readAt): việc của Hub ở POST …/read.
 //            Extension chỉ gửi danh sách id.
@@ -63,7 +66,31 @@ export function normalizeItem(raw) {
     url: raw.url ? str(raw.url) : null,
     kind: str(raw.kind),
     sticky: raw.sticky === true,
+    // Hub luôn gửi trường này; vắng (nguồn giả, Hub cũ) ⇒ ghi được như trước.
+    canMarkRead: raw.canMarkRead !== false,
   };
+}
+
+/** Nhãn nguồn của tin Bảng tin (repo UrbanB: feed.rules.ts BULLETIN_KIND). */
+export const BULLETIN_KIND = "bulletin";
+/** Trang thông báo trên Hub, khi dòng không mang `url`. */
+export const NOTIFICATIONS_PAGE = "/notifications";
+
+/**
+ * Nút trên một dòng chưa đọc. Ghi được ⇒ "Đã đọc" (gửi POST …/read). Không ghi được ở quầy
+ * (`canMarkRead: false`, H-1374 a) ⇒ nút mở Hub: tin Bảng tin là để xác nhận, loại khác để xem.
+ * Dòng đã đọc ⇒ không có nút.
+ */
+export function rowAction(n) {
+  if (!n || n.readAt) return null;
+  if (n.canMarkRead) return { kind: "read", label: "Đã đọc" };
+  return { kind: "hub", label: n.kind === BULLETIN_KIND ? "Xác nhận trên Hub" : "Mở trên Hub", path: n.url || NOTIFICATIONS_PAGE };
+}
+
+/** Các id ghi Đã đọc được từ quầy (lọc trước khi gửi POST …/read). */
+export function markableIds(items, ids) {
+  const ok = new Set(items.filter((n) => n.canMarkRead && !n.readAt).map((n) => n.id));
+  return ids.filter((id) => ok.has(id));
 }
 
 /** Lời đáp GET ⇒ `{ me, items, unread, toastSeconds }`. Hỏng ⇒ null. */
@@ -191,7 +218,7 @@ export function fakeSource(now = () => new Date()) {
   const at = (minAgo) => new Date(now().getTime() - minAgo * 60_000).toISOString();
   let seq = 3;
   let items = [
-    { id: "f1", title: "Tài liệu SOP mới cần đọc: Nhận phòng sau 22:00", body: "Đọc trước ca tối.", from: "Quản lý cơ sở · Trần Thị Mai", createdAt: at(20), readAt: null, url: "/notifications", kind: "bulletin", sticky: true },
+    { id: "f1", title: "Tài liệu SOP mới cần đọc: Nhận phòng sau 22:00", body: "Đọc trước ca tối.", from: "Quản lý cơ sở · Trần Thị Mai", createdAt: at(20), readAt: null, url: "/notifications", kind: "bulletin", sticky: true, canMarkRead: false },
     { id: "f2", title: "Công việc mới giao cho bạn: Kiểm tra máy lạnh phòng 304", body: "Hạn 15:00 hôm nay.", from: "Công việc", createdAt: at(45), readAt: null, url: "/notifications", kind: "work", sticky: false },
     { id: "f3", title: "Đề nghị bảo trì phòng 207 đã hoàn thành", body: "Thay vòi sen.", from: "Bảo trì", createdAt: at(60 * 20), readAt: at(60 * 18), url: "/notifications", kind: "maintenance", sticky: false },
   ];
