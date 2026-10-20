@@ -54,6 +54,13 @@ export const QUAY_CSS = `
 .qz .qf-tabs button.on{color:var(--fg);border-bottom-color:var(--fg)}
 .qf-tabs .ct{min-width:20px;height:20px;border-radius:10px;font-size:11.5px;line-height:20px;padding:0 6px;text-align:center;background:var(--surface-soft);color:var(--muted-fg);font-variant-numeric:tabular-nums}
 .qf-tabs .ct.bad{background:rgba(140,50,38,.12);color:var(--destructive)}
+.qz .qf-tabs button.main{flex:1.4}
+.qsec-b{display:flex;flex-direction:column;gap:8px}
+.qsec-b+.qsec-b{border-top:1px solid var(--border);padding-top:12px;margin-top:4px}
+.qsec{display:flex;align-items:center;gap:8px}
+.qsec h2{font:600 15px/1.3 var(--font-display);color:var(--fg)}
+.qsec .ct{min-width:22px;height:22px;border-radius:11px;font-size:12px;line-height:22px;padding:0 7px;text-align:center;background:var(--surface-soft);color:var(--muted-fg);font-variant-numeric:tabular-nums}
+.qsec .ct.bad{background:rgba(140,50,38,.12);color:var(--destructive)}
 .qf-tabs .dlv.cb{background:var(--destructive)}.qf-tabs .dlv.cy{background:var(--warning)}.qf-tabs .dlv.ok{background:var(--success)}.qf-tabs .dlv.lv{background:var(--accent)}
 .qf-body{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;min-height:0}
 .qf-body>*{flex:none}

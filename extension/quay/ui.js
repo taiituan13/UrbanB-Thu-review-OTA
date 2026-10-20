@@ -1,6 +1,7 @@
-// Khung "UrbanB tại quầy" trên PMS ezCloud: một nút gập ở góc phải dưới, một khung 560px ba tab
-// (Booking OTA · Khoá G2J · Chỉ báo). Chạy trong content script (thế giới ISOLATED), vẽ trong Shadow
-// DOM. Không gọi mạng: mọi lượt gọi nhắn cho service worker (quay/sw.js).
+// Khung "UrbanB tại quầy" trên PMS ezCloud: một nút gập ở góc phải dưới, một khung 560px. Tab chính
+// "Cần xử lý" (booking OTA lỗi + chỉ báo đang vượt, YC-159) và hai tab tra cứu (Booking OTA · Khoá G2J),
+// xem quay/todo.js. Chạy trong content script (thế giới ISOLATED), vẽ trong Shadow DOM. Không gọi mạng:
+// mọi lượt gọi nhắn cho service worker (quay/sw.js).
 //
 // Bố cục theo mockup v2 (repo UrbanB: .design-sync/proto-extension-quay.html). Thẻ booking và bảng khoá
 // giữ bố cục userscript 3.2.0, chỉ đổi màu sang lớp thương hiệu UrbanB.
@@ -8,6 +9,7 @@
 import * as B from "./booking-ota.js";
 import * as H from "./hub-quay.js";
 import * as I from "./indicators.js";
+import * as T from "./todo.js";
 import { QUAY_CSS } from "./ui-css.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -56,9 +58,10 @@ export function mount({ bridge, plugins = [] } = {}) {
     hotelId: bridge?.hotelId || "",
     view: null, // lời đáp quay:hello
     open: false,
-    tab: "bookings",
+    tab: T.DEFAULT_TAB,
     q: "",
-    booking: null, // { ok, matches, at, error, codeState, cached, loading }
+    booking: null, // danh sách tab Booking OTA (gần đây hoặc kết quả tìm): { ok, matches, at, error, codeState, cached, loading }
+    recent: null, // lượt đọc booking GẦN ĐÂY (q rỗng): nguồn của tab chính và nút gập, tìm không đè
     board: null,
     ind: null, // lời đáp quay:indicators
     lockBan: null,
@@ -90,7 +93,7 @@ export function mount({ bridge, plugins = [] } = {}) {
     S.view = await send({ type: "quay:hello", hotelId: S.hotelId });
     S.hello = true;
     const c = S.view?.cache;
-    if (c?.bookings && !S.booking) S.booking = { ok: true, matches: c.bookings.matches, at: c.bookings.at, cachedOnly: true };
+    if (c?.bookings && !S.booking) S.booking = S.recent = { ok: true, matches: c.bookings.matches, at: c.bookings.at, cachedOnly: true };
     if (c?.board && !S.board) S.board = { ok: true, result: c.board.result, at: c.board.at, cachedOnly: true };
     if (c?.indicators && !S.ind) S.ind = { state: "ok", data: c.indicators.data, at: c.indicators.at, cachedOnly: true };
     render();
@@ -105,13 +108,28 @@ export function mount({ bridge, plugins = [] } = {}) {
   };
   const canIndicators = () => S.view && S.hotelId && S.view.session === "ok";
 
+  async function fetchBookings(q) {
+    const r = await send({ type: "quay:bookings", hotelId: S.hotelId, q });
+    if (r.session && S.view && r.session !== S.view.session && (r.session === "expired" || r.session === "out")) S.view.session = r.session;
+    return { ...r, q, loading: false };
+  }
+
+  /** Danh sách tab Booking OTA; q rỗng thì cũng là lượt "gần đây" của tab chính. */
   async function loadBookings() {
     if (!canBook()) return;
     S.booking = { ...(S.booking ?? {}), loading: true };
     render();
-    const r = await send({ type: "quay:bookings", hotelId: S.hotelId, q: S.q });
-    S.booking = { ...r, q: S.q, loading: false };
-    if (r.session && S.view && r.session !== S.view.session && (r.session === "expired" || r.session === "out")) S.view.session = r.session;
+    const q = S.q;
+    S.booking = await fetchBookings(q);
+    if (!q) S.recent = S.booking;
+    render();
+  }
+
+  /** Đang tìm thì danh sách gần đây không tự làm mới theo ⇒ đọc riêng, kẻo tab chính giữ số cũ. */
+  async function loadRecent() {
+    if (!canBook()) return;
+    if (!S.q) return loadBookings();
+    S.recent = await fetchBookings("");
     render();
   }
 
@@ -144,6 +162,7 @@ export function mount({ bridge, plugins = [] } = {}) {
   let indTimer = null;
   function refreshAll() {
     loadBookings();
+    if (S.q) loadRecent();
     loadBoard();
     loadIndicators();
     clearTimeout(bookTimer);
@@ -156,7 +175,7 @@ export function mount({ bridge, plugins = [] } = {}) {
 
   async function start() {
     await hello();
-    loadBookings(); // số trên nút gập lúc tải trang (userscript: loadRecent)
+    loadRecent(); // số trên nút gập lúc tải trang (userscript: loadRecent)
     loadIndicators();
     scheduleIndicators();
   }
@@ -165,6 +184,7 @@ export function mount({ bridge, plugins = [] } = {}) {
     if (!id || id === S.hotelId) return;
     S.hotelId = id;
     S.booking = null;
+    S.recent = null;
     S.board = null;
     S.ind = null;
     start();
@@ -307,7 +327,7 @@ export function mount({ bridge, plugins = [] } = {}) {
       ${g.todo ? todoHTML(g.todo, "todo") : ""}</section>`;
   }
 
-  function cbTab() {
+  function indicatorsBlock() {
     const v = S.view;
     if (v?.session === "expired") return note(H.expiredIndicatorsNote());
     const m = indModel();
@@ -324,19 +344,36 @@ export function mount({ bridge, plugins = [] } = {}) {
     return `${fail}<div class="${failed ? "cb-stale" : ""}" style="display:flex;flex-direction:column;gap:8px">${verdict}${m.groups.map((g) => groupHTML(g, origin)).join("")}</div>${thieu}`;
   }
 
+  const secHead = (title, n, bad) => `<div class="qsec"><h2>${esc(title)}</h2>${n ? `<span class="ct ${bad ? "bad" : ""}">${n}</span>` : ""}</div>`;
+
+  // Tab chính: booking lỗi trước (một booking cụ thể chưa vào PMS hay chưa khoá G2J), rồi chỉ báo.
+  function todoTab() {
+    const r = S.recent;
+    const t = T.todoModel({ recent: r, ind: S.view?.session === "ok" ? indModel() : null });
+    let book;
+    if (!r || (r.loading && !t.bookingsKnown)) book = `<div class="ota-muted">Đang tải...</div>`;
+    else {
+      const problem = r.ok === false ? codeProblem(r) || `<div class="ota-card err">${esc(r.error)}</div>` : "";
+      const stale = r.ok === false && t.bookingsKnown ? ` Danh sách của lượt ${H.hhmm(r.cached?.at)}.` : "";
+      const lead = !t.bookingsKnown ? "" : t.issues.length ? "" : `<div class="ota-muted">Không có booking lỗi trong ${B.LIST_LIMIT} booking gần đây.${stale}</div>`;
+      const cards = t.issues.length ? `<div class="${r.ok === false ? "cb-stale" : ""}" style="display:flex;flex-direction:column;gap:8px">${t.issues.map(bookingCard).join("")}</div>${stale ? `<div class="ota-muted">${stale.trim()}</div>` : ""}` : "";
+      book = `${problem}${lead}${cards}`;
+    }
+    const ban = S.lockBan ? `<div class="qban ${S.lockBan.ok ? "ok" : "bad"}" role="status">${esc(S.lockBan.text)}<button data-act="lockBanX">Ẩn</button></div>` : "";
+    const m = indModel();
+    return `${ban}<section class="qsec-b" aria-label="Booking OTA lỗi">${secHead("Booking OTA lỗi", t.issues.length, true)}${book}</section>
+      <section class="qsec-b" aria-label="Chỉ báo đang vượt">${secHead("Chỉ báo đang vượt", t.exceeded, m?.level === "cb")}${indicatorsBlock()}</section>`;
+  }
+
   function tabsHTML() {
-    const b = S.booking;
-    const matches = b?.ok === false ? b.cached?.matches : b?.matches;
-    const iss = matches ? B.countIssues(matches) : 0;
-    const bookCt = matches ? (iss ? `<span class="ct bad">${iss} lỗi</span>` : `<span class="ct">${matches.length}</span>`) : "";
+    const t = T.todoModel({ recent: S.recent, ind: S.view?.session === "ok" ? indModel() : null });
     const m = S.view?.session === "ok" ? indModel() : null;
-    const dot = m ? `<span class="dlv ${S.ind?.state !== "ok" ? "cy" : m.level}"></span>` : `<span class="dlv off"></span>`;
-    const cbCt = m && m.exceeded.length ? `<span class="ct ${m.level === "cb" ? "bad" : ""}">${m.exceeded.length}</span>` : "";
-    const on = (t) => (!S.overlay && S.tab === t ? "on" : "");
-    return `<div class="qf-tabs" role="tablist">
-      <button role="tab" aria-selected="${on("bookings") === "on"}" class="${on("bookings")}" data-act="tab" data-t="bookings">Booking OTA${bookCt}</button>
-      <button role="tab" aria-selected="${on("board") === "on"}" class="${on("board")}" data-act="tab" data-t="board">Khoá G2J</button>
-      <button role="tab" aria-selected="${on("cb") === "on"}" class="${on("cb")}" data-act="tab" data-t="cb">Chỉ báo${dot}${cbCt}</button></div>`;
+    const bad = t.issues.length > 0 || m?.level === "cb";
+    const badge = { todo: t.count ? `<span class="ct ${bad ? "bad" : ""}">${t.count}</span>` : "" };
+    const on = (id) => (!S.overlay && S.tab === id ? "on" : "");
+    return `<div class="qf-tabs" role="tablist">${T.FRAME_TABS.map(
+      (x) => `<button role="tab" aria-selected="${on(x.id) === "on"}" class="${on(x.id)} ${x.id === "todo" ? "main" : ""}" data-act="tab" data-t="${x.id}">${esc(x.label)}${badge[x.id] ?? ""}</button>`,
+    ).join("")}</div>`;
   }
 
   function tokenLine() {
@@ -368,12 +405,11 @@ export function mount({ bridge, plugins = [] } = {}) {
       body = boardTab();
       ft = `<div class="qf-ft"><span class="sp">Bảng khoá Go2Joy ${B.BOARD_DAYS} ngày tới</span><button class="lk" data-act="refresh">Làm mới</button></div>`;
     } else {
-      body = cbTab();
+      body = todoTab();
       const m = indModel();
-      if (v?.session !== "expired" && m) {
-        const when = I.lastRunText(m.lastRunAt);
-        ft = `<div class="qf-ft"><span class="sp">${esc(when)}</span><a href="${esc(H.resultsUrl(S.ind?.origin || v?.origin || "", m.branchId))}" target="_blank" rel="noopener">Mở trên Hub ↗</a></div>`;
-      }
+      const hub = v?.session !== "expired" && m ? `<a href="${esc(H.resultsUrl(S.ind?.origin || v?.origin || "", m.branchId))}" target="_blank" rel="noopener">Chỉ báo trên Hub ↗</a>` : "";
+      const when = [S.recent?.at ? `Booking lượt ${H.hhmm(S.recent.at)}` : "", m && v?.session !== "expired" ? I.lastRunText(m.lastRunAt) : ""].filter(Boolean).join(" · ");
+      ft = `<div class="qf-ft"><span class="sp">${esc(when)}</span><button class="lk" data-act="refresh">Làm mới</button>${hub}</div>`;
     }
     const headBtns = v?.session === "out" ? "" : plugins.map((p) => p.headerButton?.() ?? "").join("");
     return `<div class="qf" role="dialog" aria-label="Urban B">
@@ -387,7 +423,7 @@ export function mount({ bridge, plugins = [] } = {}) {
     if (!v) segs = [{ dot: "off", text: "…" }];
     else {
       const session = v.session === "nobranch" || (!S.hotelId && v.session === "ok") ? "nobranch" : v.session;
-      const b = S.booking;
+      const b = S.recent;
       const matches = b?.ok === false ? b.cached?.matches : b?.matches;
       const booking = matches ? { issues: B.countIssues(matches), count: matches.length } : null;
       const m = indModel();
@@ -420,7 +456,7 @@ export function mount({ bridge, plugins = [] } = {}) {
 
   async function doLock(btn) {
     const key = btn.dataset.key;
-    const m = (S.booking?.matches ?? []).find((x) => x.sourceKey === key);
+    const m = [...(S.booking?.matches ?? []), ...(S.recent?.matches ?? [])].find((x) => x.sourceKey === key);
     if (!m) return;
     const c = B.lockConfirm(m);
     if (!window.confirm(c.text)) return;
@@ -439,6 +475,7 @@ export function mount({ bridge, plugins = [] } = {}) {
     if (a === "frame") {
       S.open = !S.open;
       S.overlay = null;
+      if (S.open) S.tab = T.DEFAULT_TAB;
       if (S.open) refreshAll();
       else clearTimeout(bookTimer);
     } else if (a === "tab") {
