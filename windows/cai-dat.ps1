@@ -112,27 +112,24 @@ try {
   if ($before) {
     Write-Log "Đã cập nhật $before -> $after trong $ExtDir. Extension tự nạp lại trong vòng 30 phút."
     if ($setupHotel) {
-      Write-Host "Extension đang chạy tự nhận mã trong vòng 30 phút, hoặc ngay khi mở ô Thu review OTA."
+      Write-Host "Extension đang chạy tự nhận mã trong vòng 30 phút, hoặc ngay khi bấm biểu tượng Urban B."
     }
-    Write-Host "Muốn chạy bản mới ngay: vào chrome://extensions, bấm nút nạp lại của 'Thu review OTA'."
+    Write-Host "Muốn chạy bản mới ngay: vào chrome://extensions, bấm nút nạp lại của 'Urban B'."
     Write-Host ""
-    Write-Host "Nếu Chrome chưa từng nạp thư mục này, làm 4 bước dưới đây."
+    Write-Host "Nếu Chrome chưa từng nạp thư mục này, làm các bước dưới đây."
   } else {
     Write-Log "Đã cài bản $after vào $ExtDir."
   }
   Write-Host ""
-  Write-Host "Còn 4 bước trong Chrome:" -ForegroundColor Green
-  Write-Host "  1. Gõ vào thanh địa chỉ của Chrome:  chrome://extensions"
-  Write-Host "  2. Bật 'Chế độ dành cho nhà phát triển' (góc trên bên phải). Để bật mãi: tắt đi là extension ngừng chạy."
-  Write-Host "  3. Bấm 'Tải tiện ích đã giải nén'. Trong hộp chọn thư mục, dán đường dẫn vào ô địa chỉ"
-  Write-Host "     (đã chép sẵn: $ExtDir) rồi bấm 'Chọn thư mục'."
-  if ($setupHotel) {
-    Write-Host "  4. Bấm biểu tượng mảnh ghép, ghim 'Thu review OTA' rồi mở nó. Phải thấy tên '$setupHotel'"
-    Write-Host "     và dòng 'Đã nhận cài đặt ... Sheet trả lời'. Không phải điền gì thêm."
-  } else {
-    Write-Host "  4. Bấm biểu tượng mảnh ghép, ghim 'Thu review OTA', mở nó, điền tên khách sạn, URL, mã bí mật,"
-    Write-Host "     chọn kênh, bấm 'Thử Sheet'. (Người quản lý có mã cài đặt thì dán vào ô Mã cài đặt, bấm Nhận mã.)"
-  }
+  # Cùng các bước của màn Cài extension trên Hub (repo UrbanB: extensionSetup.install.s5…s12).
+  Write-Host "Đã tải xong. Các bước tiếp trong Chrome:" -ForegroundColor Green
+  Write-Host "  1. Mở Chrome, gõ chrome://extensions vào thanh địa chỉ rồi nhấn Enter."
+  Write-Host "  2. Bật 'Chế độ dành cho nhà phát triển' ở góc trên bên phải, và để bật luôn."
+  Write-Host "  3. Bấm nút 'Tải tiện ích đã giải nén'."
+  Write-Host "  4. Trong hộp chọn thư mục, dán đường dẫn $ExtDir vào ô địa chỉ, rồi bấm 'Chọn thư mục'."
+  Write-Host "     Máy đã chép sẵn đường dẫn này, bạn chỉ cần bấm Ctrl và V."
+  Write-Host "  5. Bấm biểu tượng mảnh ghép cạnh thanh địa chỉ, rồi bấm hình ghim cạnh 'Urban B'."
+  Write-Host "  6. Mở Hub, đăng nhập, rồi mở màn Cài extension và làm tiếp các bước ở đó."
 } catch {
   Write-Log ("LỖI: " + $_.Exception.Message)
   Write-Host "Cài không xong. Chụp màn hình này gửi người quản lý." -ForegroundColor Red
