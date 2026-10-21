@@ -154,15 +154,23 @@ export function reviewMissingText(review) {
 }
 
 /**
- * Kênh quét và chu kỳ thực dùng. Hub có trường nào thì trường ấy theo Hub.
+ * Kênh quét và chu kỳ thực dùng. Hub có trường nào thì trường ấy theo Hub; `branch` = cơ sở đang dùng
+ * (pickBranch), cấu hình riêng của cơ sở thắng cấu hình cả chuỗi.
  * Hub vắng: kênh theo cấu hình của máy (mã cài đặt hoặc ô Kênh quét), chu kỳ theo mặc định của
  * extension (ô nhập chu kỳ tại máy đã bỏ, số cũ trong bộ nhớ không dùng nữa).
  */
-export function effectiveCollect(cfg, hub) {
-  const fromHub = { enabled: Boolean(hub?.enabled), intervalHours: hub?.intervalHours !== undefined };
+export function effectiveCollect(cfg, hub, branch = null) {
+  // YC-157 · H-1715 a: cơ sở có cấu hình riêng trên Hub ⇒ trường nào cơ sở đặt thì trường ấy thắng cả chuỗi.
+  const own = branch?.reviewCollect ? parseHubSettings({ reviewCollect: branch.reviewCollect }) : {};
+  const src = { ...hub, ...own };
+  const fromHub = {
+    enabled: Boolean(src.enabled),
+    intervalHours: src.intervalHours !== undefined,
+    branch: own.enabled !== undefined || own.intervalHours !== undefined,
+  };
   return {
-    enabled: fromHub.enabled ? { ...hub.enabled } : { ...DEFAULT_CONFIG.enabled, ...(cfg?.enabled ?? {}) },
-    intervalHours: fromHub.intervalHours ? hub.intervalHours : DEFAULT_CONFIG.intervalHours,
+    enabled: fromHub.enabled ? { ...src.enabled } : { ...DEFAULT_CONFIG.enabled, ...(cfg?.enabled ?? {}) },
+    intervalHours: fromHub.intervalHours ? src.intervalHours : DEFAULT_CONFIG.intervalHours,
     fromHub,
   };
 }
@@ -174,7 +182,11 @@ export function alarmMinutes(intervalHours) {
 
 /** Chữ dưới nút Quét: chu kỳ và nguồn của nó. */
 export function scheduleText(eff) {
-  const src = eff.fromHub.intervalHours ? "theo cấu hình trên Hub" : "mặc định, chưa nhận cấu hình từ Hub";
+  const src = eff.fromHub.branch
+    ? "theo cấu hình riêng của chi nhánh trên Hub"
+    : eff.fromHub.intervalHours
+      ? "theo cấu hình trên Hub"
+      : "mặc định, chưa nhận cấu hình từ Hub";
   return `Thu review tự quét mỗi ${eff.intervalHours} giờ (${src}).`;
 }
 
@@ -195,8 +207,9 @@ export const BRANCH_KEY = "quayBranchId";
  */
 export async function loadEffectiveConfig() {
   const [cfg, hub, stored] = await Promise.all([loadConfig(), loadHubCollect(), chrome.storage.local.get([MINE_KEY, BRANCH_KEY])]);
-  const collect = effectiveCollect(cfg, hub);
-  const review = effectiveReview(cfg, hub, stored[MINE_KEY]?.branches ?? null, stored[BRANCH_KEY] ?? "");
+  const branches = stored[MINE_KEY]?.branches ?? null;
+  const collect = effectiveCollect(cfg, hub, pickBranch(branches, stored[BRANCH_KEY] ?? "").branch ?? null);
+  const review = effectiveReview(cfg, hub, branches, stored[BRANCH_KEY] ?? "");
   const { fromHub: _, branchState: __, hubSeen: ___, ...fields } = review;
   return { ...cfg, ...fields, enabled: collect.enabled, intervalHours: collect.intervalHours, collect, review };
 }

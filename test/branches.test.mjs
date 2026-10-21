@@ -28,8 +28,8 @@ test("Danh sách cơ sở: giữ id, tên, mã, mã ezCloud; KHÔNG giữ mã k�
   const list = H.parseMine(mineReply);
   const noIds = { booking: null, agoda: null, expedia: null };
   assert.deepEqual(list, [
-    { id: "br_pct", name: "Phạm Công Trứ", code: "PCT", ezcloudHotelId: "1234", reviewIds: noIds },
-    { id: "br_mtt", name: "Mạc Thị Bưởi", code: "MTT", ezcloudHotelId: "", reviewIds: noIds },
+    { id: "br_pct", name: "Phạm Công Trứ", code: "PCT", ezcloudHotelId: "1234", reviewIds: noIds, reviewCollect: null },
+    { id: "br_mtt", name: "Mạc Thị Bưởi", code: "MTT", ezcloudHotelId: "", reviewIds: noIds, reviewCollect: null },
   ]);
   assert.ok(!JSON.stringify(list).includes("pushKey"));
   assert.deepEqual(H.parseMine({ ok: true, branches: [] }), []);

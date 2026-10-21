@@ -8,9 +8,10 @@ import * as B from "./booking-ota.js";
 import * as H from "./hub-quay.js";
 import * as N from "./notifications.js";
 import * as W from "./web-orders.js";
+import * as C from "./counter-heartbeat.js";
 import { DEV_FLAGS } from "../env.js";
 import { BRANCH_KEY, HUB_COLLECT_KEY, MINE_KEY, loadEffectiveConfig, parseHubSettings, reviewMissingHelp, reviewMissingText } from "../hub-config.js";
-import { CHANNELS, loadStatus } from "../config.js";
+import { CHANNELS, getDeviceId, loadStatus } from "../config.js";
 import { CHANNEL_LABEL } from "../report.js";
 import { reviewStatusModel } from "./review-status.js";
 import { HUB_TIMEOUT_MS, isTimeout } from "./net.js";
@@ -271,7 +272,10 @@ export async function board(hotelId) {
 export async function lock(hotelId, sourceKey, confirmPaid) {
   try {
     const { result } = await withCode(hotelId, B.lockParams(sourceKey, confirmPaid));
-    return { ok: true, ...B.lockOutcome(result) };
+    const outcome = B.lockOutcome(result);
+    // YC-157 · H-1535 a: Hub hiện lần Khoá G2J thành công gần nhất (và ai đang đăng nhập lúc ấy).
+    if (outcome.ok) sendHeartbeat({ g2jLock: { at: new Date(now()).toISOString() } }).catch(() => {});
+    return { ok: true, ...outcome };
   } catch (e) {
     return { ok: false, text: e.message };
   }
@@ -402,6 +406,8 @@ async function flushToken(kind) {
   const ok = reply.outcome !== "rejected";
   await set(K.memo, B.remember(memo, key, ok ? "ok" : "rejected", ok ? "" : reply.message, now()));
   await set(K.tok(kind), { at: now(), outcome: reply.outcome, message: reply.message, hotel: reply.hotel });
+  // YC-157 · H-1535 a: Hub hiện lần đẩy phiên PMS gần nhất của máy. Không chặn luồng chính.
+  sendHeartbeat({ tokenPush: C.tokenPushOf(kind, reply.outcome, now()) }).catch(() => {});
   if (kind === "ezcloud" && ok) await patchSnap({ tokenAt: now() });
   if (reply.codeRejected) await reportCodeOutcome(target, code, { kind: "rejected", message: reply.message });
   else if (ok) reportCodeOutcome(target, code, { kind: "accepted" }).catch(() => {});
@@ -535,6 +541,46 @@ export async function extStatus(pageOrigin, path) {
 /** Mô hình thu review của máy này (quay/review-status.js), chỉ tính kênh đang bật. */
 function reviewModelOf(cfg, status) {
   return reviewStatusModel({ status, order: CHANNELS, enabled: cfg.enabled, labels: CHANNEL_LABEL, missing: reviewMissingHelp(cfg.review) });
+}
+
+// ---------- Máy quầy báo Hub (YC-157) ----------
+
+/** Chi nhánh của máy: chi nhánh duy nhất hoặc đã chọn (scope=mine), không có thì chi nhánh của PMS mở gần nhất. */
+async function heartbeatBranchId() {
+  const [mine, chosenId, lastHotel] = await Promise.all([get(K.mine), get(K.branch), get(K.lastHotel)]);
+  const pick = H.pickBranch(mine?.branches ?? null, chosenId ?? "");
+  if (pick.branch?.id) return pick.branch.id;
+  const id = lastHotel ? (await get(K.conn(lastHotel)))?.branch?.id : null;
+  return typeof id === "string" ? id : "";
+}
+
+/**
+ * Một lượt báo Hub. `scan` ⇒ kèm ảnh kênh và lượt lỗi của lần quét vừa xong; không ⇒ Hub giữ ảnh kênh
+ * cũ. Lượt lỗi chưa báo được (mất mạng, hết phiên) nằm lại hàng đợi, gửi kèm lượt sau. Không ném.
+ */
+export async function sendHeartbeat({ scan = false, tokenPush = null, g2jLock = null } = {}) {
+  let model = null;
+  let failures = (await get(C.HEARTBEAT_QUEUE_KEY)) ?? [];
+  if (scan) {
+    const [cfg, status] = await Promise.all([loadEffectiveConfig(), loadStatus()]);
+    model = reviewModelOf(cfg, status);
+    failures = C.mergeFailures(failures, C.failuresOf(model));
+  }
+  const body = C.heartbeatBody({
+    deviceId: await getDeviceId(),
+    version: chrome.runtime.getManifest().version,
+    branchId: await heartbeatBranchId(),
+    model,
+    failures,
+    tokenPush,
+    g2jLock,
+  });
+  const { url, init } = C.heartbeatRequest(await hubOriginNow(), body);
+  const reply = await hubFetch(url, init);
+  const ok = reply.status === 200 && reply.json?.ok === true;
+  if (reply.status === 401) await noteSession({ state: "out" });
+  await set(C.HEARTBEAT_QUEUE_KEY, ok ? [] : failures);
+  return { ok };
 }
 
 /** YC-158 — dòng Thu review của khung quầy: đọc bộ nhớ, không gọi mạng. */

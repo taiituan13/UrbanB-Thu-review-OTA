@@ -21,7 +21,7 @@ import { hubBatches, hubRunMeta, hubSnapshots, hubSummaryText, ingestRequest, pa
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
-import { hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings } from "./quay/sw.js";
+import { hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
 import { alarmMinutes, loadEffectiveConfig, reviewMissingText } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
 import { PAGE_RUN_TIMEOUT_MS, REMOTE_TIMEOUT_MS, SHEET_TIMEOUT_MS, isTimeout, withTimeout } from "./quay/net.js";
@@ -575,6 +575,8 @@ async function runScan(trigger) {
     await chrome.storage.local.remove("scanCrash");
   } finally {
     running = false;
+    // YC-157: báo Hub sau mọi lượt quét, kể cả lượt thiếu cấu hình hay hỏng giữa chừng — máy vẫn còn sống.
+    await sendHeartbeat({ scan: true }).catch(() => {});
     await refreshBadge();
   }
 }

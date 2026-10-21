@@ -41,7 +41,7 @@ test("🔴 Có cấu hình Hub ⇒ kênh và chu kỳ theo Hub, đè cấu hình
   const eff = effectiveCollect(cfg, parseHubSettings(hubReply));
   assert.equal(eff.intervalHours, 3);
   assert.deepEqual(eff.enabled, hubReply.reviewCollect.enabled);
-  assert.deepEqual(eff.fromHub, { enabled: true, intervalHours: true });
+  assert.deepEqual(eff.fromHub, { enabled: true, intervalHours: true, branch: false });
 });
 
 test("Hub vắng ⇒ kênh theo máy (mã cài đặt), chu kỳ theo mặc định extension (bỏ số cũ của ô đã gỡ)", () => {
@@ -52,12 +52,40 @@ test("Hub vắng ⇒ kênh theo máy (mã cài đặt), chu kỳ theo mặc đ�
     assert.equal(eff.enabled.booking, false);
     assert.equal(eff.enabled.agoda, true);
     assert.equal(eff.enabled.trip, DEFAULT_CONFIG.enabled.trip);
-    assert.deepEqual(eff.fromHub, { enabled: false, intervalHours: false });
+    assert.deepEqual(eff.fromHub, { enabled: false, intervalHours: false, branch: false });
   }
   // Chỉ có chu kỳ ⇒ chu kỳ theo Hub, kênh theo máy.
   const half = effectiveCollect(cfg, { intervalHours: 24 });
   assert.equal(half.intervalHours, 24);
   assert.equal(half.enabled.agoda, true);
+});
+
+test("🔴 YC-157 · H-1715 a: chi nhánh có cấu hình riêng ⇒ kênh và chu kỳ theo chi nhánh, thắng cả chuỗi", () => {
+  // Đúng hình dạng Hub gửi trong `branches[]` của scope=mine (connection-codes.ts branchReviewCollect).
+  const [branch] = H.parseMine({
+    ok: true,
+    branches: [
+      {
+        id: "b1",
+        name: "Bến Thành",
+        reviewCollect: { enabled: { booking: true, agoda: false, trip: false, expedia: false, traveloka: false, go2joy: false }, intervalHours: 12 },
+      },
+    ],
+  });
+  const eff = effectiveCollect(DEFAULT_CONFIG, parseHubSettings(hubReply), branch);
+  assert.equal(eff.intervalHours, 12);
+  assert.equal(eff.enabled.expedia, false);
+  assert.equal(eff.enabled.booking, true);
+  assert.equal(eff.fromHub.branch, true);
+  assert.match(scheduleText(eff), /mỗi 12 giờ \(theo cấu hình riêng của chi nhánh trên Hub\)/);
+  // Chi nhánh không có cấu hình riêng (Hub gửi null) ⇒ theo cả chuỗi.
+  const [plain] = H.parseMine({ ok: true, branches: [{ id: "b2", name: "Q1", reviewCollect: null }] });
+  assert.equal(plain.reviewCollect, null);
+  const chain = effectiveCollect(DEFAULT_CONFIG, parseHubSettings(hubReply), plain);
+  assert.equal(chain.intervalHours, 3);
+  assert.equal(chain.fromHub.branch, false);
+  // Cấu hình riêng sai dạng ⇒ coi như vắng, không đè cả chuỗi.
+  assert.equal(effectiveCollect(DEFAULT_CONFIG, parseHubSettings(hubReply), { reviewCollect: { intervalHours: 999 } }).intervalHours, 3);
 });
 
 test("Báo thức: giờ ⇒ phút, không dày hơn 30 phút; chữ dưới nút nói nguồn của chu kỳ", () => {

@@ -84,6 +84,9 @@ export function parseMine(json) {
       code: typeof b.code === "string" ? b.code : "",
       ezcloudHotelId: b.ezcloudHotelId == null ? "" : String(b.ezcloudHotelId),
       reviewIds: parseReviewIds(b.reviewIds),
+      // YC-157 · H-1715 a: cấu hình thu review riêng của cơ sở (cùng dạng `reviewCollect` của cả chuỗi),
+      // null ⇒ theo cả chuỗi. Giữ nguyên bản Hub gửi; hub-config.js đọc qua parseHubSettings.
+      reviewCollect: b.reviewCollect && typeof b.reviewCollect === "object" ? b.reviewCollect : null,
     }));
 }
 
