@@ -372,12 +372,12 @@ export function noCodeNote(branchName) {
   };
 }
 
-/** Apps Script từ chối mã kết nối Hub đang giữ. */
+/** Apps Script từ chối mã kết nối Hub đang giữ. Lễ tân đọc câu này ⇒ nói "Google Sheet của khách sạn", không nói "Apps Script". */
 export function rejectedCodeNote(branchName, message) {
   return {
     tone: "bad",
-    title: `Apps Script từ chối mã kết nối Booking OTA của ${branchName || "chi nhánh này"}.`,
-    text: `Hub đã được báo để Quản trị hệ thống kiểm lại mã. Lời Apps Script: ${message}`,
+    title: `Google Sheet của khách sạn không nhận mã kết nối Booking OTA của ${branchName || "chi nhánh này"}.`,
+    text: `Hub đã tự báo Quản trị hệ thống kiểm lại mã, bạn chưa cần làm gì. Khi mã đã sửa, bấm Làm mới. Chi tiết lỗi: ${message}`,
   };
 }
 
