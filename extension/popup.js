@@ -9,7 +9,7 @@ import { loadEffectiveConfig, reviewMissingText, scheduleText } from "./hub-conf
 const $ = (id) => document.getElementById(id);
 const STATE_TEXT = { ok: "ổn", error: "lỗi", login: "cần đăng nhập lại" };
 
-/** Dòng chữ dưới nút Quét ngay; `where` = "settingsNote" cho dòng trong khối Cài đặt. */
+/** Dòng chữ dưới nút Quét review ngay; `where` = "settingsNote" cho dòng trong khối Cài đặt. */
 function note(text, where = "note") {
   $(where).textContent = text;
 }
@@ -123,14 +123,26 @@ async function copyReport(entry, button) {
   setTimeout(() => (button.textContent = "Sao chép"), 2000);
 }
 
-/** Khung đỏ: mã lỗi + nút Sao chép + cách xử lý. */
+/**
+ * Khung đỏ: chuyện gì đang xảy ra, vì sao, các bước có số (YC-158, bổ sung của user 21/10/2026), rồi mã
+ * lỗi + nút Sao chép. Bản cũ trong bộ nhớ chưa có `help` ⇒ hiện câu gợi ý một dòng như trước.
+ */
 function errorBox(entry) {
   const box = document.createElement("div");
   box.className = "err";
-  box.innerHTML = `<div class="top">Mã lỗi <span class="ref"></span> <span class="code"></span><button class="secondary">Sao chép</button></div><div class="hint"></div>`;
+  box.innerHTML = `<div class="what"></div><div class="why"></div><ol class="steps"></ol><div class="hint"></div><div class="top">Mã lỗi <span class="ref"></span> <span class="code"></span><button class="secondary">Sao chép</button></div>`;
   box.querySelector(".ref").textContent = entry.ref;
   box.querySelector(".code").textContent = `(${entry.code})`;
-  box.querySelector(".hint").textContent = entry.hint ?? "";
+  const help = entry.help;
+  if (help?.what) {
+    box.querySelector(".what").textContent = help.what;
+    box.querySelector(".why").textContent = help.why ? `Vì sao: ${help.why}` : "";
+    for (const step of help.steps ?? []) {
+      const li = document.createElement("li");
+      li.textContent = step;
+      box.querySelector(".steps").appendChild(li);
+    }
+  } else box.querySelector(".hint").textContent = entry.hint ?? "";
   const button = box.querySelector("button");
   button.onclick = () => copyReport(entry, button);
   return box;
@@ -161,7 +173,7 @@ async function renderStatus() {
     const div = document.createElement("div");
     div.className = "ch " + (s?.state ?? "");
     const when = s?.at ? shortTime(s.at) : "chưa quét";
-    const detail = s ? `${STATE_TEXT[s.state] ?? s.state} · ${s.count} bài · ${s.message}` : "";
+    const detail = s ? `${STATE_TEXT[s.state] ?? s.state}, ${s.count} bài. ${s.message}` : "";
     div.innerHTML = `<span class="dot"></span><div class="body"><div class="line"><span class="name"></span><span class="when"></span></div><div class="detail"></div></div>`;
     div.querySelector(".name").textContent = CHANNEL_LABEL[ch];
     div.querySelector(".when").textContent = when;
@@ -250,7 +262,7 @@ async function showSetupFromFile() {
   if (setupResult?.from !== "tệp" || setupResult.shown) return;
   await chrome.storage.local.set({ setupResult: { ...setupResult, shown: true } });
   await fill();
-  const next = setupResult.ping?.ok ? " Bước tiếp: đăng nhập các extranet trong Chrome này rồi bấm Quét ngay." : "";
+  const next = setupResult.ping?.ok ? " Bước tiếp: đăng nhập trang quản lý khách sạn của từng kênh trong Chrome này, rồi bấm Quét review ngay." : "";
   note(setupText(setupResult) + next);
 }
 
@@ -273,7 +285,7 @@ for (const b of document.querySelectorAll("[data-login]"))
 $("openHub").onclick = () => chrome.runtime.sendMessage({ type: "quay:openHub", path: "/" });
 $("quayBranch").onchange = async () => {
   const r = await chrome.runtime.sendMessage({ type: "quay:setBranch", branchId: $("quayBranch").value });
-  note(r?.ok ? "Đã chọn cơ sở của máy quầy." : `Không chọn được cơ sở: ${r?.error ?? "không rõ"}`);
+  note(r?.ok ? "Đã chọn chi nhánh của máy quầy." : `Không chọn được chi nhánh: ${r?.error ?? "không rõ"}`);
   await renderBranches();
 };
 

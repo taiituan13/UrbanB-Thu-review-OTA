@@ -1,5 +1,6 @@
 // YC-156: màn Cài extension trên Hub. Extension theo Hub của trang (H-1526 a) và trả trạng thái cho trang
 // qua postMessage (hợp đồng ext:hello / ext:status với làn Hub).
+import { reviewStatusModel } from "../extension/quay/review-status.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -122,7 +123,17 @@ test("ext:status: đủ trường hợp đồng, đúng kiểu", () => {
     chosenId: "br_col",
     pms: { at: Date.parse("2026-10-20T03:00:00Z"), hotelId: "15739" },
     snap: {},
-    review: { configured: true, fromHub: true, channels: { booking: { at: "2026-10-20T01:00:00Z" }, agoda: { at: "2026-10-20T02:00:00Z" } } },
+    review: {
+      configured: true,
+      fromHub: true,
+      model: reviewStatusModel({
+        status: { booking: { at: "2026-10-20T01:00:00Z", state: "ok", count: 3 }, agoda: { at: "2026-10-20T02:00:00Z", state: "ok", count: 0 } },
+        order: ["booking", "agoda"],
+        enabled: { booking: true, agoda: true },
+        labels: {},
+        missing: null,
+      }),
+    },
   });
   assert.deepEqual(s, {
     version: "1.2.0",
@@ -131,7 +142,15 @@ test("ext:status: đủ trường hợp đồng, đúng kiểu", () => {
     signedIn: true,
     branch: { id: "br_col", name: "Colline" },
     pms: { lastSeenAt: "2026-10-20T03:00:00.000Z", hotelName: "Colline" },
-    review: { configured: true, fromHub: true, lastScanAt: "2026-10-20T02:00:00.000Z" },
+    review: {
+      configured: true,
+      fromHub: true,
+      lastScanAt: "2026-10-20T02:00:00.000Z",
+      channels: [
+        { channel: "booking", state: "ok", at: "2026-10-20T01:00:00Z", okAt: "2026-10-20T01:00:00Z", count: 3, code: null, ref: null, what: null, why: null, steps: [] },
+        { channel: "agoda", state: "ok", at: "2026-10-20T02:00:00Z", okAt: "2026-10-20T02:00:00Z", count: 0, code: null, ref: null, what: null, why: null, steps: [] },
+      ],
+    },
   });
 });
 
@@ -141,7 +160,7 @@ test("ext:status: chưa biết gì ⇒ null đúng chỗ; Hub khác trang ⇒ hu
   assert.equal(s.signedIn, null);
   assert.equal(s.branch, null);
   assert.deepEqual(s.pms, { lastSeenAt: null, hotelName: null });
-  assert.deepEqual(s.review, { configured: false, fromHub: false, lastScanAt: null });
+  assert.deepEqual(s.review, { configured: false, fromHub: false, lastScanAt: null, channels: [] });
   assert.equal(H.extStatusOf({ session: "out" }).signedIn, false);
   assert.equal(H.extStatusOf({ session: "expired" }).signedIn, false);
   assert.equal(H.extStatusOf({ session: "nobranch" }).signedIn, true);
@@ -161,18 +180,13 @@ test("🔴 ext:status không mang token, mã bí mật, URL Sheet, mã kết n�
     branches: [leaky],
     pms: { at: 1, hotelId: "15739", token: "TK" },
     snap: { hotelId: "15739", branchName: "Colline", secret: "SC" },
-    review: { configured: true, fromHub: true, sheetUrl: "https://script.google.com/macros/s/S/exec", secret: "SC", channels: {} },
+    review: { configured: true, fromHub: true, sheetUrl: "https://script.google.com/macros/s/S/exec", secret: "SC", model: null },
   });
   const text = JSON.stringify(s);
   for (const bad of ["PK", "AT", "TK", "SC", "script.google.com", "otaSync", "secret", "sheetUrl", "token"]) assert.ok(!text.includes(bad), bad);
   assert.deepEqual(Object.keys(s), ["version", "hub", "hubFollowed", "signedIn", "branch", "pms", "review"]);
 });
 
-test("Giờ quét gần nhất: kênh mới nhất; giờ hỏng bỏ qua; chưa quét ⇒ null", () => {
-  assert.equal(H.lastScanAt({ a: { at: "2026-10-01T00:00:00Z" }, b: { at: "2026-10-03T00:00:00Z" }, c: { at: "rác" } }), "2026-10-03T00:00:00.000Z");
-  assert.equal(H.lastScanAt({}), null);
-  assert.equal(H.lastScanAt(undefined), null);
-});
 
 test("Service worker: gốc trang lấy từ người gửi (không từ tin); popup không còn ô chọn Hub", () => {
   const sw = readFileSync(new URL("../extension/quay/sw.js", import.meta.url), "utf8");

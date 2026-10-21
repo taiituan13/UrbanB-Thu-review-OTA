@@ -76,18 +76,18 @@ test("🔴 Hub không có Sheet (null) ⇒ máy chạy nguyên cấu hình cũ, 
   }
 });
 
-test("Tài khoản nhiều cơ sở chưa chọn: máy cũ giữ tên cũ; máy mới được nhắc chọn cơ sở", () => {
+test("Tài khoản nhiều chi nhánh chưa chọn: máy cũ giữ tên cũ; máy mới được nhắc chọn chi nhánh", () => {
   assert.equal(effectiveReview(old, hub, branches, "").hotel, "Tên cũ");
   const fresh = effectiveReview(DEFAULT_CONFIG, hub, branches, "");
   assert.equal(fresh.hotel, "");
   assert.equal(fresh.branchState, "ask");
-  assert.match(reviewMissingText(fresh), /nhiều cơ sở.*chọn cơ sở/);
+  assert.match(reviewMissingText(fresh), /nhiều chi nhánh.*Chọn chi nhánh của máy này/);
 });
 
 test("Câu nhắc thiếu cấu hình: chưa nhận gì từ Hub ⇒ đăng nhập; Hub đã trả mà không có Sheet ⇒ báo Quản trị", () => {
-  assert.match(reviewMissingText(effectiveReview(DEFAULT_CONFIG, null, null, "")), /Chưa nhận cấu hình thu review từ Hub/);
-  assert.match(reviewMissingText(effectiveReview(DEFAULT_CONFIG, { at: 1 }, branches, "br_col")), /^Hub chưa có cấu hình thu review/);
-  assert.match(reviewMissingText(effectiveReview(DEFAULT_CONFIG, hub, [], "")), /đăng nhập Hub bằng tài khoản của cơ sở/);
+  assert.match(reviewMissingText(effectiveReview(DEFAULT_CONFIG, null, null, "")), /chưa nhận cấu hình từ Hub.*đăng nhập bằng tài khoản của bạn/);
+  assert.match(reviewMissingText(effectiveReview(DEFAULT_CONFIG, { at: 1 }, branches, "br_col")), /Hub chưa có cấu hình thu review\. Nhắn Quản trị hệ thống/);
+  assert.match(reviewMissingText(effectiveReview(DEFAULT_CONFIG, hub, [], "")), /chưa gắn với chi nhánh nào.*tài khoản Lễ tân của chi nhánh này/);
 });
 
 const effCfg = (cfgIn, h, list, chosen) => {
@@ -99,7 +99,7 @@ const effCfg = (cfgIn, h, list, chosen) => {
 test("Popup: nói rõ nguồn; Hub vắng ⇒ 'Hub chưa có cấu hình thu review'; KHÔNG in URL Sheet hay mã bí mật", () => {
   const hubLines = reviewSourceLines(effCfg(old, hub, branches, "br_col"), CHANNELS).map((l) => l.text);
   assert.match(hubLines.join("\n"), /Sheet thu review: theo cấu hình trên Hub/);
-  assert.match(hubLines.join("\n"), /Tên khách sạn: Colline \(tên cơ sở trên Hub\)/);
+  assert.match(hubLines.join("\n"), /Tên khách sạn: Colline \(tên chi nhánh trên Hub\)/);
   assert.match(hubLines.join("\n"), /Booking 111 \(Hub\) · Agoda 888 \(cấu hình cũ\) · Expedia 333 \(Hub\)/);
   const oldLines = reviewSourceLines(effCfg(old, { at: 1 }, branches, "br_col"), CHANNELS);
   assert.match(oldLines[0].text, /^Hub chưa có cấu hình thu review\. Máy đang chạy bằng cấu hình cũ/);

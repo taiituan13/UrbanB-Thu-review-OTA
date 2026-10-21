@@ -69,8 +69,8 @@ test("Ô chọn cơ sở trong popup chỉ hiện khi có từ hai cơ sở; ch�
   const ask = H.branchPicker(list, "");
   assert.equal(ask.ask, true);
   assert.equal(ask.value, "");
-  assert.deepEqual(ask.options.map((o) => o.label), ["Chọn cơ sở…", "PCT · Phạm Công Trứ", "MTT · Mạc Thị Bưởi"]);
-  assert.match(ask.text, /2 cơ sở/);
+  assert.deepEqual(ask.options.map((o) => o.label), ["Chọn chi nhánh…", "PCT · Phạm Công Trứ", "MTT · Mạc Thị Bưởi"]);
+  assert.match(ask.text, /2 chi nhánh/);
   const chosen = H.branchPicker(list, "br_pct");
   assert.equal(chosen.ask, false);
   assert.equal(chosen.value, "br_pct");

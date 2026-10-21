@@ -144,4 +144,18 @@ table.ota-board{border-collapse:collapse;width:100%;font-size:11px;background:va
 .qnote{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483002;max-width:min(560px,calc(100vw - 36px));padding:9px 14px;border-radius:8px;
   font-size:12.5px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.25);background:var(--fg)}
 .qnote.ok{background:var(--success)}.qnote.warn{background:var(--warning)}.qnote.err{background:var(--destructive)}
+/* YC-158 — khối Thu review trong tab Cần xử lý */
+.rv-ok{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;color:var(--muted-fg)}
+.rv-ok span{flex:1 1 200px}
+.rv-card{display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:1.45;background:#f6ebe8;border:1px solid #e6cbc4;border-radius:var(--r-md);padding:10px 12px;color:var(--fg)}
+.rv-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rv-st{font-size:12px;font-weight:600;color:var(--destructive)}
+.rv-st.login{color:#B45309}
+.rv-when{font-size:12px;color:var(--muted-fg);font-variant-numeric:tabular-nums}
+.rv-what{font-weight:600}
+.rv-why .k,.rv-steps .k{font-weight:600;color:var(--muted-fg)}
+.rv-steps ol{margin:2px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:2px}
+.rv-ref{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted-fg)}
+.rv-ref code{font:600 13px/1 ui-monospace,monospace;color:var(--fg);background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:4px 6px}
+.qsec-b .bt{display:flex;gap:8px;flex-wrap:wrap}
 `;

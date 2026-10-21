@@ -165,13 +165,15 @@ export function whenText(iso, now) {
 }
 
 /**
- * Chữ trên huy hiệu icon Chrome (H-1264 a: huy hiệu là số chưa đọc). Không có chưa đọc mà máy cần người
- * xem (thu review lỗi, chưa đăng nhập hay hết phiên Hub) ⇒ "!". Còn lại ⇒ rỗng.
+ * Chữ trên huy hiệu icon Chrome (H-1264 a: huy hiệu là số chưa đọc). Máy cần người xem (thu review lỗi,
+ * chưa đăng nhập hay hết phiên Hub) ⇒ thêm "!" — YC-158 (H-1539): số chưa đọc không còn che dấu này.
+ * Chrome hiện chừng 4 ký tự ⇒ quá 99 kèm "!" thì "99!".
  */
 export function badgeText({ unread, problem }) {
   const n = Number(unread) || 0;
-  if (n > 0) return n > 99 ? "99+" : String(n);
-  return problem ? "!" : "";
+  if (n <= 0) return problem ? "!" : "";
+  if (!problem) return n > 99 ? "99+" : String(n);
+  return `${Math.min(n, 99)}!`;
 }
 
 // ---------- Nguồn ----------

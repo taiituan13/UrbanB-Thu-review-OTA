@@ -78,7 +78,7 @@ review". Ô bật lên chỉ cho biết từng mục lấy từ đâu, không hi
    (hoặc mở màn **Cài extension** trên Hub). Khối Cài đặt, mục **Thu review OTA**, cho biết máy đã nhận gì.
 4. Bấm **Thử Sheet**. Đúng thì hiện tên Sheet; máy đã đăng nhập Hub thì dòng đó có thêm
    "Hub: ổn".
-5. Bấm **Quét ngay**. Extension mở từng extranet trong một tab nền, đọc review, đóng
+5. Bấm **Quét review ngay**. Extension mở từng extranet trong một tab nền, đọc review, đóng
    tab, rồi gửi lên Sheet. Mỗi kênh mất khoảng nửa phút đến vài phút.
 
 Sau đó extension tự quét theo số giờ đã đặt (mặc định 6 giờ), miễn là Chrome đang mở.
@@ -90,7 +90,7 @@ Sau đó extension tự quét theo số giờ đã đặt (mặc định 6 giờ
 | Đèn | Nghĩa | Làm gì |
 |---|---|---|
 | Xanh | Lượt gần nhất ổn | Không cần làm gì |
-| Cam | Kênh đã đá về trang đăng nhập | Mở extranet đó, đăng nhập lại, bấm Quét ngay |
+| Cam | Kênh đã đá về trang đăng nhập | Mở extranet đó, đăng nhập lại, bấm Quét review ngay |
 | Đỏ | Lỗi khác (đọc dòng chữ dưới tên kênh) | Làm theo câu hướng dẫn trong khung đỏ; vẫn lỗi thì gửi **mã lỗi** |
 
 Mỗi lỗi có một **mã lỗi** dạng `E-7K3QX2` trong khung đỏ dưới tên kênh. Nút **Sao chép**

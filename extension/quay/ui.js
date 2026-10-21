@@ -9,6 +9,7 @@
 import * as B from "./booking-ota.js";
 import * as H from "./hub-quay.js";
 import * as I from "./indicators.js";
+import * as R from "./review-ui.js";
 import * as T from "./todo.js";
 import * as W from "./web-orders.js";
 import { QUAY_CSS } from "./ui-css.js";
@@ -66,6 +67,8 @@ export function mount({ bridge, plugins = [] } = {}) {
     board: null,
     ind: null, // lời đáp quay:indicators
     web: null, // lời đáp quay:webOrders — đơn web urbanb.vn lệch số booking (YC-171)
+    review: null, // mô hình thu review của máy này (quay:review, YC-158)
+    reviewScan: { scanning: false, note: "", copied: "" },
     webBan: null, // kết quả lần bấm "Đã xử lý"
     lockBan: null,
     note: null, // lời báo đẩy token
@@ -170,9 +173,40 @@ export function mount({ bridge, plugins = [] } = {}) {
     render();
   }
 
+  // YC-158 — thu review là của máy, không theo cơ sở hay phiên Hub ⇒ đọc cả khi Hub chưa đăng nhập.
+  async function loadReview() {
+    const r = await send({ type: "quay:review" });
+    if (r?.model) S.review = r.model;
+    render();
+  }
+
+  async function doReviewScan() {
+    S.reviewScan = { scanning: true, note: "", copied: "" };
+    render();
+    const r = await send({ type: "scanNow" });
+    S.reviewScan = {
+      scanning: false,
+      note: r?.ok ? "Quét xong. Kết quả từng kênh ở trên." : `Chưa quét được: ${r?.error ?? "không rõ lý do"}`,
+      copied: "",
+    };
+    loadReview();
+  }
+
+  async function doReviewCopy(btn) {
+    const ref = btn.dataset.ref;
+    try {
+      await navigator.clipboard.writeText(ref);
+      S.reviewScan = { ...S.reviewScan, copied: ref };
+    } catch {
+      S.reviewScan = { ...S.reviewScan, copied: "", note: `Máy không cho chép. Ghi lại mã ${ref} để gửi người quản lý.` };
+    }
+    render();
+  }
+
   let bookTimer = null;
   let indTimer = null;
   function refreshAll() {
+    loadReview();
     loadBookings();
     if (S.q) loadRecent();
     loadBoard();
@@ -187,6 +221,7 @@ export function mount({ bridge, plugins = [] } = {}) {
   }
 
   async function start() {
+    loadReview();
     await hello();
     loadRecent(); // số trên nút gập lúc tải trang (userscript: loadRecent)
     loadIndicators();
@@ -204,6 +239,11 @@ export function mount({ bridge, plugins = [] } = {}) {
     S.web = null;
     S.webBan = null;
     start();
+  });
+
+  // Lượt quét nào xong (hẹn giờ hay bấm tay) cũng ghi `status` ⇒ khối Thu review vẽ lại ngay.
+  chrome.storage?.onChanged?.addListener((changes, area) => {
+    if (area === "local" && changes.status) loadReview();
   });
 
   // Tin từ service worker: lời báo đẩy token (userscript: notify).
@@ -273,7 +313,7 @@ export function mount({ bridge, plugins = [] } = {}) {
     const c = W.webOrderCard(o);
     const act = canResolve
       ? `<div class="ota-row" style="margin:6px 0 0"><button class="ota-btn" data-act="webDone" data-id="${esc(o.id)}" data-code="${esc(o.orderCode)}">Đã xử lý</button><span class="ota-muted">Bấm sau khi PMS đã đủ booking của đơn</span></div>`
-      : `<div class="ota-muted">Lễ tân của cơ sở bấm Đã xử lý sau khi PMS đủ booking.</div>`;
+      : `<div class="ota-muted">Lễ tân của chi nhánh bấm Đã xử lý sau khi PMS đủ booking.</div>`;
     return `<div class="ota-card" data-web-order="${esc(o.orderCode)}">
       <div class="ota-t"><span>${esc(c.title)}</span>${c.received ? `<span class="ota-muted" style="white-space:nowrap">nhận ${esc(c.received)}</span>` : ""}</div>
       <div class="ota-m bad">${esc(c.gap)}</div>
@@ -393,7 +433,7 @@ export function mount({ bridge, plugins = [] } = {}) {
   // Tab chính: booking lỗi trước (một booking cụ thể chưa vào PMS hay chưa khoá G2J), rồi chỉ báo.
   function todoTab() {
     const r = S.recent;
-    const t = T.todoModel({ recent: r, ind: S.view?.session === "ok" ? indModel() : null });
+    const t = T.todoModel({ recent: r, ind: S.view?.session === "ok" ? indModel() : null, review: R.reviewProblemCount(S.review) });
     let book;
     if (!r || (r.loading && !t.bookingsKnown)) book = `<div class="ota-muted">Đang tải...</div>`;
     else {
@@ -406,13 +446,14 @@ export function mount({ bridge, plugins = [] } = {}) {
     const ban = S.lockBan ? `<div class="qban ${S.lockBan.ok ? "ok" : "bad"}" role="status">${esc(S.lockBan.text)}<button data-act="lockBanX">Ẩn</button></div>` : "";
     const m = indModel();
     return `${ban}<section class="qsec-b" aria-label="Booking OTA lỗi">${secHead("Booking OTA lỗi", t.issues.length, true)}${book}</section>
-      <section class="qsec-b" aria-label="Chỉ báo đang vượt">${secHead("Chỉ báo đang vượt", t.exceeded, m?.level === "cb")}${indicatorsBlock()}</section>`;
+      <section class="qsec-b" aria-label="Chỉ báo đang vượt">${secHead("Chỉ báo đang vượt", t.exceeded, m?.level === "cb")}${indicatorsBlock()}</section>
+      <section class="qsec-b" aria-label="Thu review">${secHead("Thu review", t.review, true)}${R.reviewBlockHTML(S.review, S.reviewScan)}</section>`;
   }
 
   function tabsHTML() {
-    const t = T.todoModel({ recent: S.recent, ind: S.view?.session === "ok" ? indModel() : null });
+    const t = T.todoModel({ recent: S.recent, ind: S.view?.session === "ok" ? indModel() : null, review: R.reviewProblemCount(S.review) });
     const m = S.view?.session === "ok" ? indModel() : null;
-    const bad = t.issues.length > 0 || m?.level === "cb";
+    const bad = t.issues.length > 0 || m?.level === "cb" || t.review > 0;
     const web = S.web?.orders?.length ?? 0;
     const badge = { todo: t.count ? `<span class="ct ${bad ? "bad" : ""}">${t.count}</span>` : "", bookings: web ? `<span class="ct bad">${web}</span>` : "" };
     const on = (id) => (!S.overlay && S.tab === id ? "on" : "");
@@ -550,6 +591,8 @@ export function mount({ bridge, plugins = [] } = {}) {
     else if (a === "noteX") S.note = null;
     else if (a === "retry") return start();
     else if (a === "retryInd") return loadIndicators();
+    else if (a === "reviewScan") return doReviewScan();
+    else if (a === "reviewCopy") return doReviewCopy(t);
     else if (a === "login") {
       // Thẻ <a> tự mở trang đăng nhập Hub ở tab mới; quay lại tab PMS là đọc lại phiên (visibilitychange).
       return;

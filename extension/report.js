@@ -18,7 +18,7 @@ export function parseSheetReply(status, body) {
   try {
     j = JSON.parse(body);
   } catch {
-    throw new SheetError(`Sheet trả về không phải JSON (HTTP ${status}). Kiểm lại URL Web App và quyền "Bất kỳ ai".`, true);
+    throw new SheetError(`Sheet trả về không phải JSON (HTTP ${status})`, true);
   }
   if (!j.ok) {
     const error = String(j.error ?? "không rõ");
@@ -78,73 +78,205 @@ export function makeErrorRef(random = (n) => crypto.getRandomValues(new Uint8Arr
 const CHANNEL_PREFIX = { booking: "BKG", agoda: "AGD", trip: "TRP", expedia: "EXP", traveloka: "TVL", go2joy: "G2J" };
 
 /**
- * Danh mục loại lỗi; luật đầu tiên khớp thắng. `hint` là việc nhân viên khách sạn tự làm được,
- * hiện ngay trong ô bật lên. Cập nhật docs/ma-loi.md khi thêm loại.
+ * Danh mục loại lỗi; luật đầu tiên khớp thắng. Mỗi loại mang lời hướng dẫn ba phần cho người đứng quầy
+ * (YC-158, user 21/10/2026: "hướng dẫn chi tiết hơn cho Lễ tân… văn phong giống người"):
+ * - `what`: chuyện gì đang xảy ra; `why`: vì sao; `steps`: làm gì tiếp, mỗi bước một câu.
+ * Câu viết như nói với đồng nghiệp: không tên kỹ thuật, không ký hiệu. Nút thật tên "Quét review ngay"
+ * (popup.html). Cập nhật docs/ma-loi.md khi thêm hay sửa loại.
  */
+const RESCAN = "Bấm biểu tượng Urban B trên thanh Chrome, rồi bấm Quét review ngay.";
+const SEND_REF = "Vẫn lỗi thì bấm Sao chép cạnh mã lỗi và gửi cho người quản lý.";
+
 const SHEET_KINDS = [
-  ["SHEET-CONFIG", /Chưa điền|cấu hình thu review/i, "Đăng nhập Hub rồi mở màn Cài extension; Hub chưa có Sheet thu review thì báo Quản trị hệ thống."],
-  ["SHEET-SECRET", /Sai mã bí mật/i, "Dán lại mã bí mật (lấy từ người quản lý), rồi bấm Thử Sheet."],
-  ["SHEET-NET", /Không gọi được Sheet/i, "Kiểm tra mạng của máy, rồi bấm Thử Sheet."],
-  ["SHEET-URL", /không phải JSON/i, "Kiểm tra URL Web App (phải kết thúc bằng /exec). Đúng mà vẫn lỗi thì gửi mã lỗi."],
-  ["SHEET-BUSY", /bận/i, "Sheet đang bận; lượt sau sẽ tự gửi lại. Lặp lại nhiều lần thì gửi mã lỗi."],
-  ["SHEET-OLD", /Hành động lạ/i, "Gửi mã lỗi cho người quản lý (Sheet đang chạy mã cũ)."],
-  ["SHEET-REJECT", /./, "Gửi mã lỗi cho người quản lý."],
+  ["SHEET-CONFIG", /Chưa điền|cấu hình thu review/i, {
+    what: "Máy này chưa biết gửi review về bảng tính nào.",
+    why: "Máy chưa nhận cấu hình thu review từ Hub.",
+    steps: ["Mở Hub trong Chrome này và đăng nhập.", "Mở màn Cài extension trên Hub, máy sẽ tự nhận cấu hình.", "Màn ấy báo thu review chưa cấu hình thì nhắn Quản trị hệ thống."],
+  }],
+  ["SHEET-SECRET", /Sai mã bí mật/i, {
+    what: "Bảng tính review không nhận bài từ máy này.",
+    why: "Mã khoá của bảng tính vừa được đổi mà máy chưa nhận mã mới.",
+    steps: ["Mở màn Cài extension trên Hub để máy nhận cấu hình mới.", RESCAN, "Vẫn lỗi thì bấm Sao chép cạnh mã lỗi và gửi cho Quản trị hệ thống."],
+  }],
+  ["SHEET-NET", /Không gọi được Sheet|Hết giờ chờ Sheet/i, {
+    what: "Máy không gửi được review về bảng tính.",
+    why: "Mạng của máy đang chập chờn hoặc bị ngắt.",
+    steps: ["Kiểm tra máy còn vào được mạng.", "Bạn không cần gửi lại, lượt quét sau máy tự gửi."],
+  }],
+  ["SHEET-URL", /không phải JSON/i, {
+    what: "Bảng tính review không trả lời đúng.",
+    why: "Địa chỉ bảng tính trên Hub đã cũ, hoặc bảng tính đang bị khoá quyền.",
+    steps: ["Bấm Sao chép cạnh mã lỗi và gửi cho Quản trị hệ thống để kiểm bảng tính thu review trên Hub."],
+  }],
+  ["SHEET-BUSY", /bận/i, {
+    what: "Bảng tính review đang bận nên chưa nhận bài.",
+    why: "Nhiều máy đang gửi cùng lúc.",
+    steps: ["Bạn không cần làm gì, lượt quét sau máy tự gửi lại.", "Lỗi lặp lại suốt cả ngày thì bấm Sao chép cạnh mã lỗi và gửi cho người quản lý."],
+  }],
+  ["SHEET-OLD", /Hành động lạ/i, {
+    what: "Bảng tính review không hiểu bài máy này gửi.",
+    why: "Bảng tính đang chạy bản cũ hơn extension.",
+    steps: ["Bấm Sao chép cạnh mã lỗi và gửi cho người quản lý để cập nhật bảng tính."],
+  }],
+  ["SHEET-REJECT", /./, {
+    what: "Bảng tính review từ chối bài từ máy này.",
+    why: "Chưa rõ nguyên nhân.",
+    steps: ["Bấm Sao chép cạnh mã lỗi và gửi cho người quản lý."],
+  }],
 ];
 
 // Gửi Hub (hub.js) hỏng không làm hỏng lượt gửi Sheet; lỗi vẫn vào nhật ký như mọi lỗi khác.
 const HUB_KINDS = [
-  ["HUB-ORIGIN", /FORBIDDEN_ORIGIN/, "Chạy lệnh cập nhật extension; vẫn lỗi thì gửi mã lỗi cho người quản lý."],
-  ["HUB-SCOPE", /quyền thêm review|ngoài phạm vi/i, "Đăng nhập Hub đúng tài khoản lễ tân của cơ sở này. Đúng tài khoản mà vẫn lỗi thì gửi mã lỗi cho người quản lý."],
-  ["HUB-LOGIN", /Chưa đăng nhập Hub/i, "Bấm Đăng nhập Hub trong ô UrbanB, đăng nhập bằng tài khoản của bạn, rồi bấm Quét review ngay."],
-  ["HUB-OFF", /chưa bật/i, "Gửi mã lỗi cho người quản lý (Hub chưa mở cửa nhận review)."],
-  ["HUB-NET", /Không gọi được Hub/i, "Kiểm tra mạng của máy; lượt quét sau sẽ tự gửi lại."],
-  ["HUB-ROWS", /bài Hub không nhận/i, "Không cần làm gì: các bài khác vẫn được gửi. Gửi mã lỗi để người quản lý sửa."],
-  ["HUB-REJECT", /./, "Gửi mã lỗi cho người quản lý."],
+  ["HUB-ORIGIN", /FORBIDDEN_ORIGIN/, {
+    what: "Hub không nhận review từ extension trên máy này.",
+    why: "Extension trên máy đã cũ.",
+    steps: ["Mở màn Cài extension trên Hub.", "Làm lại bước chạy lệnh cài ở mục 1 để lên bản mới.", SEND_REF],
+  }],
+  ["HUB-SCOPE", /quyền thêm review|ngoài phạm vi/i, {
+    what: "Hub không nhận review vì tài khoản đang đăng nhập không thuộc chi nhánh này.",
+    why: "Chrome này đang đăng nhập Hub bằng tài khoản của người khác hoặc của chi nhánh khác.",
+    steps: ["Mở Hub, đăng xuất, rồi đăng nhập bằng tài khoản Lễ tân của chi nhánh này.", RESCAN, "Đúng tài khoản mà vẫn lỗi thì bấm Sao chép cạnh mã lỗi và gửi cho người quản lý."],
+  }],
+  ["HUB-LOGIN", /Chưa đăng nhập Hub/i, {
+    what: "Review chưa lên Hub vì Chrome này chưa đăng nhập Hub.",
+    why: "Phiên đăng nhập Hub đã hết hạn, hoặc có người vừa đăng xuất.",
+    steps: ["Bấm biểu tượng Urban B trên thanh Chrome, rồi bấm Đăng nhập Hub.", "Đăng nhập bằng tài khoản của bạn.", "Quay lại biểu tượng Urban B và bấm Quét review ngay."],
+  }],
+  ["HUB-OFF", /chưa bật/i, {
+    what: "Hub chưa mở chỗ nhận review từ máy quầy.",
+    why: "Phần nhận review trên Hub đang tắt.",
+    steps: ["Bấm Sao chép cạnh mã lỗi và gửi cho người quản lý."],
+  }],
+  ["HUB-NET", /Không gọi được Hub|Hết giờ chờ Hub/i, {
+    what: "Máy không gửi được review lên Hub.",
+    why: "Mạng của máy đang chập chờn hoặc bị ngắt.",
+    steps: ["Kiểm tra máy còn vào được mạng.", "Bạn không cần gửi lại, lượt quét sau máy tự gửi."],
+  }],
+  ["HUB-ROWS", /bài Hub không nhận/i, {
+    what: "Hub không nhận vài bài review trong lượt này.",
+    why: "Các bài ấy thiếu thông tin Hub cần.",
+    steps: ["Bạn không cần làm gì, các bài khác đã lên Hub.", "Bấm Sao chép cạnh mã lỗi và gửi cho người quản lý để kiểm."],
+  }],
+  ["HUB-REJECT", /./, {
+    what: "Hub từ chối review từ máy này.",
+    why: "Chưa rõ nguyên nhân.",
+    steps: ["Chờ lượt quét sau, máy tự thử lại.", SEND_REF],
+  }],
 ];
 
 const CHANNEL_KINDS = [
-  ["LOGIN", (stage) => stage === "đăng nhập", "Mở {kênh} trong Chrome này, đăng nhập lại, rồi bấm Quét ngay."],
-  ["MULTI", /thấy \d+ chỗ nghỉ/i, "Báo Quản trị hệ thống điền mã {kênh} của cơ sở trên Hub, rồi bấm Quét ngay."],
-  ["NOID", /Không dò được mã/i, "Báo Quản trị hệ thống điền mã {kênh} của cơ sở trên Hub, rồi bấm Quét ngay."],
-  ["PAGE", /chuyển sang .* (thay vì trang review|giữa lượt quét)/i, "Mở trang review của {kênh} trong Chrome này xem có vào được không. Kênh có ô mã khách sạn thì kiểm lại ô đó, rồi bấm Quét ngay; vẫn lỗi thì gửi mã lỗi."],
-  ["OPEN", /Chưa mở được|không tải được/i, "Đừng bấm dừng hay đóng tab mà extension tự mở. Vẫn lỗi thì mở {kênh} trong Chrome này xem có vào được không, rồi bấm Quét ngay."],
-  ["TIMEOUT", /Hết giờ chờ trang tải/i, "Trang {kênh} tải quá chậm. Kiểm tra mạng, bấm Quét ngay; lặp lại thì gửi mã lỗi."],
-  ["TAB", (stage, m) => stage === "mở tab" || /No tab with id|Tab bị đóng/i.test(m), "Đừng đóng tab mà extension tự mở. Bấm Quét ngay; lặp lại thì gửi mã lỗi."],
-  ["CAPTURE", /Không bắt được request|Không thấy request|Không đọc được phiên|không có SupplyReviewsQuery/i, "Mở trang review của {kênh} xem có tải được không, rồi bấm Quét ngay; vẫn lỗi thì gửi mã lỗi."],
-  ["HTTP", /HTTP \d+/i, "Gửi mã lỗi cho người quản lý."],
-  ["API", /báo lỗi/i, "Gửi mã lỗi cho người quản lý."],
-  ["NORM", (stage) => stage === "chuẩn hoá", "Không cần làm gì: các bài khác vẫn được gửi. Gửi mã lỗi để người quản lý sửa."],
-  ["SCAN", () => true, "Gửi mã lỗi cho người quản lý."],
+  ["LOGIN", (stage) => stage === "đăng nhập", {
+    what: "Máy không vào được trang {kênh} vì tài khoản {kênh} trên Chrome này đã bị đăng xuất.",
+    why: "Trang {kênh} tự đăng xuất sau một thời gian, hoặc có người vừa đăng xuất.",
+    steps: ["Mở trang quản lý khách sạn của {kênh} trong Chrome này.", "Đăng nhập bằng tài khoản {kênh} của chi nhánh.", RESCAN],
+  }],
+  ["MULTI", /thấy \d+ chỗ nghỉ/i, {
+    what: "Máy chưa biết lấy review của chỗ nghỉ nào trên {kênh}.",
+    why: "Tài khoản {kênh} này quản lý nhiều chỗ nghỉ, mà Hub chưa ghi mã {kênh} của chi nhánh.",
+    steps: ["Nhắn Quản trị hệ thống điền mã {kênh} của chi nhánh trên Hub.", "Khi Quản trị hệ thống báo đã điền xong, bấm biểu tượng Urban B rồi bấm Quét review ngay."],
+  }],
+  ["NOID", /Không dò được mã/i, {
+    what: "Máy không tìm ra mã chỗ nghỉ của chi nhánh trên {kênh}.",
+    why: "Trang {kênh} không cho biết mã, và Hub cũng chưa ghi mã ấy.",
+    steps: ["Nhắn Quản trị hệ thống điền mã {kênh} của chi nhánh trên Hub.", "Khi Quản trị hệ thống báo đã điền xong, bấm biểu tượng Urban B rồi bấm Quét review ngay."],
+  }],
+  ["PAGE", /chuyển sang .* (thay vì trang review|giữa lượt quét)/i, {
+    what: "Trang {kênh} tự chuyển sang trang khác khi máy đang đọc review.",
+    why: "Thường là mã chỗ nghỉ ghi trên Hub bị sai, hoặc {kênh} vừa đổi trang.",
+    steps: ["Mở trang review của {kênh} trong Chrome này, xem có vào được không.", "Vào được thì bấm biểu tượng Urban B rồi bấm Quét review ngay.", "Vẫn lỗi thì bấm Sao chép cạnh mã lỗi và gửi cho người quản lý để kiểm mã chỗ nghỉ trên Hub."],
+  }],
+  ["OPEN", /Chưa mở được|không tải được/i, {
+    what: "Máy không mở được trang {kênh}.",
+    why: "Máy đang mất mạng, hoặc tab máy tự mở để đọc review bị dừng hay bị chặn.",
+    steps: ["Kiểm tra máy còn vào được mạng.", "Lần sau thấy tab {kênh} tự mở thì cứ để nó, tab tự đóng khi đọc xong.", RESCAN],
+  }],
+  ["TIMEOUT", /Hết giờ chờ|timed out|timeout/i, {
+    what: "Trang {kênh} tải quá lâu nên máy dừng lượt đọc này.",
+    why: "Mạng của máy chậm, hoặc trang {kênh} đang chậm.",
+    steps: ["Kiểm tra mạng của máy.", RESCAN, "Lỗi lặp lại nhiều lần thì bấm Sao chép cạnh mã lỗi và gửi cho người quản lý."],
+  }],
+  ["TAB", (stage, m) => stage === "mở tab" || /No tab with id|Tab bị đóng/i.test(m), {
+    what: "Tab {kênh} bị đóng khi máy đang đọc review.",
+    why: "Có người đóng tab mà máy tự mở để đọc review.",
+    steps: ["Lần sau thấy tab {kênh} tự mở thì cứ để nó, tab tự đóng khi đọc xong.", RESCAN],
+  }],
+  ["CAPTURE", /Không bắt được request|Không thấy request|Không đọc được phiên|không có SupplyReviewsQuery/i, {
+    what: "Máy mở được trang {kênh} nhưng không đọc được danh sách review.",
+    why: "Trang chưa tải hết, hoặc {kênh} vừa đổi giao diện.",
+    steps: ["Mở trang review của {kênh} trong Chrome này, xem danh sách review có hiện không.", RESCAN, SEND_REF],
+  }],
+  ["HTTP", /HTTP \d+/i, {
+    what: "Trang {kênh} báo lỗi khi máy hỏi danh sách review.",
+    why: "Phía {kênh} đang trục trặc, hoặc mã chỗ nghỉ ghi trên Hub không đúng.",
+    steps: ["Bạn chờ lượt quét sau, máy tự thử lại.", "Lỗi còn sau vài giờ thì bấm Sao chép cạnh mã lỗi và gửi cho người quản lý."],
+  }],
+  ["API", /báo lỗi/i, {
+    what: "{kênh} từ chối trả danh sách review.",
+    why: "Tài khoản đang đăng nhập có thể không được xem review, hoặc phía {kênh} đang lỗi.",
+    steps: ["Mở trang review của {kênh} trong Chrome này, xem bạn có xem được review không.", "Không xem được thì đăng nhập lại bằng tài khoản {kênh} của chi nhánh.", SEND_REF],
+  }],
+  ["NORM", (stage) => stage === "chuẩn hoá", {
+    what: "Có vài bài review {kênh} máy đọc không trọn.",
+    why: "Các bài ấy có dạng lạ mà extension chưa đọc được.",
+    steps: ["Bạn không cần làm gì, các bài khác vẫn lên Hub.", "Bấm Sao chép cạnh mã lỗi và gửi cho người quản lý để sửa extension."],
+  }],
+  ["SCAN", () => true, {
+    what: "Máy gặp lỗi lạ khi đọc review {kênh}.",
+    why: "Chưa rõ nguyên nhân.",
+    steps: [RESCAN, SEND_REF],
+  }],
 ];
 
 function matches(rule, stage, message) {
   return typeof rule === "function" ? rule(stage, message) : rule.test(message);
 }
 
-/** Loại lỗi + cách xử lý, suy từ kênh, giai đoạn và thông điệp. */
+function fill(help, label) {
+  const f = (t) => t.replaceAll("{kênh}", label);
+  return { what: f(help.what), why: f(help.why), steps: help.steps.map(f) };
+}
+
+/** Một dòng chữ gọn của lời hướng dẫn, cho Sheet và cho chỗ chỉ có một dòng. */
+export function helpText(help) {
+  return [help.what, help.why, ...help.steps].filter(Boolean).join(" ");
+}
+
+/** Mọi loại lỗi với lời hướng dẫn đã điền tên kênh — cho test soi chữ. */
+export function errorHelpCatalog(label = CHANNEL_LABEL.agoda) {
+  return [
+    ...SHEET_KINDS.map(([code, , help]) => ({ code, help })),
+    ...HUB_KINDS.map(([code, , help]) => ({ code, help })),
+    ...CHANNEL_KINDS.map(([code, , help]) => ({ code, help: fill(help, label) })),
+  ];
+}
+
+/** Loại lỗi + lời hướng dẫn, suy từ kênh, giai đoạn và thông điệp. `hint` = bản một dòng của `help`. */
 export function classifyError(channel, stage, message) {
   const m = String(message ?? "");
+  let code;
+  let help;
   if (stage === "gửi Hub") {
-    const [code, , hint] = HUB_KINDS.find(([, re]) => re.test(m));
-    return { code, hint };
+    [code, , help] = HUB_KINDS.find(([, re]) => re.test(m));
+  } else if (stage === "gửi Sheet" || !CHANNEL_PREFIX[channel]) {
+    [code, , help] = SHEET_KINDS.find(([, re]) => re.test(m)) ?? SHEET_KINDS[SHEET_KINDS.length - 1];
+  } else {
+    const [kind, , h] = CHANNEL_KINDS.find(([, rule]) => matches(rule, stage, m));
+    code = `${CHANNEL_PREFIX[channel]}-${kind}`;
+    help = fill(h, CHANNEL_LABEL[channel]);
   }
-  if (stage === "gửi Sheet" || !CHANNEL_PREFIX[channel]) {
-    const [code, , hint] = SHEET_KINDS.find(([, re]) => re.test(m)) ?? SHEET_KINDS[SHEET_KINDS.length - 1];
-    return { code, hint };
-  }
-  const [kind, , hint] = CHANNEL_KINDS.find(([, rule]) => matches(rule, stage, m));
-  return { code: `${CHANNEL_PREFIX[channel]}-${kind}`, hint: hint.replaceAll("{kênh}", CHANNEL_LABEL[channel]) };
+  return { code, hint: helpText(help), help };
 }
 
 /** Một dòng nhật ký lỗi. `id` để xoá đúng dòng đã gửi khỏi hàng đợi; `ref` để người dùng báo lại. */
 export function makeLogEntry({ at, channel = "", stage, error, url = "", detail }) {
   const message = String(error?.message ?? error ?? "").slice(0, 500);
-  const { code, hint } = classifyError(channel, stage, message);
+  const { code, hint, help } = classifyError(channel, stage, message);
   return {
     id: crypto.randomUUID(),
     ref: makeErrorRef(),
     code,
     hint,
+    help,
     at: at ?? new Date().toISOString(),
     channel,
     stage,

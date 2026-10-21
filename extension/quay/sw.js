@@ -9,8 +9,11 @@ import * as H from "./hub-quay.js";
 import * as N from "./notifications.js";
 import * as W from "./web-orders.js";
 import { DEV_FLAGS } from "../env.js";
-import { BRANCH_KEY, HUB_COLLECT_KEY, MINE_KEY, loadEffectiveConfig, parseHubSettings, reviewMissingText } from "../hub-config.js";
-import { loadStatus } from "../config.js";
+import { BRANCH_KEY, HUB_COLLECT_KEY, MINE_KEY, loadEffectiveConfig, parseHubSettings, reviewMissingHelp, reviewMissingText } from "../hub-config.js";
+import { CHANNELS, loadStatus } from "../config.js";
+import { CHANNEL_LABEL } from "../report.js";
+import { reviewStatusModel } from "./review-status.js";
+import { HUB_TIMEOUT_MS, isTimeout } from "./net.js";
 
 const K = {
   hub: "quayHubOrigin",
@@ -51,7 +54,9 @@ export async function hubOriginNow() {
 /** fetch tới Hub kèm cookie phiên. Trả `{ status, url, redirected, json }` hoặc `{ netError }`. */
 export async function hubFetch(url, init = {}) {
   try {
-    const res = await fetch(url, { ...init, credentials: "include", cache: "no-store" });
+    // Lượt gọi tự có hạn (Booking OTA truyền `signal` riêng, dài hơn) ⇒ không lượt nào treo mãi (YC-158).
+    const signal = init.signal ?? AbortSignal.timeout(HUB_TIMEOUT_MS);
+    const res = await fetch(url, { ...init, signal, credentials: "include", cache: "no-store" });
     let json = null;
     const type = res.headers.get("content-type") ?? "";
     if (type.includes("json")) {
@@ -61,7 +66,7 @@ export async function hubFetch(url, init = {}) {
     }
     return { status: res.status, url: res.url, redirected: res.redirected, json };
   } catch (e) {
-    return { netError: String(e?.message ?? e) };
+    return { netError: isTimeout(e) ? "Hết giờ chờ Hub trả lời" : String(e?.message ?? e) };
   }
 }
 
@@ -193,7 +198,7 @@ async function reportCodeOutcome(target, otaSync, outcome) {
 // ---------- Apps Script ----------
 
 async function scriptGet(otaSync, params) {
-  if (!otaSync) throw new B.ApiError("no-code", "Hub chưa có mã kết nối Booking OTA của cơ sở này.");
+  if (!otaSync) throw new B.ApiError("no-code", "Hub chưa có mã kết nối Booking OTA của chi nhánh này.");
   if (!B.isAppsScriptUrl(otaSync.webAppUrl)) throw new B.ApiError("no-code", "Mã kết nối Hub trả về không phải URL Web App Apps Script.");
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), B.GET_TIMEOUT_MS);
@@ -428,7 +433,7 @@ async function go2joyTarget(quiet) {
   if (!t?.ask) return t;
   if (!quiet && now() - askedAt > ASK_AGAIN_MS) {
     askedAt = now();
-    broadcast({ type: "quay:tokenNote", kind: "go2joy", tone: "warn", text: `Chưa gửi token Go2Joy: tài khoản Hub có ${t.count} cơ sở. Bấm icon UrbanB trên thanh Chrome, chọn cơ sở của máy này.` });
+    broadcast({ type: "quay:tokenNote", kind: "go2joy", tone: "warn", text: `Chưa gửi token Go2Joy: tài khoản Hub có ${t.count} chi nhánh. Bấm icon UrbanB trên thanh Chrome, chọn chi nhánh của máy này.` });
   }
   return null;
 }
@@ -522,10 +527,22 @@ export async function extStatus(pageOrigin, path) {
     chosenId: chosenId ?? "",
     pms,
     snap,
-    review: { configured: !reviewMissingText(cfg.review), fromHub: cfg.review.fromHub.sheet, channels: status },
+    review: { configured: !reviewMissingText(cfg.review), fromHub: cfg.review.fromHub.sheet, model: reviewModelOf(cfg, status) },
   });
   return { ok: true, status: view };
 }
+
+/** Mô hình thu review của máy này (quay/review-status.js), chỉ tính kênh đang bật. */
+function reviewModelOf(cfg, status) {
+  return reviewStatusModel({ status, order: CHANNELS, enabled: cfg.enabled, labels: CHANNEL_LABEL, missing: reviewMissingHelp(cfg.review) });
+}
+
+/** YC-158 — dòng Thu review của khung quầy: đọc bộ nhớ, không gọi mạng. */
+export async function reviewStatus() {
+  const [cfg, status] = await Promise.all([loadEffectiveConfig(), loadStatus()]);
+  return { ok: true, model: reviewModelOf(cfg, status) };
+}
+
 
 export async function setHubOrigin(origin) {
   const o = H.hubOrigin(origin);
@@ -595,6 +612,7 @@ const HANDLERS = {
   "quay:lock": (m) => lock(String(m.hotelId ?? ""), String(m.sourceKey ?? ""), Boolean(m.confirmPaid)),
   "quay:indicators": (m) => indicators(String(m.hotelId ?? "")),
   "quay:webOrders": (m) => webOrders(String(m.hotelId ?? "")),
+  "quay:review": () => reviewStatus(),
   "quay:webOrderResolve": (m) => resolveWebOrder(String(m.hotelId ?? ""), String(m.id ?? "")),
   "quay:token": (m, sender) => onToken(m, sender?.tab?.id),
   "quay:pageHotel": (m, sender) => onPageHotel(m.hotelId, sender?.tab?.id),

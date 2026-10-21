@@ -9,6 +9,7 @@
 // Lỗi JSON: NOT_SIGNED_IN 401 · MISSING_HOTEL 400 · HOTEL_NOT_LINKED 404 · OUT_OF_SCOPE 403 · FORBIDDEN_ORIGIN 403 ·
 //           BRANCH_NOT_FOUND 404 · INVALID_QUERY 400.
 
+import { hubChannels } from "./review-status.js";
 import { DEFAULT_HUB_ORIGIN, HUB_ORIGINS } from "../env.js";
 
 export const CONNECTION_PATH = "/api/extension/connection";
@@ -132,8 +133,8 @@ const isoOrNull = (v) => {
  * - `session`: trạng thái phiên Hub (ok · nobranch ⇒ đã đăng nhập; out · expired ⇒ chưa; khác ⇒ null).
  * - `pms`: `{ at, hotelId }` lần gần nhất khung chạy trên PMS; tên cơ sở tra theo danh sách `branches`,
  *   không có thì theo tên khung đã nhận (`snap.branchName` của cùng mã KS).
- * - `review`: `{ configured, fromHub, channels }`, `channels` = trạng thái từng kênh (config.js loadStatus);
- *   `lastScanAt` = giờ lượt quét gần nhất của kênh bất kỳ.
+ * - `review`: `{ configured, fromHub, model }`, `model` = `reviewStatusModel(...)` (quay/review-status.js);
+ *   tin trả `lastScanAt` = giờ lượt quét ỔN gần nhất và `channels` = lỗi từng kênh đang bật (YC-158).
  */
 export function extStatusOf({ version, hub, pageOrigin, session, branches, chosenId, pms, snap, review }) {
   const pick = pickBranch(branches ?? null, chosenId ?? "");
@@ -147,14 +148,15 @@ export function extStatusOf({ version, hub, pageOrigin, session, branches, chose
     signedIn: session === "ok" || session === "nobranch" ? true : session === "out" || session === "expired" ? false : null,
     branch: pick.branch ? { id: pick.branch.id, name: pick.branch.name } : null,
     pms: { lastSeenAt: isoOrNull(pms?.at), hotelName: listed?.name || shown || null },
-    review: { configured: Boolean(review?.configured), fromHub: Boolean(review?.fromHub), lastScanAt: lastScanAt(review?.channels) },
+    // YC-158: `lastScanAt` là lượt quét ỔN gần nhất của kênh đang bật (trước đây tính cả lượt lỗi và kênh
+    // đã tắt ⇒ máy hỏng hết vẫn hiện "Quét lần cuối 14:05"); `channels` là lỗi từng kênh cho màn Cài extension.
+    review: {
+      configured: Boolean(review?.configured),
+      fromHub: Boolean(review?.fromHub),
+      lastScanAt: review?.model?.lastOkAt ?? null,
+      channels: review?.model ? hubChannels(review.model) : [],
+    },
   };
-}
-
-/** Giờ lượt quét gần nhất trong trạng thái các kênh; chưa quét kênh nào ⇒ null. */
-export function lastScanAt(channels) {
-  const times = Object.values(channels ?? {}).map((s) => Date.parse(s?.at ?? "")).filter((t) => !Number.isNaN(t));
-  return times.length ? new Date(Math.max(...times)).toISOString() : null;
 }
 
 /**
@@ -198,10 +200,10 @@ export function branchPicker(branches, chosenId) {
   return {
     ask: pick.state === "ask",
     value: pick.branch?.id ?? "",
-    options: [{ value: "", label: "Chọn cơ sở…" }, ...branches.map((b) => ({ value: b.id, label: label(b) }))],
+    options: [{ value: "", label: "Chọn chi nhánh…" }, ...branches.map((b) => ({ value: b.id, label: label(b) }))],
     text: pick.state === "ask"
-      ? `Tài khoản Hub của bạn có ${branches.length} cơ sở. Chọn cơ sở của máy quầy này để token Go2Joy gửi đúng Apps Script của khách sạn.`
-      : "Token Go2Joy gửi về Apps Script của cơ sở này.",
+      ? `Tài khoản Hub của bạn có ${branches.length} chi nhánh. Chọn chi nhánh của máy quầy này để token Go2Joy gửi về đúng khách sạn.`
+      : "Token Go2Joy gửi về bảng tính của chi nhánh này.",
   };
 }
 
@@ -316,7 +318,7 @@ export function frameSubtitle({ session, branchName, why }) {
   if (session === "nobranch" || why) return "Cơ sở: chưa xác định";
   if (UNREACHABLE.has(session) && !branchName) return "Không gọi được Hub";
   if (session === "expired") return `${branchName || "Cơ sở đã nhận"} · phiên Hub đã hết`;
-  return branchName ? `${branchName} · theo PMS đang mở` : "Đang đọc cơ sở…";
+  return branchName ? `${branchName} · theo PMS đang mở` : "Đang đọc chi nhánh…";
 }
 
 /**
@@ -328,33 +330,33 @@ export function blockedNote({ session, why, hotelId, branchName, hasCache = fals
     return {
       tone: "",
       title: "Đăng nhập Hub để bắt đầu.",
-      text: "Đăng nhập xong, khung tự nhận mã kết nối Booking OTA của cơ sở, hiện bảng khoá G2J, chỉ báo công suất và thông báo của bạn.",
+      text: "Đăng nhập xong, khung tự nhận mã kết nối Booking OTA của chi nhánh, hiện bảng khoá G2J, chỉ báo công suất và thông báo của bạn.",
       login: true,
     };
   if (UNREACHABLE.has(session) && !hasCache)
     return {
       tone: "bad",
       title: "Không gọi được Hub.",
-      text: "Khung chưa nhận được cấu hình của cơ sở lần nào trên máy này. Kiểm tra mạng của máy quầy rồi bấm Thử lại.",
+      text: "Khung chưa nhận được cấu hình của chi nhánh lần nào trên máy này. Kiểm tra mạng của máy quầy rồi bấm Thử lại.",
       retry: true,
     };
   if (session !== "nobranch") return null;
   if (why === "unmapped")
     return {
       tone: "bad",
-      title: "Khách sạn đang mở trên PMS chưa được ghép với cơ sở nào trên Hub.",
-      text: `Mã khách sạn ezCloud: ${hotelId}. Báo Quản trị hệ thống ghép mã này với cơ sở trên Hub; ghép xong, khung tự hiện booking và chỉ báo.`,
+      title: "Khách sạn đang mở trên PMS chưa được ghép với chi nhánh nào trên Hub.",
+      text: `Mã khách sạn ezCloud: ${hotelId}. Báo Quản trị hệ thống ghép mã này với chi nhánh trên Hub; ghép xong, khung tự hiện booking và chỉ báo.`,
     };
   if (why === "scope")
     return {
       tone: "",
-      title: branchName ? `PMS đang mở ${branchName}.` : "PMS đang mở một cơ sở bạn không được gán.",
-      text: "Tài khoản đang đăng nhập Hub không được gán cơ sở này. Đổi khách sạn trên PMS về cơ sở của bạn để xem.",
+      title: branchName ? `PMS đang mở ${branchName}.` : "PMS đang mở một chi nhánh bạn không được gán.",
+      text: "Tài khoản đang đăng nhập Hub không được gán chi nhánh này. Đổi khách sạn trên PMS về chi nhánh của bạn để xem.",
     };
   return {
     tone: "",
-    title: "Chưa biết PMS đang mở cơ sở nào.",
-    text: "Khung đọc cơ sở từ yêu cầu PMS gửi đi. Mở một màn bất kỳ của PMS (ví dụ Sơ đồ phòng) là có.",
+    title: "Chưa biết PMS đang mở chi nhánh nào.",
+    text: "Khung đọc chi nhánh từ yêu cầu PMS gửi đi. Mở một màn bất kỳ của PMS (ví dụ Sơ đồ phòng) là có.",
   };
 }
 
@@ -362,8 +364,8 @@ export function blockedNote({ session, why, hotelId, branchName, hasCache = fals
 export function noCodeNote(branchName) {
   return {
     tone: "bad",
-    title: `Hub chưa có mã kết nối Booking OTA của ${branchName || "cơ sở này"}.`,
-    text: "Báo Quản trị hệ thống nhập mã kết nối cho cơ sở trên Hub. Nhập xong, bấm Làm mới.",
+    title: `Hub chưa có mã kết nối Booking OTA của ${branchName || "chi nhánh này"}.`,
+    text: "Báo Quản trị hệ thống nhập mã kết nối cho chi nhánh trên Hub. Nhập xong, bấm Làm mới.",
   };
 }
 
@@ -371,7 +373,7 @@ export function noCodeNote(branchName) {
 export function rejectedCodeNote(branchName, message) {
   return {
     tone: "bad",
-    title: `Apps Script từ chối mã kết nối Booking OTA của ${branchName || "cơ sở này"}.`,
+    title: `Apps Script từ chối mã kết nối Booking OTA của ${branchName || "chi nhánh này"}.`,
     text: `Hub đã được báo để Quản trị hệ thống kiểm lại mã. Lời Apps Script: ${message}`,
   };
 }
@@ -413,7 +415,7 @@ export function hhmm(at) {
  */
 export function dockModel({ session, booking, indicators }) {
   if (session === "out") return { segs: [{ dot: "off", text: "chưa đăng nhập" }] };
-  if (session === "nobranch") return { segs: [{ dot: "off", text: "chưa biết cơ sở" }] };
+  if (session === "nobranch") return { segs: [{ dot: "off", text: "chưa biết chi nhánh" }] };
   const segs = [];
   if (booking) segs.push({ text: booking.issues ? `Booking ${booking.issues} lỗi` : `Booking ${booking.count}`, bad: booking.issues > 0 });
   if (session === "expired") segs.push({ dot: "off", text: "Chỉ báo dừng cập nhật" });
@@ -441,11 +443,11 @@ export function popupPmsRow(snap) {
     };
   const subs = [];
   const b = snap.booking;
-  const branch = snap.branchName || "cơ sở";
+  const branch = snap.branchName || "chi nhánh";
   const unmapped = session === "nobranch" && snap.why === "unmapped";
   const unreachable = UNREACHABLE.has(session) || snap.codeState === "unknown";
   if (session === "nobranch")
-    subs.push({ tone: unmapped ? "err" : "warn", text: unmapped ? "Booking OTA · Khoá G2J: khách sạn đang mở trên PMS chưa được ghép với cơ sở nào trên Hub — báo Quản trị hệ thống" : "Booking OTA · Khoá G2J: chưa biết PMS đang mở cơ sở nào", at: null });
+    subs.push({ tone: unmapped ? "err" : "warn", text: unmapped ? "Booking OTA · Khoá G2J: khách sạn đang mở trên PMS chưa được ghép với chi nhánh nào trên Hub — báo Quản trị hệ thống" : "Booking OTA · Khoá G2J: chưa biết PMS đang mở chi nhánh nào", at: null });
   else if (unreachable && !b?.count && snap.codeState !== "ok") subs.push({ tone: "err", text: "Booking OTA · Khoá G2J: không gọi được Hub, máy chưa nhận mã kết nối lần nào", at: b?.at });
   else if (snap.codeState === "none") subs.push({ tone: "err", text: `Booking OTA · Khoá G2J: Hub chưa có mã kết nối Booking OTA của ${branch} — báo Quản trị hệ thống`, at: b?.at });
   else if (snap.codeState === "rejected") subs.push({ tone: "err", text: `Booking OTA · Khoá G2J: Apps Script từ chối mã kết nối của ${branch} — đã báo Hub`, at: b?.at });
@@ -455,7 +457,7 @@ export function popupPmsRow(snap) {
 
   const ind = snap.indicators;
   if (session === "expired") subs.push({ tone: "warn", text: "Chỉ báo: dừng cập nhật tới khi đăng nhập lại", at: ind?.at });
-  else if (session === "nobranch") subs.push({ tone: unmapped ? "err" : "warn", text: unmapped ? "Chỉ báo: chưa có, vì khách sạn trên PMS chưa ghép với cơ sở" : "Chỉ báo: chưa biết PMS đang mở cơ sở nào", at: null });
+  else if (session === "nobranch") subs.push({ tone: unmapped ? "err" : "warn", text: unmapped ? "Chỉ báo: chưa có, vì khách sạn trên PMS chưa ghép với chi nhánh" : "Chỉ báo: chưa biết PMS đang mở chi nhánh nào", at: null });
   else if (UNREACHABLE.has(session) && !ind) subs.push({ tone: "err", text: "Chỉ báo: không gọi được Hub", at: null });
   else if (ind?.stale) subs.push({ tone: "err", text: `Chỉ báo: không gọi được Hub, đang hiện số lượt ${hhmm(ind.at)}`, at: ind.failedAt });
   else if (ind) subs.push({ tone: "ok", text: `Chỉ báo: ${branch} ${ind.exceeded ? ind.exceeded + " tình huống đang vượt" : "không có tình huống đang vượt"}`, at: ind.at });

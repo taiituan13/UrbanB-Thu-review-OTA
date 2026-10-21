@@ -29,7 +29,7 @@ export async function scanBookingInPage() {
   let total = null;
   for (let offset = 0; offset < 10000; offset += rows) {
     url.searchParams.set("offset", String(offset));
-    const res = await fetch(url, { credentials: "include" });
+    const res = await fetch(url, { credentials: "include", signal: AbortSignal.timeout(30_000) });
     const body = await res.text();
     if (!body.startsWith("{")) return { ok: false, error: `Booking trả về không phải JSON (HTTP ${res.status})` };
     const j = JSON.parse(body);
@@ -58,6 +58,7 @@ export async function scanAgodaInPage(propertyId) {
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ pageNumber, pageSize, searchText: null, countries: [], guestTypes: [], roomTypes: [], scores: [] }),
+      signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) return { ok: false, error: `Agoda HTTP ${res.status}` };
     const j = await res.json();
@@ -71,7 +72,7 @@ export async function scanAgodaInPage(propertyId) {
   // Điểm hạng mục mức khách sạn (Agoda không có điểm hạng mục cho từng bài).
   const snapshots = [];
   try {
-    const s = await (await fetch(`${base}/score/${propertyId}`, { credentials: "include" })).json();
+    const s = await (await fetch(`${base}/score/${propertyId}`, { credentials: "include", signal: AbortSignal.timeout(30_000) })).json();
     const g = s.group ?? {};
     snapshots.push({ category: "Tổng", categoryCode: "overall", score: g.score, scale: g.maxScore, reviewCount: g.reviewCount });
     for (const grade of g.grades ?? []) {
@@ -102,6 +103,7 @@ export async function scanTripInPage() {
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...body, pageIndex, pageSize }),
+      signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) return { ok: false, error: `Trip HTTP ${res.status}` };
     const j = await res.json();
@@ -140,7 +142,7 @@ export async function scanTravelokaInPage() {
     body.data.skip = skip;
     // filterType null = tất cả (kể cả bài chỉ chấm điểm); giá trị khác "null" như "ALL" bị trả 400.
     body.data.filterSortSpec = { filterType: null, dateRangeStart: null, dateRangeEnd: null, sortType: "NEWEST_TIMESTAMP" };
-    const res = await fetch(cap.url, { ...cap.init, body: JSON.stringify(body) });
+    const res = await fetch(cap.url, { ...cap.init, body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
     if (!res.ok) return { ok: false, error: `Traveloka HTTP ${res.status}` };
     const j = await res.json();
     const d = j.data ?? {};
@@ -216,7 +218,7 @@ export async function scanExpediaInPage() {
     target.variables.reviewsContext = { ...target.variables.reviewsContext, filters: [], page };
     target.variables.reviewId = "";
     if (target.variables.context) target.variables.context.locale = "en_US";
-    const res = await fetch(cap.url, { ...cap.init, body: JSON.stringify(body) });
+    const res = await fetch(cap.url, { ...cap.init, body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
     if (!res.ok) return { ok: false, error: `Expedia HTTP ${res.status}` };
     const j = await res.json();
     const one = Array.isArray(j) ? j[0] : j;
@@ -263,7 +265,7 @@ export async function scanGo2joyInPage() {
   let info = null;
   for (let page = 1; page < 50; page++) {
     url.searchParams.set("page", String(page));
-    const res = await fetch(url, { method: cap.init.method || "GET", headers: cap.init.headers });
+    const res = await fetch(url, { method: cap.init.method || "GET", headers: cap.init.headers, signal: AbortSignal.timeout(30_000) });
     if (!res.ok) return { ok: false, error: `Go2Joy HTTP ${res.status}` };
     const j = await res.json();
     if (j.code !== 1) return { ok: false, error: "Go2Joy báo lỗi: " + String(j.message ?? j.code).slice(0, 200) };
@@ -322,8 +324,8 @@ export function expediaPropertiesInPage() {
  */
 export function pickPropertyId(label, ids) {
   if (ids.length === 1) return ids[0];
-  if (!ids.length) throw new Error(`Không dò được mã khách sạn ${label}. Báo Quản trị hệ thống điền mã ${label} của cơ sở trên Hub.`);
-  throw new Error(`Tài khoản ${label} thấy ${ids.length} chỗ nghỉ (${ids.join(", ")}). Báo Quản trị hệ thống điền mã ${label} của cơ sở trên Hub.`);
+  if (!ids.length) throw new Error(`Không dò được mã khách sạn ${label}. Báo Quản trị hệ thống điền mã ${label} của chi nhánh trên Hub.`);
+  throw new Error(`Tài khoản ${label} thấy ${ids.length} chỗ nghỉ (${ids.join(", ")}). Báo Quản trị hệ thống điền mã ${label} của chi nhánh trên Hub.`);
 }
 
 /** Booking — trên trang chủ (nhóm hoặc một chỗ nghỉ): lấy ses và danh sách mã chỗ nghỉ thấy được. */

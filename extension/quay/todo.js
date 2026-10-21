@@ -21,8 +21,9 @@ export const DEFAULT_TAB = "todo";
  * Mô hình tab chính.
  * `recent` = lượt đọc booking GẦN ĐÂY (không phải kết quả tìm: tìm một booking không được làm mất
  * booking lỗi khỏi tab chính). `ind` = `indicatorsModel(...)` hoặc `null` khi chưa đọc được.
+ * `review` = số việc thu review cần xem trên máy này (`reviewProblemCount`, YC-158).
  */
-export function todoModel({ recent, ind }) {
+export function todoModel({ recent, ind, review = 0 }) {
   const list = recent ? (recent.ok === false ? recent.cached?.matches ?? null : recent.matches ?? null) : null;
   const issues = list ? list.filter(hasIssue) : [];
   const exceeded = ind ? ind.exceeded.length : 0;
@@ -31,6 +32,7 @@ export function todoModel({ recent, ind }) {
     // Đọc booking hỏng mà không có bản lưu: chưa biết có booking lỗi hay không, không được nói "không có".
     bookingsKnown: list !== null,
     exceeded,
-    count: issues.length + exceeded,
+    review,
+    count: issues.length + exceeded + review,
   };
 }

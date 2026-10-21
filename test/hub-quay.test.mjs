@@ -100,7 +100,7 @@ test("popupPmsRow: từng phần một dòng, phần hỏng đẩy màu chung", 
 
 test("popupPmsRow: chưa ghép cơ sở và mất Hub KHÔNG bị đọc thành 'Hub chưa có mã kết nối'", () => {
   const un = H.popupPmsRow({ session: "nobranch", why: "unmapped", codeState: "unknown" });
-  assert.match(un.subs[0].text, /chưa được ghép với cơ sở/);
+  assert.match(un.subs[0].text, /chưa được ghép với chi nhánh/);
   assert.ok(!un.subs.some((x) => /chưa có mã kết nối/.test(x.text)));
   const down = H.popupPmsRow({ session: "server", codeState: "unknown" });
   assert.match(down.subs[0].text, /không gọi được Hub/);

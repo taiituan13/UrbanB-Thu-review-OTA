@@ -14,6 +14,7 @@
 // mã bí mật theo Hub, tên khách sạn = tên cơ sở đang dùng, mã chỗ nghỉ theo cơ sở (ô nào null thì như cũ).
 // Hub vắng hoặc null ⇒ máy chạy bằng cấu hình cũ trong bộ nhớ (mã cài đặt URB1 hoặc ô nhập tay của bản trước).
 
+import { helpText } from "./report.js";
 import { CHANNELS, DEFAULT_CONFIG, loadConfig } from "./config.js";
 import { APPS_SCRIPT_URL_RE } from "./env.js";
 import { pickBranch } from "./quay/hub-quay.js";
@@ -97,19 +98,59 @@ export function effectiveReview(cfg, hub, branches, chosenId) {
   };
 }
 
-/** Thu review chưa chạy được thì vì sao (một câu cho lễ tân); đủ cấu hình ⇒ null. */
-export function reviewMissingText(review) {
+/**
+ * Thu review chưa chạy được thì vì sao — lời hướng dẫn ba phần cho người đứng quầy (YC-158): chuyện gì,
+ * vì sao, làm gì từng bước. Đủ cấu hình ⇒ null.
+ */
+export function reviewMissingHelp(review) {
   const r = review ?? {};
   if (!r.sheetUrl || !r.secret) {
     return r.hubSeen
-      ? "Hub chưa có cấu hình thu review. Báo Quản trị hệ thống điền Sheet thu review ở màn Kết nối › Extension máy quầy trên Hub."
-      : "Chưa nhận cấu hình thu review từ Hub. Đăng nhập Hub rồi mở màn Cài extension trên Hub.";
+      ? {
+          what: "Thu review chưa chạy được trên máy này.",
+          why: "Hub chưa có cấu hình thu review.",
+          steps: [
+            "Nhắn Quản trị hệ thống điền bảng tính thu review trên Hub, ở màn Kết nối, phần Extension máy quầy.",
+            "Khi Quản trị hệ thống báo xong, mở màn Cài extension trên Hub để máy nhận cấu hình.",
+          ],
+        }
+      : {
+          what: "Thu review chưa chạy được trên máy này.",
+          why: "Máy chưa nhận cấu hình từ Hub, vì Chrome này chưa đăng nhập Hub lần nào.",
+          steps: [
+            "Mở Hub trong Chrome này và đăng nhập bằng tài khoản của bạn.",
+            "Mở màn Cài extension trên Hub, máy sẽ tự nhận cấu hình.",
+            "Bấm biểu tượng Urban B trên thanh Chrome, rồi bấm Quét review ngay.",
+          ],
+        };
   }
   if (!r.hotel) {
-    if (r.branchState === "ask") return "Chưa biết tên khách sạn: tài khoản Hub có nhiều cơ sở. Bấm icon UrbanB trên thanh Chrome, chọn cơ sở của máy này.";
-    return "Chưa biết tên khách sạn: đăng nhập Hub bằng tài khoản của cơ sở (mở màn Cài extension trên Hub).";
+    if (r.branchState === "ask")
+      return {
+        what: "Máy chưa biết mình thuộc chi nhánh nào.",
+        why: "Tài khoản Hub đang đăng nhập có nhiều chi nhánh.",
+        steps: [
+          "Bấm biểu tượng Urban B trên thanh Chrome.",
+          "Chọn chi nhánh của máy này trong ô chọn chi nhánh.",
+          "Bấm Quét review ngay.",
+        ],
+      };
+    return {
+      what: "Máy chưa biết mình thuộc chi nhánh nào.",
+      why: "Tài khoản Hub đang đăng nhập chưa gắn với chi nhánh nào.",
+      steps: [
+        "Mở Hub, đăng xuất, rồi đăng nhập bằng tài khoản Lễ tân của chi nhánh này.",
+        "Mở màn Cài extension trên Hub, máy sẽ tự nhận chi nhánh.",
+      ],
+    };
   }
   return null;
+}
+
+/** Bản một dòng của `reviewMissingHelp`; đủ cấu hình ⇒ null. */
+export function reviewMissingText(review) {
+  const help = reviewMissingHelp(review);
+  return help ? helpText(help) : null;
 }
 
 /**

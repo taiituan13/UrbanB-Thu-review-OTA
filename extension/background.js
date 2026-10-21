@@ -24,6 +24,7 @@ import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } f
 import { hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings } from "./quay/sw.js";
 import { alarmMinutes, loadEffectiveConfig, reviewMissingText } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
+import { PAGE_RUN_TIMEOUT_MS, REMOTE_TIMEOUT_MS, SHEET_TIMEOUT_MS, isTimeout, withTimeout } from "./quay/net.js";
 import {
   bookingSessionInPage,
   scanAgodaInPage,
@@ -73,7 +74,7 @@ async function syncHubSettings() {
 chrome.runtime.onInstalled.addListener(() => schedule().then(importSetupFile));
 chrome.runtime.onStartup.addListener(() => schedule().then(importSetupFile));
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === ALARM) runScan("hẹn giờ");
+  if (alarm.name === ALARM) runScan("hẹn giờ").catch(scanCrashed);
   if (alarm.name === UPDATE_ALARM) {
     syncHubSettings().then(refreshBadge);
     reloadIfDiskNewer();
@@ -150,7 +151,7 @@ async function reloadIfDiskNewer() {
  */
 async function checkRemoteVersion() {
   try {
-    const res = await fetch(REMOTE_MANIFEST_URL, { cache: "no-store" });
+    const res = await fetch(REMOTE_MANIFEST_URL, { cache: "no-store", signal: AbortSignal.timeout(REMOTE_TIMEOUT_MS) });
     const latest = res.ok ? parseRemoteVersion(await res.text()) : null;
     if (latest) await chrome.storage.local.set({ update: { latest, at: new Date().toISOString() } });
   } catch {}
@@ -167,7 +168,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg?.type === "scanNow") {
     runScan("bấm tay").then(
       (problem) => reply(problem ? { ok: false, error: problem } : { ok: true }),
-      (e) => reply({ ok: false, error: String(e) }),
+      (e) => scanCrashed(e).then(() => reply({ ok: false, error: String(e) })),
     );
     return true;
   }
@@ -269,9 +270,11 @@ async function go(tabId, url) {
 
 async function runInPage(tabId, func, args = []) {
   try {
-    const [first] = await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func, args });
+    const run = chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func, args });
+    const [first] = await withTimeout(run, PAGE_RUN_TIMEOUT_MS, "Hết giờ chờ trang trả kết quả");
     return first?.result;
   } catch (e) {
+    if (isTimeout(e)) throw e;
     let tabUrl = "";
     try {
       tabUrl = (await chrome.tabs.get(tabId)).url ?? "";
@@ -329,7 +332,7 @@ async function scanBooking(tabId, cfg) {
   if (!hotelId) {
     if (session.propertyIds.length !== 1) {
       throw new Error(
-        `Tài khoản Booking thấy ${session.propertyIds.length} chỗ nghỉ (${session.propertyIds.join(", ")}). Báo Quản trị hệ thống điền mã Booking của cơ sở trên Hub.`,
+        `Tài khoản Booking thấy ${session.propertyIds.length} chỗ nghỉ (${session.propertyIds.join(", ")}). Báo Quản trị hệ thống điền mã Booking của chi nhánh trên Hub.`,
       );
     }
     hotelId = session.propertyIds[0];
@@ -345,7 +348,7 @@ async function scanAgoda(tabId, cfg) {
     const landed = await go(tabId, "https://ycs.agoda.com/");
     assertLoggedIn("agoda", landed);
     const m = new URL(landed).pathname.match(/\/(\d{5,})(?:\/|$)/);
-    if (!m) throw new Error("Không dò được mã khách sạn Agoda. Báo Quản trị hệ thống điền mã Agoda của cơ sở trên Hub.");
+    if (!m) throw new Error("Không dò được mã khách sạn Agoda. Báo Quản trị hệ thống điền mã Agoda của chi nhánh trên Hub.");
     pid = m[1];
   }
   assertLoggedIn("agoda", await go(tabId, `https://portal.agoda.com/mldc/vi-vn/app/setting/review/${pid}`));
@@ -374,7 +377,7 @@ async function scanExpedia(tabId, cfg) {
   assertLoggedIn("expedia", landed);
   const at = expediaLanding(landed);
   if (!at.onReviews) {
-    throw new Error(`Expedia chuyển sang ${at.path} thay vì trang review của chỗ nghỉ ${pid}. Kiểm lại mã Expedia của cơ sở trên Hub.`);
+    throw new Error(`Expedia chuyển sang ${at.path} thay vì trang review của chỗ nghỉ ${pid}. Kiểm lại mã Expedia của chi nhánh trên Hub.`);
   }
   return runInPage(tabId, scanExpediaInPage);
 }
@@ -430,9 +433,9 @@ async function postSheet(cfg, payload) {
       async () => {
         let res;
         try {
-          res = await fetch(cfg.sheetUrl, { method: "POST", body });
+          res = await fetch(cfg.sheetUrl, { method: "POST", body, signal: AbortSignal.timeout(SHEET_TIMEOUT_MS) });
         } catch (e) {
-          throw new SheetError(`Không gọi được Sheet: ${e?.message ?? e}`, true);
+          throw new SheetError(isTimeout(e) ? "Hết giờ chờ Sheet trả lời" : `Không gọi được Sheet: ${e?.message ?? e}`, true);
         }
         return parseSheetReply(res.status, await res.text());
       },
@@ -526,10 +529,21 @@ async function sendHub(channel, reviews, at) {
   return { at, ok: !error, text: hubSummaryText(total), error };
 }
 
-/** Phần của dòng nhật ký mà ô bật lên cần: mã để sao chép và cách xử lý. */
+/** Phần của dòng nhật ký mà ô bật lên và khung quầy cần: mã để sao chép và lời hướng dẫn ba phần. */
 function errorBrief(entry) {
-  const { ref, code, hint, at, channel, stage, message } = entry;
-  return { ref, code, hint, at, channel, stage, message };
+  const { ref, code, hint, help, at, channel, stage, message } = entry;
+  return { ref, code, hint, help, at, channel, stage, message };
+}
+
+/**
+ * YC-158 (H-1539): lượt quét ném ra ngoài (vd. đọc cấu hình hỏng) từng im hẳn ở lượt hẹn giờ. Nay ghi
+ * nhật ký lỗi và giữ dấu `scanCrash` tới lượt quét chạy xong kế tiếp ⇒ huy hiệu hiện "!".
+ */
+async function scanCrashed(e) {
+  const entry = makeLogEntry({ stage: "lượt quét", error: e });
+  await queueLog(entry);
+  await chrome.storage.local.set({ scanCrash: errorBrief(entry) });
+  await refreshBadge().catch(() => {});
 }
 
 // ---------- Một lượt quét ----------
@@ -555,6 +569,7 @@ async function runScan(trigger) {
     try {
       await postSheet(cfg, { action: "heartbeat" });
     } catch {}
+    await chrome.storage.local.remove("scanCrash");
   } finally {
     running = false;
     await refreshBadge();
@@ -608,9 +623,11 @@ async function scanOne(channel, cfg, trigger) {
     });
     await saveChannelStatus(channel, {
       at: startedAt,
+      // Giờ quét ỔN gần nhất (YC-158): gửi Hub hỏng thì review chưa lên Hub ⇒ giữ giờ ổn cũ.
+      okAt: hub?.ok === false ? await lastOkAt(channel) : startedAt,
       state: "ok",
       count: batch.reviews.length,
-      message: `${sent.inserted} mới · ${sent.updated} đổi`,
+      message: `${sent.inserted} bài mới, ${sent.updated} bài cập nhật.`,
       error: partial && errorBrief(partial),
       hub,
     });
@@ -632,6 +649,7 @@ async function scanOne(channel, cfg, trigger) {
     run.note = `${entry.ref} · ${entry.code} · ${run.note}`;
     await saveChannelStatus(channel, {
       at: startedAt,
+      okAt: await lastOkAt(channel),
       state: login ? "login" : "error",
       count: 0,
       message: String(e?.message ?? e),
@@ -651,6 +669,13 @@ async function scanOne(channel, cfg, trigger) {
   }
 }
 
+/** Giờ quét ổn gần nhất đã lưu của kênh; bản cũ chưa ghi `okAt` thì lượt cuối ổn là giờ ổn. */
+async function lastOkAt(channel) {
+  const s = (await loadStatus())[channel];
+  if (!s) return null;
+  return s.okAt ?? (s.state === "ok" && s.hub?.ok !== false ? s.at ?? null : null);
+}
+
 // ---------- Huy hiệu trên biểu tượng ----------
 
 async function setBadge(text) {
@@ -660,11 +685,16 @@ async function setBadge(text) {
 }
 
 /**
- * Số thông báo chưa đọc trên Hub (H-1264 a). Không có thì "!" khi thu review chưa đủ cấu hình, một kênh
- * ĐANG BẬT không ổn hay gửi Hub hỏng (kênh đã tắt không tính), hoặc chưa đăng nhập / hết phiên Hub.
+ * Số thông báo chưa đọc trên Hub (H-1264 a) kèm "!" (YC-158: số không còn che dấu) khi thu review chưa đủ
+ * cấu hình, một kênh ĐANG BẬT không ổn hay gửi Hub hỏng (kênh đã tắt không tính), lượt báo sống không gửi
+ * được Sheet, lượt quét hỏng giữa chừng, hoặc chưa đăng nhập / hết phiên Hub.
  */
 async function refreshBadge() {
-  const [cfg, status, { quaySnap }] = await Promise.all([loadEffectiveConfig(), loadStatus(), chrome.storage.local.get("quaySnap")]);
+  const [cfg, status, { quaySnap, lastError, scanCrash }] = await Promise.all([
+    loadEffectiveConfig(),
+    loadStatus(),
+    chrome.storage.local.get(["quaySnap", "lastError", "scanCrash"]),
+  ]);
   const missing = Boolean(reviewMissingText(cfg.review));
   const bad = CHANNELS.some((ch) => {
     const s = status[ch];
@@ -673,5 +703,6 @@ async function refreshBadge() {
   const session = quaySnap?.session;
   const hubProblem = session === "out" || session === "expired";
   const unread = session !== "expired" && quaySnap?.notifications?.state === "ok" ? quaySnap.notifications.unread : 0;
-  await setBadge(badgeText({ unread, problem: missing || bad || hubProblem }));
+  const sheetDown = lastError?.stage === "gửi Sheet";
+  await setBadge(badgeText({ unread, problem: missing || bad || hubProblem || sheetDown || Boolean(scanCrash) }));
 }

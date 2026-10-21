@@ -82,7 +82,7 @@ export function resolveState(reply) {
   }
   if (reply.status === 401 || json?.error === "NOT_SIGNED_IN") return { ok: false, state: "out", text: "Phiên Hub đã hết. Đăng nhập lại rồi bấm lại." };
   if (json?.error === "NOT_FOUND") return { ok: false, gone: true, text: "Đơn này đã có người bấm Đã xử lý, hoặc không còn lệch." };
-  if (json?.error === "OUT_OF_SCOPE") return { ok: false, text: "Tài khoản này không có quyền bấm Đã xử lý ở cơ sở này." };
+  if (json?.error === "OUT_OF_SCOPE") return { ok: false, text: "Tài khoản này không có quyền bấm Đã xử lý ở chi nhánh này." };
   if (json?.error === "STAGE_RESTRICTED") return { ok: false, text: "Tài khoản đang ở giai đoạn chưa được bấm Đã xử lý." };
   return { ok: false, text: `Hub trả lỗi ${reply.status ?? ""}`.trim() };
 }

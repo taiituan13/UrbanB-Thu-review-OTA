@@ -12,15 +12,33 @@ từ ảnh chụp cũng không sai.
 
 ## Phía khách sạn: gửi mã lỗi thế nào
 
-1. Bấm biểu tượng "Thu review OTA". Kênh lỗi có khung đỏ với dòng **Mã lỗi E-…**, kèm
-   một câu hướng dẫn tự xử lý.
-2. Làm theo câu hướng dẫn trước (ví dụ: đăng nhập lại rồi bấm **Quét ngay**).
-3. Vẫn lỗi thì bấm **Sao chép** rồi dán vào tin nhắn gửi người quản lý. Đoạn chép gồm mã
-   lỗi, loại lỗi, tên khách sạn, mã máy, phiên bản, giờ lỗi và thông điệp lỗi. Đoạn này
+Từ bản 1.4.0 (YC-158), lỗi thu review hiện ở ba nơi với **cùng một lời hướng dẫn**:
+
+- tab **Cần xử lý** của khung Urban B trên PMS, khối **Thu review** (lễ tân không phải bấm icon);
+- ô bật lên khi bấm biểu tượng Urban B trên thanh Chrome;
+- màn **Cài extension** trên Hub, khối "Kiểm máy này", danh sách từng kênh.
+
+Mỗi lời hướng dẫn có ba phần: **chuyện gì đang xảy ra**, **vì sao**, và **làm gì tiếp theo** theo từng
+bước có số. Chữ nằm ở `SHEET_KINDS`, `HUB_KINDS`, `CHANNEL_KINDS` trong `extension/report.js`; cột
+"Khách sạn tự làm" ở bảng dưới chỉ là bản tóm tắt.
+
+1. Làm theo các bước trong khung đỏ, rồi bấm **Quét review ngay** (trên khung PMS hoặc trong ô bật lên).
+2. Vẫn lỗi thì bấm **Sao chép** cạnh mã lỗi rồi dán vào tin nhắn gửi người quản lý. Ở ô bật lên, đoạn
+   chép gồm mã lỗi, loại lỗi, tên khách sạn, mã máy, phiên bản, giờ lỗi và thông điệp lỗi. Đoạn này
    không chứa mật khẩu, mã phiên hay mã bí mật của Sheet.
 
 Lỗi gửi Sheet (sai mã bí mật, sai URL…) không thuộc kênh nào, nên hiện riêng trong khung
 **Lỗi gửi Sheet** ở cuối ô bật lên. Khung này tự mất khi Sheet nhận được lại.
+
+Huy hiệu trên biểu tượng Chrome: số thông báo chưa đọc, kèm dấu `!` khi máy có việc cần xem (vd. `3!`).
+Từ bản 1.4.0 số không còn che dấu `!`.
+
+### Hạn giờ (từ 1.4.0)
+
+Mọi lượt gọi ra ngoài đều có hạn giờ, nên không còn lượt quét im hẳn: gửi Sheet 90 giây, gửi Hub 30
+giây, lượt gọi API review của kênh 30 giây, lượt chạy trong trang 120 giây, kiểm bản mới 15 giây
+(`extension/quay/net.js`). Hết giờ thì báo `SHEET-NET`, `HUB-NET` hoặc `<kênh>-TIMEOUT`. Lượt quét hẹn
+giờ ném lỗi ra ngoài thì ghi nhật ký ở giai đoạn `lượt quét` và giữ dấu `!` tới lượt quét chạy xong kế tiếp.
 
 ## Phía người quản lý: tra mã
 
@@ -42,12 +60,12 @@ Các loại không có tiền tố kênh bắt đầu bằng `SHEET` (gửi Shee
 
 | Loại | Nghĩa | Khách sạn tự làm | Người quản lý kiểm |
 |---|---|---|---|
-| `-LOGIN` | Extranet đá về trang đăng nhập (phiên hết hạn) | Đăng nhập lại kênh đó trong cùng Chrome, bấm Quét ngay | Lặp lại liên tục ở Booking: phiên Booking hết sau khoảng 2 giờ không dùng (xem `cai-dat.md` §5) |
-| `-MULTI` | Tài khoản thấy nhiều chỗ nghỉ, extension không biết chọn cái nào | Gửi mã lỗi | Thông điệp lỗi liệt kê sẵn các mã thấy được ⇒ điền mã kênh đó của cơ sở trên Hub |
-| `-NOID` | Không dò được mã khách sạn (Agoda, Expedia) | Gửi mã lỗi | Điền mã kênh đó của cơ sở trên Hub. Agoda: trang chủ đổi đường dẫn ⇒ sửa `scanAgoda`. Expedia: trang đích không có `htid` trong URL lẫn trong link ⇒ xem `scanExpedia` (cả hai trong `background.js`) |
+| `-LOGIN` | Extranet đá về trang đăng nhập (phiên hết hạn) | Đăng nhập lại kênh đó trong cùng Chrome, bấm Quét review ngay | Lặp lại liên tục ở Booking: phiên Booking hết sau khoảng 2 giờ không dùng (xem `cai-dat.md` §5) |
+| `-MULTI` | Tài khoản thấy nhiều chỗ nghỉ, extension không biết chọn cái nào | Gửi mã lỗi | Thông điệp lỗi liệt kê sẵn các mã thấy được ⇒ điền mã kênh đó của chi nhánh trên Hub |
+| `-NOID` | Không dò được mã khách sạn (Agoda, Expedia) | Gửi mã lỗi | Điền mã kênh đó của chi nhánh trên Hub. Agoda: trang chủ đổi đường dẫn ⇒ sửa `scanAgoda`. Expedia: trang đích không có `htid` trong URL lẫn trong link ⇒ xem `scanExpedia` (cả hai trong `background.js`) |
 | `-PAGE` | Trang kênh tự chuyển đi chỗ khác thay vì trang review, hoặc chuyển đi giữa lúc đang quét | Mở trang review của kênh xem có vào được không; kênh có ô mã khách sạn thì kiểm lại ô đó | Thông điệp ghi đường dẫn trang đích. Ví dụ Expedia đá sang `/supply/inbox` khi chưa chọn chỗ nghỉ (09/10/2026) |
 | `-OPEN` | Trang kênh không mở được: tab vẫn trống sau hai lượt mở, hoặc Chrome hiện trang lỗi của nó | Đừng bấm dừng hay đóng tab mà extension tự mở. Vẫn lỗi thì mở kênh đó trong Chrome này xem có vào được không | Tab trống: người dùng bấm ✕/Esc trên tab trắng, hoặc lượt mở bị huỷ (tiện ích chặn, phần mềm bảo mật, trang trả 204). Trang lỗi: mất mạng hoặc bị chặn. Extension đã tự mở lại một lần trước khi báo |
-| `-TIMEOUT` | Trang không tải xong trong 45 giây | Kiểm mạng, bấm Quét ngay | Lặp lại ở một kênh: kênh chậm hoặc chặn tab nền |
+| `-TIMEOUT` | Trang không tải xong trong 45 giây, hoặc kênh không trả lời trong hạn giờ | Kiểm mạng, bấm Quét review ngay | Lặp lại ở một kênh: kênh chậm hoặc chặn tab nền |
 | `-TAB` | Tab nền bị đóng giữa chừng, kể cả lúc trang đang tải (từ 0.8.2; trước đó ca này báo nhầm `-TIMEOUT` sau 45 giây) | Đừng đóng tab mà extension tự mở | Thường do người dùng đóng tay; không cần sửa mã |
 | `-CAPTURE` | Không bắt được request review của trang | Mở trang review của kênh xem có tải được không | Xem cột *Trang lúc lỗi*: trang bị chuyển hướng đi đâu. Kênh đổi giao diện ⇒ sửa `scanners.js` hoặc mẫu trong `capture.js` |
 | `-HTTP` | API review của kênh trả mã HTTP lỗi | Gửi mã lỗi | 401/403: phiên hỏng nửa chừng. 400: kênh đổi định dạng yêu cầu ⇒ sửa `scanners.js` |
@@ -59,7 +77,7 @@ Các loại không có tiền tố kênh bắt đầu bằng `SHEET` (gửi Shee
 
 | Loại | Nghĩa | Khách sạn tự làm | Người quản lý kiểm |
 |---|---|---|---|
-| `SHEET-CONFIG` | Máy chưa có đủ Sheet thu review, mã bí mật, tên khách sạn (Hub chưa có cấu hình thu review, hoặc máy chưa đăng nhập Hub) | Đăng nhập Hub, chọn cơ sở nếu được hỏi, bấm Thử Sheet | Điền Sheet thu review ở màn Kết nối › Extension máy quầy trên Hub |
+| `SHEET-CONFIG` | Máy chưa có đủ Sheet thu review, mã bí mật, tên khách sạn (Hub chưa có cấu hình thu review, hoặc máy chưa đăng nhập Hub) | Đăng nhập Hub, chọn chi nhánh nếu được hỏi, bấm Thử Sheet | Điền Sheet thu review ở màn Kết nối › Extension máy quầy trên Hub |
 | `SHEET-SECRET` | Sheet từ chối mã bí mật | Gửi mã lỗi | Mã bí mật trên Hub khớp Script Property `SECRET` của Sheet? Sửa trên Hub, máy tự nhận lại |
 | `SHEET-NET` | Không gọi được tới Google | Kiểm mạng | — |
 | `SHEET-URL` | Google trả trang lỗi thay vì JSON, cả 3 lần gửi | Kiểm URL kết thúc bằng `/exec` | Đúng URL mà vẫn lỗi: bản triển khai bị lưu trữ, hoặc quyền không còn là "Bất kỳ ai" |

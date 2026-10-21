@@ -92,7 +92,7 @@ export function parseIngestReply(reply) {
     throw new HubError("Hub chặn lượt gửi vì không nhận ra nguồn gửi (FORBIDDEN_ORIGIN). Cập nhật extension; vẫn lỗi thì gửi mã lỗi.", false);
   }
   if (status === 403) {
-    throw new HubError("Tài khoản đang đăng nhập Hub chưa có quyền thêm review ở cơ sở nào (403). Đăng nhập đúng tài khoản lễ tân của cơ sở, hoặc báo Quản trị hệ thống cấp quyền.", false);
+    throw new HubError("Tài khoản đang đăng nhập Hub chưa có quyền thêm review ở chi nhánh nào (403). Đăng nhập đúng tài khoản lễ tân của chi nhánh, hoặc báo Quản trị hệ thống cấp quyền.", false);
   }
   if (status === 413) throw new HubError("Lô gửi Hub quá lớn (413).", false);
   if (status === 404 && !json) throw new HubError("Hub chưa bật cửa nhận review (404).", false);
@@ -138,5 +138,5 @@ export function hubSummaryText(t) {
  */
 export function rejectedText(rejected) {
   const ids = rejected.map((x) => x.channelHotelId).join(", ");
-  return `Hub không nhận bài của ${rejected.length} mã khách sạn ngoài phạm vi (${ids}): mã đã ghép vào cơ sở mà tài khoản đang đăng nhập không được gán`;
+  return `Hub không nhận bài của ${rejected.length} mã khách sạn ngoài phạm vi (${ids}): mã đã ghép vào chi nhánh mà tài khoản đang đăng nhập không được gán`;
 }

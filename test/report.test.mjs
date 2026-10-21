@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   SheetError,
   classifyError,
+  errorHelpCatalog,
   formatErrorReport,
   makeErrorRef,
   makeLogEntry,
@@ -100,8 +101,38 @@ test("Loại lỗi: mỗi nguyên nhân đã biết một mã riêng, kèm cách
   }
   // Đăng nhập là theo GIAI ĐOẠN, không theo chữ: cùng thông điệp ở giai đoạn quét không phải LOGIN.
   assert.equal(classifyError("booking", "quét", "Cần đăng nhập lại").code, "BKG-SCAN");
-  assert.match(classifyError("agoda", "đăng nhập", "").hint, /Mở Agoda/);
+  assert.match(classifyError("agoda", "đăng nhập", "").hint, /Mở trang quản lý khách sạn của Agoda/);
   assert.doesNotMatch(classifyError("agoda", "đăng nhập", "").hint, /\{kênh\}/);
+});
+
+test("YC-158: mọi loại lỗi có đủ ba phần — chuyện gì, vì sao, làm gì từng bước", () => {
+  const all = errorHelpCatalog();
+  assert.ok(all.length >= 25);
+  for (const { code, help } of all) {
+    assert.ok(help.what && help.why, code);
+    assert.ok(Array.isArray(help.steps) && help.steps.length >= 1, code);
+    for (const line of [help.what, help.why, ...help.steps]) {
+      assert.match(line, /\.$/, `${code}: câu phải trọn: ${line}`);
+      assert.doesNotMatch(line, /\{kênh\}/, code);
+    }
+  }
+  // Hết giờ do hạn giờ mọi lượt gọi (AbortSignal.timeout) ⇒ loại TIMEOUT, không rơi vào SCAN.
+  assert.equal(classifyError("agoda", "quét", "TimeoutError: signal timed out").code, "AGD-TIMEOUT");
+  assert.equal(classifyError("", "gửi Sheet", "Hết giờ chờ Sheet trả lời").code, "SHEET-NET");
+  assert.equal(classifyError("", "gửi Hub", "Hết giờ chờ Hub trả lời").code, "HUB-NET");
+});
+
+test("YC-158: chữ hướng dẫn nói như người — không tên kỹ thuật, không ký hiệu, tên nút đúng, 'chi nhánh'", () => {
+  const text = errorHelpCatalog()
+    .flatMap(({ help }) => [help.what, help.why, ...help.steps])
+    .join("\n");
+  for (const bad of [/Apps Script/i, /token/i, /\bURL\b/, /\bAPI\b/, /JSON/, /HTTP/, /Web App/i, /mã bí mật/i, /request/i, /[·→Σ]/]) {
+    assert.doesNotMatch(text, bad, String(bad));
+  }
+  // Nút thật trên ô Urban B tên "Quét review ngay" (popup.html).
+  assert.doesNotMatch(text, /Quét ngay/);
+  // "chi nhánh" theo H-1712 a; "Quản lý cơ sở" là tên vai, giữ.
+  assert.doesNotMatch(text.replaceAll("Quản lý cơ sở", ""), /cơ sở/i);
 });
 
 test("Dòng nhật ký mang mã tham chiếu và loại lỗi", () => {

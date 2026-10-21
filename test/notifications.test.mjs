@@ -67,8 +67,10 @@ test("Công tắc đọc-hết tắt sẵn (H-1263 b: bấm Đã đọc rõ ràn
   assert.equal(N.SWITCHES.readAll, false);
 });
 
-test("badgeText: số chưa đọc thắng; không có thì '!' khi máy có việc cần xem (H-1264 a)", () => {
-  assert.equal(N.badgeText({ unread: 3, problem: true }), "3");
+test("🔴 badgeText: số chưa đọc kèm '!' khi máy có việc cần xem — số không che dấu (H-1264 a, YC-158)", () => {
+  assert.equal(N.badgeText({ unread: 3, problem: true }), "3!");
+  assert.equal(N.badgeText({ unread: 3, problem: false }), "3");
+  assert.equal(N.badgeText({ unread: 250, problem: true }), "99!");
   assert.equal(N.badgeText({ unread: 120, problem: false }), "99+");
   assert.equal(N.badgeText({ unread: 0, problem: true }), "!");
   assert.equal(N.badgeText({ unread: 0, problem: false }), "");

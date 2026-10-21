@@ -76,7 +76,7 @@ từ Hub hay từ cấu hình cũ. Bấm **Thử Sheet**: dòng chữ hiện "Sh
 ngay**, và mã lỗi kèm nút **Sao chép** khi có kênh hỏng.
 
 **Bước 4: quét lần đầu.** Đăng nhập sẵn các extranet trong **cùng Chrome đó**, rồi bấm
-**Quét ngay**. Kênh nào báo cam thì đăng nhập lại kênh đó.
+**Quét review ngay**. Kênh nào báo cam thì đăng nhập lại kênh đó.
 
 Máy đã cài bản giải nén từ thư mục khác trước đây: gỡ bản cũ trong `chrome://extensions` trước,
 rồi làm lại từ bước 1.

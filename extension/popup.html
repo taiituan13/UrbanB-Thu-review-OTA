@@ -37,6 +37,10 @@
   .err .code { color: var(--muted); }
   .err button { margin-left: auto; min-height: 26px; padding: 0 10px; font-size: 12px; }
   .err .hint { margin-top: 3px; }
+  .err .what { font-weight: 600; }
+  .err .why:empty, .err .hint:empty, .err .steps:empty { display: none; }
+  .err .steps { margin: 3px 0 4px; padding-left: 18px; }
+  .err .what + .why, .err .top { margin-top: 3px; }
 
   button { font: inherit; cursor: pointer; border-radius: 10px; }
   .primary { display: block; width: 100%; min-height: 44px; margin-top: 12px; border: 0; background: var(--fg); color: var(--on-dark); font-size: 14px; font-weight: 600; }
@@ -158,7 +162,7 @@
   <div id="outBox" hidden>
     <div class="band info">
       <strong>Đăng nhập tài khoản Hub để bắt đầu</strong>
-      <span>Đăng nhập xong, khung UrbanB trên PMS tự nhận mã kết nối Booking OTA của cơ sở, hiện chỉ báo và thông báo của bạn. Không phải dán mã nào.</span>
+      <span>Đăng nhập xong, khung UrbanB trên PMS tự nhận mã kết nối Booking OTA của chi nhánh, hiện chỉ báo và thông báo của bạn. Không phải dán mã nào.</span>
     </div>
     <button class="primary" data-login style="margin-top:0">Đăng nhập Hub</button>
     <div class="small">Mở trang đăng nhập Hub trong tab mới. Đăng nhập xong, bấm lại icon UrbanB trên thanh Chrome.</div>

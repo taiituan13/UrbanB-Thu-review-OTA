@@ -14,8 +14,8 @@ export function hm(iso) {
 /** Câu khi chưa bật kênh nào: kênh đặt trên Hub thì người ở quầy không tự bật được. */
 export function noChannelText(cfg) {
   return cfg?.collect?.fromHub?.enabled
-    ? "Cấu hình trên Hub chưa bật kênh nào. Báo Quản trị hệ thống bật kênh ở màn Kết nối › Extension máy quầy."
-    : "Kênh quét đặt trên Hub: báo Quản trị hệ thống bật kênh ở màn Kết nối › Extension máy quầy.";
+    ? "Cấu hình trên Hub chưa bật kênh nào. Nhắn Quản trị hệ thống bật kênh ở màn Kết nối, phần Extension máy quầy."
+    : "Kênh quét do Hub đặt. Nhắn Quản trị hệ thống bật kênh ở màn Kết nối, phần Extension máy quầy.";
 }
 
 /**
@@ -40,8 +40,8 @@ export function reviewRow(cfg, status, channels) {
       state: login.length === bad.length ? `${bad.length} kênh cần đăng nhập lại` : `${bad.length} kênh lỗi`,
       when: latest ? hm(latest) : "",
       detail: login.length === bad.length
-        ? `${names}: mở extranet trong Chrome này và đăng nhập, lượt quét sau tự chạy.`
-        : `${names}: xem từng kênh bên dưới, có mã lỗi để gửi người quản lý.`,
+        ? `${names}: mở trang quản lý khách sạn của kênh trong Chrome này và đăng nhập. Lượt quét sau tự chạy.`
+        : `${names}: xem từng kênh bên dưới, mỗi kênh có các bước cần làm và mã lỗi để gửi người quản lý.`,
     };
   }
   // Sheet nhận bình thường mà Hub không nhận (H-1233 a: review lên Hub theo phiên đăng nhập).
@@ -51,19 +51,19 @@ export function reviewRow(cfg, status, channels) {
     const login = hubBad.every((r) => r.s.hub.login);
     return {
       tone: login ? "warn" : "err",
-      state: login ? "Review chưa lên Hub · cần đăng nhập Hub" : `Gửi Hub lỗi ở ${hubBad.length} kênh`,
+      state: login ? "Review chưa lên Hub, cần đăng nhập Hub" : `Gửi Hub lỗi ở ${hubBad.length} kênh`,
       when: latest ? hm(latest) : "",
       detail: login
-        ? "Sheet vẫn nhận bình thường. Bấm Đăng nhập Hub bằng tài khoản của bạn, lượt quét sau tự gửi lên Hub."
-        : `${names}: Sheet vẫn nhận; xem từng kênh bên dưới, có mã lỗi để gửi người quản lý.`,
+        ? "Sheet vẫn nhận bình thường. Bấm Đăng nhập Hub và đăng nhập bằng tài khoản của bạn. Lượt quét sau tự gửi lên Hub."
+        : `${names}: Sheet vẫn nhận. Xem từng kênh bên dưới, mỗi kênh có các bước cần làm và mã lỗi để gửi người quản lý.`,
     };
   }
-  if (never.length === rows.length) return { tone: "off", state: `Chưa quét lần nào · ${rows.length} kênh`, when: "", detail: "Bấm Quét review ngay, hoặc chờ lượt tự quét." };
+  if (never.length === rows.length) return { tone: "off", state: `Chưa quét lần nào, ${rows.length} kênh đang bật`, when: "", detail: "Bấm Quét review ngay, hoặc chờ máy tự quét." };
   return {
     tone: "ok",
-    state: `Đang chạy · ${rows.length} kênh`,
+    state: `Đang chạy, ${rows.length} kênh`,
     when: latest ? hm(latest) : "",
-    detail: `Lượt trước ${total} bài · tự quét mỗi ${Math.max(1, Number(cfg.intervalHours) || 6)} giờ.`,
+    detail: `Lượt trước được ${total} bài. Máy tự quét mỗi ${Math.max(1, Number(cfg.intervalHours) || 6)} giờ.`,
   };
 }
 
@@ -77,7 +77,7 @@ export function reviewSourceLines(cfg, channels) {
   const lines = [];
   if (from.sheet) lines.push({ text: "Sheet thu review: theo cấu hình trên Hub." });
   else if (r.sheetUrl && r.secret) lines.push({ text: "Hub chưa có cấu hình thu review. Máy đang chạy bằng cấu hình cũ trong bộ nhớ.", warn: true });
-  if (r.hotel) lines.push({ text: `Tên khách sạn: ${r.hotel} (${from.hotel ? "tên cơ sở trên Hub" : "cấu hình cũ của máy"}).` });
+  if (r.hotel) lines.push({ text: `Tên khách sạn: ${r.hotel} (${from.hotel ? "tên chi nhánh trên Hub" : "cấu hình cũ của máy"}).` });
   const missing = reviewMissingText(r);
   if (missing) lines.push({ text: missing, warn: true });
   const on = channels.filter((ch) => cfg?.enabled?.[ch]).map((ch) => CHANNEL_LABEL[ch] ?? ch);
