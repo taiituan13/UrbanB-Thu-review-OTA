@@ -2,6 +2,7 @@
 // Mục "Khung trên PMS" dùng quay/hub-quay.js popupPmsRow.
 
 import { CHANNEL_LABEL } from "./report.js";
+import { reviewMissingText } from "./hub-config.js";
 
 /** Giờ "08:02" theo giờ máy. */
 export function hm(iso) {
@@ -14,7 +15,7 @@ export function hm(iso) {
 export function noChannelText(cfg) {
   return cfg?.collect?.fromHub?.enabled
     ? "Cấu hình trên Hub chưa bật kênh nào. Báo Quản trị hệ thống bật kênh ở màn Kết nối › Extension máy quầy."
-    : "Mở Cài đặt, chọn kênh rồi bấm Lưu.";
+    : "Kênh quét đặt trên Hub: báo Quản trị hệ thống bật kênh ở màn Kết nối › Extension máy quầy.";
 }
 
 /**
@@ -24,7 +25,7 @@ export function noChannelText(cfg) {
 export function reviewRow(cfg, status, channels) {
   const enabled = channels.filter((ch) => cfg?.enabled?.[ch]);
   if (!cfg?.sheetUrl || !cfg?.secret || !cfg?.hotel)
-    return { tone: "warn", state: "Chưa cài đặt xong", when: "", detail: "Mở Cài đặt bên dưới, dán Mã cài đặt người quản lý gửi (bắt đầu bằng URB1.) rồi bấm Nhận mã." };
+    return { tone: "warn", state: "Chưa cài đặt xong", when: "", detail: reviewMissingText(cfg.review ?? cfg) };
   if (!enabled.length) return { tone: "off", state: "Chưa bật kênh nào", when: "", detail: noChannelText(cfg) };
   const rows = enabled.map((ch) => ({ ch, s: status?.[ch] }));
   const bad = rows.filter((r) => r.s && r.s.state !== "ok");
@@ -64,4 +65,29 @@ export function reviewRow(cfg, status, channels) {
     when: latest ? hm(latest) : "",
     detail: `Lượt trước ${total} bài · tự quét mỗi ${Math.max(1, Number(cfg.intervalHours) || 6)} giờ.`,
   };
+}
+
+/**
+ * Khối "Thu review OTA" trong Cài đặt (H-1527 a): mỗi dòng một thứ máy đang dùng và nguồn của nó.
+ * `cfg` = loadEffectiveConfig (hub-config.js). Không in URL Sheet hay mã bí mật. Trả `[{ text, warn? }]`.
+ */
+export function reviewSourceLines(cfg, channels) {
+  const r = cfg?.review ?? { fromHub: {} };
+  const from = r.fromHub ?? {};
+  const lines = [];
+  if (from.sheet) lines.push({ text: "Sheet thu review: theo cấu hình trên Hub." });
+  else if (r.sheetUrl && r.secret) lines.push({ text: "Hub chưa có cấu hình thu review. Máy đang chạy bằng cấu hình cũ trong bộ nhớ.", warn: true });
+  if (r.hotel) lines.push({ text: `Tên khách sạn: ${r.hotel} (${from.hotel ? "tên cơ sở trên Hub" : "cấu hình cũ của máy"}).` });
+  const missing = reviewMissingText(r);
+  if (missing) lines.push({ text: missing, warn: true });
+  const on = channels.filter((ch) => cfg?.enabled?.[ch]).map((ch) => CHANNEL_LABEL[ch] ?? ch);
+  const chFrom = cfg?.collect?.fromHub?.enabled ? "theo Hub" : "cấu hình của máy";
+  lines.push({ text: `Kênh quét: ${on.length ? on.join(", ") : "chưa bật kênh nào"} (${chFrom}).` });
+  const ids = [
+    ["booking", "Booking", r.bookingHotelId],
+    ["agoda", "Agoda", r.agodaPropertyId],
+    ["expedia", "Expedia", r.expediaPropertyId],
+  ].map(([k, label, v]) => (v ? `${label} ${v}${from[k] ? " (Hub)" : " (cấu hình cũ)"}` : `${label} tự dò`));
+  lines.push({ text: `Mã chỗ nghỉ: ${ids.join(" · ")}.` });
+  return lines;
 }

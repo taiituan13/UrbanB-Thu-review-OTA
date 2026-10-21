@@ -322,8 +322,8 @@ export function expediaPropertiesInPage() {
  */
 export function pickPropertyId(label, ids) {
   if (ids.length === 1) return ids[0];
-  if (!ids.length) throw new Error(`Không dò được mã khách sạn ${label}. Điền mã ${label} trong cài đặt.`);
-  throw new Error(`Tài khoản ${label} thấy ${ids.length} chỗ nghỉ (${ids.join(", ")}). Điền mã ${label} trong cài đặt.`);
+  if (!ids.length) throw new Error(`Không dò được mã khách sạn ${label}. Báo Quản trị hệ thống điền mã ${label} của cơ sở trên Hub.`);
+  throw new Error(`Tài khoản ${label} thấy ${ids.length} chỗ nghỉ (${ids.join(", ")}). Báo Quản trị hệ thống điền mã ${label} của cơ sở trên Hub.`);
 }
 
 /** Booking — trên trang chủ (nhóm hoặc một chỗ nghỉ): lấy ses và danh sách mã chỗ nghỉ thấy được. */

@@ -82,7 +82,79 @@ export function parseMine(json) {
       name: typeof b.name === "string" ? b.name : "",
       code: typeof b.code === "string" ? b.code : "",
       ezcloudHotelId: b.ezcloudHotelId == null ? "" : String(b.ezcloudHotelId),
+      reviewIds: parseReviewIds(b.reviewIds),
     }));
+}
+
+/** Kênh có mã chỗ nghỉ đặt trên Hub (H-1527 a). Các kênh khác tự dò. */
+export const REVIEW_ID_CHANNELS = ["booking", "agoda", "expedia"];
+
+/**
+ * `reviewIds` của một cơ sở (H-1527 a) ⇒ `{ booking, agoda, expedia }`, mỗi ô là chuỗi hoặc null.
+ * Vắng trường, sai dạng, chuỗi rỗng ⇒ null: kênh ấy giữ hành vi tự dò như trước.
+ */
+export function parseReviewIds(raw) {
+  const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  return Object.fromEntries(
+    REVIEW_ID_CHANNELS.map((ch) => {
+      const v = src[ch];
+      const s = typeof v === "string" || typeof v === "number" ? String(v).trim() : "";
+      return [ch, s || null];
+    }),
+  );
+}
+
+// ---------- Màn "Cài extension" trên Hub (YC-156 · H-1526 a) ----------
+
+/** Đường của màn Cài extension trên Hub. Trang ở đường này ⇒ extension theo Hub của trang. */
+export function isExtensionPage(pathname) {
+  return /^\/extension\/?$/.test(String(pathname ?? ""));
+}
+
+/**
+ * Trang Hub ở gốc `requested` (màn Cài extension) muốn extension theo. `current` = gốc đang lưu.
+ * Gốc ngoài danh sách cho phép ⇒ "reject"; cùng gốc ⇒ "same" (không xoá gì); khác ⇒ "switch".
+ */
+export function followHub(current, requested) {
+  if (!HUB_ORIGINS.includes(String(requested ?? ""))) return "reject";
+  return hubOrigin(current) === requested ? "same" : "switch";
+}
+
+const isoOrNull = (v) => {
+  if (v == null || v === "") return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
+
+/**
+ * Trạng thái extension trả cho trang Hub (tin `ext:status`, hợp đồng YC-156 với làn Hub).
+ * Chỉ các trường dưới đây: KHÔNG có token, mã bí mật, URL Sheet hay mã kết nối.
+ * - `session`: trạng thái phiên Hub (ok · nobranch ⇒ đã đăng nhập; out · expired ⇒ chưa; khác ⇒ null).
+ * - `pms`: `{ at, hotelId }` lần gần nhất khung chạy trên PMS; tên cơ sở tra theo danh sách `branches`,
+ *   không có thì theo tên khung đã nhận (`snap.branchName` của cùng mã KS).
+ * - `review`: `{ configured, fromHub, channels }`, `channels` = trạng thái từng kênh (config.js loadStatus);
+ *   `lastScanAt` = giờ lượt quét gần nhất của kênh bất kỳ.
+ */
+export function extStatusOf({ version, hub, pageOrigin, session, branches, chosenId, pms, snap, review }) {
+  const pick = pickBranch(branches ?? null, chosenId ?? "");
+  const hotelId = pms?.hotelId ? String(pms.hotelId) : "";
+  const listed = hotelId && Array.isArray(branches) ? branches.find((b) => b.ezcloudHotelId === hotelId) : null;
+  const shown = hotelId && snap?.hotelId === hotelId ? snap.branchName : "";
+  return {
+    version: String(version ?? ""),
+    hub,
+    hubFollowed: hub === pageOrigin,
+    signedIn: session === "ok" || session === "nobranch" ? true : session === "out" || session === "expired" ? false : null,
+    branch: pick.branch ? { id: pick.branch.id, name: pick.branch.name } : null,
+    pms: { lastSeenAt: isoOrNull(pms?.at), hotelName: listed?.name || shown || null },
+    review: { configured: Boolean(review?.configured), fromHub: Boolean(review?.fromHub), lastScanAt: lastScanAt(review?.channels) },
+  };
+}
+
+/** Giờ lượt quét gần nhất trong trạng thái các kênh; chưa quét kênh nào ⇒ null. */
+export function lastScanAt(channels) {
+  const times = Object.values(channels ?? {}).map((s) => Date.parse(s?.at ?? "")).filter((t) => !Number.isNaN(t));
+  return times.length ? new Date(Math.max(...times)).toISOString() : null;
 }
 
 /**

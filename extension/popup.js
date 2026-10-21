@@ -1,13 +1,12 @@
-import { CHANNELS, CHANNEL_LABEL, VERSION, getDeviceId, loadConfig, loadLastError, loadStatus, saveConfig } from "./config.js";
+import { CHANNELS, CHANNEL_LABEL, VERSION, getDeviceId, loadLastError, loadStatus } from "./config.js";
 import { formatErrorReport } from "./report.js";
 import { UPDATE_COMMAND, updateNotice } from "./update.js";
-import { HUB_LABELS, HUB_ORIGINS } from "./env.js";
+import { HUB_LABELS } from "./env.js";
 import { branchPicker, popupPmsRow } from "./quay/hub-quay.js";
-import { noChannelText, reviewRow } from "./popup-model.js";
-import { loadEffectiveConfig, scheduleText } from "./hub-config.js";
+import { noChannelText, reviewRow, reviewSourceLines } from "./popup-model.js";
+import { loadEffectiveConfig, reviewMissingText, scheduleText } from "./hub-config.js";
 
 const $ = (id) => document.getElementById(id);
-const FIELDS = ["hotel", "sheetUrl", "secret", "bookingHotelId", "agodaPropertyId", "expediaPropertyId"];
 const STATE_TEXT = { ok: "ổn", error: "lỗi", login: "cần đăng nhập lại" };
 
 /** Dòng chữ dưới nút Quét ngay; `where` = "settingsNote" cho dòng trong khối Cài đặt. */
@@ -15,16 +14,22 @@ function note(text, where = "note") {
   $(where).textContent = text;
 }
 
-/** Dòng "Tự quét mỗi N giờ" và ô kênh quét, theo cấu hình đặt trên Hub (hub-config.js). */
+/**
+ * Dòng "Tự quét mỗi N giờ" và khối "Thu review OTA" trong Cài đặt: Sheet, tên khách sạn, kênh, mã chỗ nghỉ
+ * và nguồn của từng thứ (H-1527 a: theo Hub; Hub chưa có thì cấu hình cũ của máy). Chỉ để xem.
+ */
 async function renderCollect() {
   const cfg = await loadEffectiveConfig();
   $("auto").textContent = scheduleText(cfg.collect);
-  const hub = cfg.collect.fromHub.enabled;
-  $("channelsFromHub").hidden = !hub;
-  for (const ch of CHANNELS) {
-    $(`en-${ch}`).disabled = hub;
-    if (hub) $(`en-${ch}`).checked = !!cfg.enabled[ch];
+  const box = $("reviewSrc");
+  box.textContent = "";
+  for (const line of reviewSourceLines(cfg, CHANNELS)) {
+    const d = document.createElement("div");
+    d.className = "small" + (line.warn ? " warn" : "");
+    d.textContent = line.text;
+    box.appendChild(d);
   }
+  return cfg;
 }
 
 /** Một dòng tình trạng (chấm màu · tình trạng · việc cần làm). */
@@ -68,10 +73,7 @@ async function renderQuay() {
     m.textContent = x.at ? shortTime(x.at) : "";
     subs.append(d, t, m);
   }
-  const sel = $("quayHub");
-  if (!sel.options.length)
-    for (const o of HUB_ORIGINS) sel.add(new Option(HUB_LABELS[o] ?? o, o));
-  if (snap?.origin) sel.value = snap.origin;
+  $("hubNow").textContent = hubLabel;
 }
 
 /** Ô chọn cơ sở (H-1351 c): đọc danh sách cơ sở của người đăng nhập qua lượt chỉ đọc scope=mine. */
@@ -103,17 +105,14 @@ async function renderReviewRow() {
 }
 
 async function fill() {
-  const cfg = await loadConfig();
-  for (const f of FIELDS) $(f).value = cfg[f] ?? "";
-  for (const ch of CHANNELS) $(`en-${ch}`).checked = !!cfg.enabled[ch];
-  await renderCollect();
-  // Máy mới cài: mở sẵn khối Cài đặt để người cài thấy ngay ô phải điền.
-  if (!cfg.hotel || !cfg.sheetUrl || !cfg.secret) $("settings").open = true;
+  const cfg = await renderCollect();
+  // Thu review chưa đủ cấu hình: mở sẵn khối Cài đặt để thấy ngay thiếu gì.
+  if (reviewMissingText(cfg.review)) $("settings").open = true;
 }
 
 /** Chép đoạn báo lỗi đầy đủ (mã, khách sạn, máy, phiên bản, lỗi) để dán gửi người quản lý. */
 async function copyReport(entry, button) {
-  const cfg = await loadConfig();
+  const cfg = await loadEffectiveConfig();
   const text = formatErrorReport(entry, { hotel: cfg.hotel, deviceId: await getDeviceId(), version: VERSION });
   try {
     await navigator.clipboard.writeText(text);
@@ -221,22 +220,6 @@ async function renderUpdate() {
       : `Máy đang chạy bản mới nhất (${VERSION}).`;
 }
 
-async function save() {
-  const cfg = await loadConfig();
-  for (const f of FIELDS) cfg[f] = $(f).value.trim();
-  // Kênh đặt trên Hub ⇒ ô bị khoá, giữ nguyên kênh của máy (dùng lại khi Hub thôi gửi cấu hình).
-  if (!$("en-booking").disabled) for (const ch of CHANNELS) cfg.enabled[ch] = $(`en-${ch}`).checked;
-  await saveConfig(cfg);
-  await chrome.runtime.sendMessage({ type: "reschedule" });
-  await renderCollect();
-  await renderStatus();
-}
-
-$("save").onclick = async () => {
-  await save();
-  note("Đã lưu.", "settingsNote");
-};
-
 /** Một dòng kết quả Thử Sheet (kèm Hub nếu máy gửi Hub). */
 function pingText(r) {
   const sheet = r?.ok ? `Sheet trả lời: ${r.sheet ?? "ok"}` : `Lỗi Sheet${r?.ref ? " " + r.ref : ""}: ${r?.error ?? "không rõ"}`;
@@ -257,24 +240,6 @@ async function ping() {
   await renderStatus();
 }
 
-$("applyCode").onclick = async () => {
-  const code = $("setupCode").value.trim();
-  if (!code) return note("Dán mã vào ô Mã cài đặt trước.", "settingsNote");
-  $("applyCode").disabled = true;
-  note("Đang nhận mã và thử Sheet…", "settingsNote");
-  try {
-    const r = await chrome.runtime.sendMessage({ type: "applySetupCode", code });
-    if (r?.ok) {
-      $("setupCode").value = "";
-      await fill();
-    }
-    note(setupText(r), "settingsNote");
-  } finally {
-    $("applyCode").disabled = false;
-  }
-  await renderStatus();
-};
-
 /**
  * Lệnh cài kèm mã: extension tự áp lúc nạp. Lần mở ô đầu tiên sau đó báo lại kết quả một lần,
  * để người cài thấy máy đã nhận đúng khách sạn.
@@ -289,13 +254,9 @@ async function showSetupFromFile() {
   note(setupText(setupResult) + next);
 }
 
-$("ping").onclick = async () => {
-  await save();
-  await ping();
-};
+$("ping").onclick = () => ping();
 
 $("scan").onclick = async () => {
-  await save();
   $("scan").disabled = true;
   note("Đang quét. Có thể mất vài phút, đóng ô này cũng không sao.");
   try {
@@ -310,13 +271,6 @@ $("scan").onclick = async () => {
 for (const b of document.querySelectorAll("[data-login]"))
   b.onclick = () => chrome.runtime.sendMessage({ type: "quay:openHub", path: "/login" });
 $("openHub").onclick = () => chrome.runtime.sendMessage({ type: "quay:openHub", path: "/" });
-$("quayHub").onchange = async () => {
-  await chrome.runtime.sendMessage({ type: "quay:setHub", origin: $("quayHub").value });
-  note("Đã đổi Hub. Mở lại tab PMS để khung nhận mã kết nối của Hub mới.", "settingsNote");
-  await renderQuay();
-  await renderBranches();
-};
-
 $("quayBranch").onchange = async () => {
   const r = await chrome.runtime.sendMessage({ type: "quay:setBranch", branchId: $("quayBranch").value });
   note(r?.ok ? "Đã chọn cơ sở của máy quầy." : `Không chọn được cơ sở: ${r?.error ?? "không rõ"}`);
@@ -328,7 +282,7 @@ $("copyCmd").onclick = () => copyCommand($("copyCmd"));
 
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.status || changes.lastError || changes.config || changes.hubCollect) renderStatus();
-  if (changes.hubCollect) renderCollect();
+  if (changes.hubCollect || changes.quayMine || changes.quayBranchId || changes.config) renderCollect();
   if (changes.update) renderUpdate();
   if (changes.quaySnap) renderQuay();
 });
