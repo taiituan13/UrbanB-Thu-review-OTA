@@ -17,7 +17,7 @@ import {
 } from "./config.js";
 import { SheetError, makeLogEntry, parseSheetReply, withRetry } from "./report.js";
 import { normalizeBatch } from "./normalize.js";
-import { hubBatches, hubRunMeta, hubSummaryText, ingestRequest, parseIngestReply, rejectedText, sumHubReplies } from "./hub.js";
+import { hubBatches, hubRunMeta, hubSnapshots, hubSummaryText, ingestRequest, parseIngestReply, rejectedText, sumHubReplies } from "./hub.js";
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
@@ -507,11 +507,11 @@ async function pingHub() {
  * Gửi các bài của một kênh lên Hub, chia lô. Không bao giờ ném: kết quả (hoặc lỗi) nằm trong
  * trạng thái kênh, còn lượt gửi Sheet đi tiếp như cũ. Một lô hỏng thì dừng, các lô đã gửi vẫn giữ.
  */
-async function sendHub(channel, reviews, at, run) {
+async function sendHub(channel, reviews, at, run, snapshots = []) {
   const replies = [];
   try {
     const meta = hubRunMeta({ deviceId: await getDeviceId(), trigger: run.trigger, runId: run.id });
-    for (const body of hubBatches(reviews, undefined, meta)) replies.push(await postHub(body));
+    for (const body of hubBatches(reviews, undefined, meta, snapshots)) replies.push(await postHub(body));
   } catch (e) {
     const sentNote = replies.length ? ` (đã gửi ${replies.length} lô trước đó)` : "";
     const entry = await hubFailure(channel, `${e?.message ?? e}${sentNote}`);
@@ -613,7 +613,7 @@ async function scanOne(channel, cfg, trigger, runId) {
     }
 
     // Hub trước Sheet: sendHub không ném, nên lỗi Hub không chặn Sheet và ngược lại.
-    hub = await sendHub(channel, batch.reviews, startedAt, { trigger, id: runId });
+    hub = await sendHub(channel, batch.reviews, startedAt, { trigger, id: runId }, hubSnapshots(result.snapshots, channel, result.channelHotelId));
 
     stage = "gửi Sheet";
 

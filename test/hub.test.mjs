@@ -8,6 +8,7 @@ import {
   HUB_PATH,
   NOT_SIGNED_IN_TEXT,
   hubBatches,
+  hubSnapshots,
   hubRunMeta,
   HUB_TRIGGER,
   hubSummaryText,
@@ -194,4 +195,26 @@ test("Lỗi gửi Hub có loại HUB-… riêng, không lẫn với lỗi Sheet 
   assert.equal(kind("3 bài Hub không nhận"), "HUB-ROWS");
   assert.equal(kind("Hub lỗi máy chủ (HTTP 502)."), "HUB-REJECT");
   assert.equal(classifyError("", "gửi Hub", "Hub chưa bật cửa nhận review (404).").code, "HUB-OFF");
+});
+
+test("YC-152: hubSnapshots chỉ giữ điểm tổng, kèm kênh và mã khách sạn", () => {
+  const snaps = [
+    { category: "Tổng", categoryCode: "overall", score: 8.6, scale: 10, reviewCount: 120 },
+    { category: "Sạch sẽ", categoryCode: "cleanliness", score: 9, scale: 10 },
+    { categoryCode: "overall", score: undefined, scale: 10 },
+  ];
+  assert.deepEqual(hubSnapshots(snaps, "agoda", 12345), [
+    { channel: "agoda", channelHotelId: "12345", categoryCode: "overall", score: 8.6, scale: 10 },
+  ]);
+  assert.deepEqual(hubSnapshots(snaps, "agoda", ""), [], "không mã khách sạn thì Hub không biết của chi nhánh nào");
+  assert.deepEqual(hubSnapshots(undefined, "agoda", "1"), []);
+});
+
+test("YC-152: điểm tổng đi ở lô đầu; lượt 0 bài vẫn gửi một lô để Hub nhận điểm", () => {
+  const snap = [{ channel: "agoda", channelHotelId: "1", categoryCode: "overall", score: 8.6, scale: 10 }];
+  const two = hubBatches(Array.from({ length: 250 }, (_, i) => review(i)), undefined, {}, snap);
+  assert.deepEqual(two[0].snapshots, snap);
+  assert.equal("snapshots" in two[1], false);
+  assert.deepEqual(hubBatches([], undefined, { run: { id: "r" } }, snap), [{ action: "ingest", reviews: [], snapshots: snap, run: { id: "r" } }]);
+  assert.deepEqual(hubBatches([], undefined, {}, []), [], "không bài, không điểm ⇒ không gửi gì");
 });

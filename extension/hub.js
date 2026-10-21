@@ -84,13 +84,29 @@ export function hubRunMeta({ deviceId, trigger, runId } = {}) {
 }
 
 /**
- * Chia bài thành các thân request, mỗi thân tối đa `size` bài và chỉ mang trường trong HUB_FIELDS.
- * `meta` (hubRunMeta) đi kèm MỌI lô của cùng một lượt.
+ * YC-152 (H-1489 a): điểm tổng của kênh mà bộ quét đọc trên extranet (snapshot `categoryCode: "overall"`),
+ * gửi Hub kèm mã khách sạn trên kênh. Điểm hạng mục chỉ đi Sheet. Không có điểm hợp lệ ⇒ mảng rỗng.
  */
-export function hubBatches(reviews, size = HUB_BATCH, meta = {}) {
+export function hubSnapshots(snapshots, channel, channelHotelId) {
+  if (!channelHotelId) return [];
+  return (snapshots ?? [])
+    .filter((s) => s?.categoryCode === "overall" && Number.isFinite(Number(s.score)) && Number.isFinite(Number(s.scale)))
+    .map((s) => ({ channel, channelHotelId: String(channelHotelId), categoryCode: "overall", score: Number(s.score), scale: Number(s.scale) }));
+}
+
+/**
+ * Chia bài thành các thân request, mỗi thân tối đa `size` bài và chỉ mang trường trong HUB_FIELDS.
+ * `meta` (hubRunMeta) đi kèm MỌI lô của cùng một lượt. Điểm tổng (`snapshots`, hubSnapshots) chỉ đi ở
+ * lô đầu; lượt 0 bài mà có điểm vẫn gửi một lô `reviews: []` để Hub nhận điểm.
+ */
+export function hubBatches(reviews, size = HUB_BATCH, meta = {}, snapshots = []) {
   const rows = reviews.map((r) => Object.fromEntries(HUB_FIELDS.filter((f) => f in r).map((f) => [f, r[f]])));
   const out = [];
   for (let i = 0; i < rows.length; i += size) out.push({ action: "ingest", reviews: rows.slice(i, i + size), ...meta });
+  if (snapshots.length) {
+    if (out.length) out[0].snapshots = snapshots;
+    else out.push({ action: "ingest", reviews: [], snapshots, ...meta });
+  }
   return out;
 }
 
