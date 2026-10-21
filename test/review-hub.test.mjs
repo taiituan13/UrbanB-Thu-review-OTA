@@ -100,7 +100,7 @@ test("Popup: nói rõ nguồn; Hub vắng ⇒ 'Hub chưa có cấu hình thu rev
   const hubLines = reviewSourceLines(effCfg(old, hub, branches, "br_col"), CHANNELS).map((l) => l.text);
   assert.match(hubLines.join("\n"), /Sheet thu review: theo cấu hình trên Hub/);
   assert.match(hubLines.join("\n"), /Tên khách sạn: Colline \(tên chi nhánh trên Hub\)/);
-  assert.match(hubLines.join("\n"), /Booking 111 \(Hub\) · Agoda 888 \(cấu hình cũ\) · Expedia 333 \(Hub\)/);
+  assert.match(hubLines.join("\n"), /Booking 111 \(Hub\), Agoda 888 \(cấu hình cũ\), Expedia 333 \(Hub\)/);
   const oldLines = reviewSourceLines(effCfg(old, { at: 1 }, branches, "br_col"), CHANNELS);
   assert.match(oldLines[0].text, /^Hub chưa có cấu hình thu review\. Máy đang chạy bằng cấu hình cũ/);
   assert.equal(oldLines[0].warn, true);

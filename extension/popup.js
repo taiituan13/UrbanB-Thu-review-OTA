@@ -53,8 +53,8 @@ async function renderQuay() {
   $("who").textContent =
     session === "out" ? `Chưa đăng nhập ${hubLabel}`
     : session === "expired" ? `Phiên ${hubLabel} đã hết`
-    : snap?.net ? `Không gọi được ${hubLabel} · đang hiện lượt trước`
-    : `${snap?.notifications?.me ? snap.notifications.me + " · " : "Đã đăng nhập "}${hubLabel}${snap?.branchName ? " · " + snap.branchName : ""}`;
+    : snap?.net ? `Không gọi được ${hubLabel}, đang hiện lượt trước`
+    : `${snap?.notifications?.me ? snap.notifications.me + " đã đăng nhập " : "Đã đăng nhập "}${hubLabel}${snap?.branchName ? ", đang mở " + snap.branchName : ""}`;
   $("outBox").hidden = session !== "out";
   $("expired").hidden = session !== "expired";
   $("tm").hidden = !snap?.tampermonkey;
@@ -199,10 +199,10 @@ async function renderStatus() {
   lastBox.textContent = "";
   if (last?.ref && last.stage === "gửi Sheet" && !shown.has(last.ref)) {
     const h = document.createElement("h2");
-    h.textContent = `Lỗi gửi Sheet · ${shortTime(last.at)}`;
+    h.textContent = `Lỗi gửi Sheet lúc ${shortTime(last.at)}`;
     const msg = document.createElement("div");
     msg.className = "detail";
-    msg.textContent = `${CHANNEL_LABEL[last.channel] ?? "Sheet"} · ${last.stage} · ${last.message}`;
+    msg.textContent = `${CHANNEL_LABEL[last.channel] ?? "Sheet"}, bước ${last.stage}: ${last.message}`;
     lastBox.append(h, msg, errorBox(last));
   }
 }
@@ -235,7 +235,7 @@ async function renderUpdate() {
 /** Một dòng kết quả Thử Sheet (kèm Hub nếu máy gửi Hub). */
 function pingText(r) {
   const sheet = r?.ok ? `Sheet trả lời: ${r.sheet ?? "ok"}` : `Lỗi Sheet${r?.ref ? " " + r.ref : ""}: ${r?.error ?? "không rõ"}`;
-  const hub = !r?.hub ? "" : r.hub.ok ? " · Hub: ổn" : ` · Lỗi Hub ${r.hub.ref ?? ""}: ${r.hub.error ?? "không rõ"}`;
+  const hub = !r?.hub ? "" : r.hub.ok ? ". Hub: ổn" : `. Lỗi Hub ${r.hub.ref ?? ""}: ${r.hub.error ?? "không rõ"}`;
   return sheet + hub;
 }
 
@@ -310,5 +310,5 @@ renderUpdate();
 showSetupFromFile();
 chrome.runtime.sendMessage({ type: "checkUpdate" }).catch(() => {});
 getDeviceId().then((id) => {
-  $("device").textContent = `Mã máy ${id.slice(0, 8)} · phiên bản ${VERSION}`;
+  $("device").textContent = `Mã máy ${id.slice(0, 8)}, phiên bản ${VERSION}`;
 });

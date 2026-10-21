@@ -8,6 +8,8 @@ import {
   HUB_PATH,
   NOT_SIGNED_IN_TEXT,
   hubBatches,
+  hubRunMeta,
+  HUB_TRIGGER,
   hubSummaryText,
   ingestRequest,
   ingestUrl,
@@ -57,6 +59,26 @@ test("Chia lô dưới trần 500 bài của Hub: 662 bài ⇒ 200 + 200 + 200 +
   assert.deepEqual(batches.map((b) => b.reviews.length), [200, 200, 200, 62]);
   assert.equal(batches[3].reviews[61].reviewId, "661");
   assert.deepEqual(hubBatches([]), []);
+});
+
+test("YC-157: mọi lô của một lượt mang mã máy, kiểu lượt và mã lượt theo hợp đồng Hub", () => {
+  const meta = hubRunMeta({ deviceId: "may-1", trigger: "hẹn giờ", runId: "luot-1" });
+  assert.deepEqual(meta, { device: { deviceId: "may-1" }, run: { trigger: "schedule", id: "luot-1" } });
+  const batches = hubBatches(Array.from({ length: 250 }, (_, i) => review(i)), undefined, meta);
+  assert.equal(batches.length, 2);
+  for (const b of batches) {
+    assert.deepEqual(b.device, { deviceId: "may-1" });
+    assert.deepEqual(b.run, { trigger: "schedule", id: "luot-1" });
+  }
+  assert.equal(hubRunMeta({ trigger: "bấm tay" }).run.trigger, "manual");
+});
+
+test("🔴 YC-157: kiểu lượt lạ không gửi; thiếu hết thông tin thì thân không có khoá device/run", () => {
+  assert.deepEqual(hubRunMeta({ trigger: "ai đó" }), {});
+  assert.deepEqual(hubRunMeta(), {});
+  const [body] = hubBatches([review(1)]);
+  assert.ok(!("device" in body) && !("run" in body));
+  assert.deepEqual(Object.keys(HUB_TRIGGER).sort(), ["bấm tay", "hẹn giờ"]);
 });
 
 test("🔴 H-1233 a: request gửi Hub KHÔNG có header Authorization (Hub chọn đường phiên theo đúng header này)", () => {

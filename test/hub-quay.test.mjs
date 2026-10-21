@@ -108,7 +108,7 @@ test("popupPmsRow: chưa ghép cơ sở và mất Hub KHÔNG bị đọc thành 
   // Đối chứng: Hub trả lời được mà không có mã ⇒ vẫn là "chưa có mã kết nối".
   assert.match(H.popupPmsRow({ session: "ok", codeState: "none", branchName: "UB1" }).subs[0].text, /chưa có mã kết nối Booking OTA của UB1/);
   assert.equal(H.frameSubtitle({ session: "server", branchName: "" }), "Không gọi được Hub");
-  assert.equal(H.frameSubtitle({ session: "server", branchName: "UB1" }), "UB1 · theo PMS đang mở");
+  assert.equal(H.frameSubtitle({ session: "server", branchName: "UB1" }), "UB1, theo PMS đang mở");
 });
 
 test("🔴 Chưa đăng nhập: chỉ ghi ảnh trạng thái khi phiên đổi (bản 1.0.0 ghi mỗi lượt ⇒ popup gọi Hub không ngừng)", () => {

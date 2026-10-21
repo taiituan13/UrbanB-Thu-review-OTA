@@ -17,7 +17,7 @@ import {
 } from "./config.js";
 import { SheetError, makeLogEntry, parseSheetReply, withRetry } from "./report.js";
 import { normalizeBatch } from "./normalize.js";
-import { hubBatches, hubSummaryText, ingestRequest, parseIngestReply, rejectedText, sumHubReplies } from "./hub.js";
+import { hubBatches, hubRunMeta, hubSummaryText, ingestRequest, parseIngestReply, rejectedText, sumHubReplies } from "./hub.js";
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
@@ -507,10 +507,11 @@ async function pingHub() {
  * Gửi các bài của một kênh lên Hub, chia lô. Không bao giờ ném: kết quả (hoặc lỗi) nằm trong
  * trạng thái kênh, còn lượt gửi Sheet đi tiếp như cũ. Một lô hỏng thì dừng, các lô đã gửi vẫn giữ.
  */
-async function sendHub(channel, reviews, at) {
+async function sendHub(channel, reviews, at, run) {
   const replies = [];
   try {
-    for (const body of hubBatches(reviews)) replies.push(await postHub(body));
+    const meta = hubRunMeta({ deviceId: await getDeviceId(), trigger: run.trigger, runId: run.id });
+    for (const body of hubBatches(reviews, undefined, meta)) replies.push(await postHub(body));
   } catch (e) {
     const sentNote = replies.length ? ` (đã gửi ${replies.length} lô trước đó)` : "";
     const entry = await hubFailure(channel, `${e?.message ?? e}${sentNote}`);
@@ -561,9 +562,11 @@ async function runScan(trigger) {
     // Sheet, tên khách sạn, mã chỗ nghỉ theo Hub (H-1527 a); Hub chưa có thì theo cấu hình cũ của máy.
     const missing = reviewMissingText(cfg.review);
     if (missing) return missing;
+    // Một mã cho cả lượt (mọi kênh): Hub gom các lô của cùng một lần quét (YC-157).
+    const runId = crypto.randomUUID();
     for (const channel of CHANNELS) {
       if (!cfg.enabled[channel]) continue;
-      await scanOne(channel, cfg, trigger);
+      await scanOne(channel, cfg, trigger, runId);
     }
     // Báo sống kèm trạng thái cuối của mọi kênh; chạy cả khi không bật kênh nào.
     try {
@@ -576,7 +579,7 @@ async function runScan(trigger) {
   }
 }
 
-async function scanOne(channel, cfg, trigger) {
+async function scanOne(channel, cfg, trigger, runId) {
   const startedAt = new Date().toISOString();
   const run = { at: startedAt, hotel: cfg.hotel, channel, trigger, version: VERSION, status: "", count: 0, note: "" };
   let tab = null;
@@ -610,7 +613,7 @@ async function scanOne(channel, cfg, trigger) {
     }
 
     // Hub trước Sheet: sendHub không ném, nên lỗi Hub không chặn Sheet và ngược lại.
-    hub = await sendHub(channel, batch.reviews, startedAt);
+    hub = await sendHub(channel, batch.reviews, startedAt, { trigger, id: runId });
 
     stage = "gửi Sheet";
 

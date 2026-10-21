@@ -63,11 +63,34 @@ export function ingestRequest(origin, body) {
 /** Câu báo chưa đăng nhập: lễ tân tự làm được, không phải lỗi của máy. */
 export const NOT_SIGNED_IN_TEXT = "Chưa đăng nhập Hub, hoặc phiên Hub đã hết. Mở Hub, đăng nhập bằng tài khoản của bạn rồi bấm Quét review ngay.";
 
-/** Chia bài thành các thân request, mỗi thân tối đa `size` bài và chỉ mang trường trong HUB_FIELDS. */
-export function hubBatches(reviews, size = HUB_BATCH) {
+/**
+ * Kiểu lượt gửi Hub (YC-157): mã ổn định thay chữ tiếng Việt của Sheet. Hub chỉ hiện nhãn cho mã nó
+ * biết; kiểu lạ thì không gửi.
+ */
+export const HUB_TRIGGER = { "hẹn giờ": "schedule", "bấm tay": "manual" };
+
+/**
+ * Thông tin lượt gửi kèm mỗi lô (hợp đồng `device.deviceId` · `run.trigger` · `run.id`, Hub đọc ở
+ * src/modules/reviews/ingest.rules.ts parseIngestRunMeta). Không có thông tin nào ⇒ không thêm khoá.
+ */
+export function hubRunMeta({ deviceId, trigger, runId } = {}) {
+  const meta = {};
+  if (deviceId) meta.device = { deviceId: String(deviceId) };
+  const run = {};
+  if (HUB_TRIGGER[trigger]) run.trigger = HUB_TRIGGER[trigger];
+  if (runId) run.id = String(runId);
+  if (Object.keys(run).length) meta.run = run;
+  return meta;
+}
+
+/**
+ * Chia bài thành các thân request, mỗi thân tối đa `size` bài và chỉ mang trường trong HUB_FIELDS.
+ * `meta` (hubRunMeta) đi kèm MỌI lô của cùng một lượt.
+ */
+export function hubBatches(reviews, size = HUB_BATCH, meta = {}) {
   const rows = reviews.map((r) => Object.fromEntries(HUB_FIELDS.filter((f) => f in r).map((f) => [f, r[f]])));
   const out = [];
-  for (let i = 0; i < rows.length; i += size) out.push({ action: "ingest", reviews: rows.slice(i, i + size) });
+  for (let i = 0; i < rows.length; i += size) out.push({ action: "ingest", reviews: rows.slice(i, i + size), ...meta });
   return out;
 }
 

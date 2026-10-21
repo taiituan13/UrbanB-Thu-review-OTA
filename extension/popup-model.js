@@ -88,6 +88,6 @@ export function reviewSourceLines(cfg, channels) {
     ["agoda", "Agoda", r.agodaPropertyId],
     ["expedia", "Expedia", r.expediaPropertyId],
   ].map(([k, label, v]) => (v ? `${label} ${v}${from[k] ? " (Hub)" : " (cấu hình cũ)"}` : `${label} tự dò`));
-  lines.push({ text: `Mã chỗ nghỉ: ${ids.join(" · ")}.` });
+  lines.push({ text: `Mã chỗ nghỉ: ${ids.join(", ")}.` });
   return lines;
 }

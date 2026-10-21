@@ -315,10 +315,10 @@ export function reportToSend(lastReport, otaSync, outcome) {
 /** Dòng phụ dưới tên khung. */
 export function frameSubtitle({ session, branchName, why }) {
   if (session === "out") return "Chưa đăng nhập Hub";
-  if (session === "nobranch" || why) return "Cơ sở: chưa xác định";
+  if (session === "nobranch" || why) return "Chưa biết chi nhánh nào";
   if (UNREACHABLE.has(session) && !branchName) return "Không gọi được Hub";
-  if (session === "expired") return `${branchName || "Cơ sở đã nhận"} · phiên Hub đã hết`;
-  return branchName ? `${branchName} · theo PMS đang mở` : "Đang đọc chi nhánh…";
+  if (session === "expired") return `${branchName || "Chi nhánh đã nhận"}, phiên Hub đã hết`;
+  return branchName ? `${branchName}, theo PMS đang mở` : "Đang đọc chi nhánh…";
 }
 
 /**
@@ -345,7 +345,7 @@ export function blockedNote({ session, why, hotelId, branchName, hasCache = fals
     return {
       tone: "bad",
       title: "Khách sạn đang mở trên PMS chưa được ghép với chi nhánh nào trên Hub.",
-      text: `Mã khách sạn ezCloud: ${hotelId}. Báo Quản trị hệ thống ghép mã này với chi nhánh trên Hub; ghép xong, khung tự hiện booking và chỉ báo.`,
+      text: `Mã khách sạn ezCloud: ${hotelId}. Gửi mã này cho Quản trị hệ thống để ghép với chi nhánh trên Hub (màn Kết nối, nút Ghép mã ezCloud). Ghép xong, khung tự hiện booking và chỉ báo.`,
     };
   if (why === "scope")
     return {
@@ -438,7 +438,7 @@ export function popupPmsRow(snap) {
     return {
       tone: "off",
       state: "Chưa chạy",
-      detail: "Booking OTA · Khoá G2J · Chỉ báo · Thông báo: cần đăng nhập Hub. Khung trên PMS cũng nhắc việc này.",
+      detail: "Booking OTA, Khoá G2J, Chỉ báo và Thông báo cần đăng nhập Hub. Khung trên PMS cũng nhắc việc này.",
       subs: [],
     };
   const subs = [];
@@ -447,13 +447,13 @@ export function popupPmsRow(snap) {
   const unmapped = session === "nobranch" && snap.why === "unmapped";
   const unreachable = UNREACHABLE.has(session) || snap.codeState === "unknown";
   if (session === "nobranch")
-    subs.push({ tone: unmapped ? "err" : "warn", text: unmapped ? "Booking OTA · Khoá G2J: khách sạn đang mở trên PMS chưa được ghép với chi nhánh nào trên Hub — báo Quản trị hệ thống" : "Booking OTA · Khoá G2J: chưa biết PMS đang mở chi nhánh nào", at: null });
-  else if (unreachable && !b?.count && snap.codeState !== "ok") subs.push({ tone: "err", text: "Booking OTA · Khoá G2J: không gọi được Hub, máy chưa nhận mã kết nối lần nào", at: b?.at });
-  else if (snap.codeState === "none") subs.push({ tone: "err", text: `Booking OTA · Khoá G2J: Hub chưa có mã kết nối Booking OTA của ${branch} — báo Quản trị hệ thống`, at: b?.at });
-  else if (snap.codeState === "rejected") subs.push({ tone: "err", text: `Booking OTA · Khoá G2J: Apps Script từ chối mã kết nối của ${branch} — đã báo Hub`, at: b?.at });
-  else if (b?.error) subs.push({ tone: "err", text: `Booking OTA · Khoá G2J: ${b.error}`, at: b.at });
-  else if (b) subs.push({ tone: b.issues ? "warn" : "ok", text: `Booking OTA · Khoá G2J: ${b.count} booking${b.issues ? `, ${b.issues} booking lỗi` : ""}${snap.tokenAt ? ` · token PMS gửi ${hhmm(snap.tokenAt)}` : ""}`, at: b.at });
-  else subs.push({ tone: "off", text: "Booking OTA · Khoá G2J: chưa mở PMS", at: null });
+    subs.push({ tone: unmapped ? "err" : "warn", text: unmapped ? "Booking OTA và Khoá G2J chưa chạy: khách sạn đang mở trên PMS chưa được ghép với chi nhánh nào trên Hub. Báo Quản trị hệ thống." : "Booking OTA và Khoá G2J: chưa biết PMS đang mở chi nhánh nào. Mở một màn bất kỳ của PMS là có.", at: null });
+  else if (unreachable && !b?.count && snap.codeState !== "ok") subs.push({ tone: "err", text: "Booking OTA và Khoá G2J: không gọi được Hub, máy chưa nhận mã kết nối lần nào. Kiểm tra mạng của máy quầy.", at: b?.at });
+  else if (snap.codeState === "none") subs.push({ tone: "err", text: `Booking OTA và Khoá G2J: Hub chưa có mã kết nối Booking OTA của ${branch}. Báo Quản trị hệ thống.`, at: b?.at });
+  else if (snap.codeState === "rejected") subs.push({ tone: "err", text: `Booking OTA và Khoá G2J: Google Sheet của khách sạn không nhận mã kết nối của ${branch}. Máy đã báo Hub, báo Quản trị hệ thống nhập lại mã.`, at: b?.at });
+  else if (b?.error) subs.push({ tone: "err", text: `Booking OTA và Khoá G2J: ${b.error}`, at: b.at });
+  else if (b) subs.push({ tone: b.issues ? "warn" : "ok", text: `Booking OTA và Khoá G2J: ${b.count} booking${b.issues ? `, ${b.issues} booking lỗi` : ""}${snap.tokenAt ? `. Đã gửi phiên đăng nhập PMS lúc ${hhmm(snap.tokenAt)}` : ""}`, at: b.at });
+  else subs.push({ tone: "off", text: "Booking OTA và Khoá G2J: chưa mở PMS", at: null });
 
   const ind = snap.indicators;
   if (session === "expired") subs.push({ tone: "warn", text: "Chỉ báo: dừng cập nhật tới khi đăng nhập lại", at: ind?.at });
@@ -464,14 +464,14 @@ export function popupPmsRow(snap) {
 
   const n = snap.notifications;
   if (session === "expired") subs.push({ tone: "warn", text: "Thông báo: tạm không nhận", at: null });
-  else if (n?.state === "ok") subs.push({ tone: "ok", text: n.unread ? `Thông báo: ${n.unread} chưa đọc — xem ở chip trên PMS` : "Thông báo: không có thông báo chưa đọc", at: n.at });
+  else if (n?.state === "ok") subs.push({ tone: "ok", text: n.unread ? `Thông báo: ${n.unread} chưa đọc, xem ở nút Thông báo trên PMS` : "Thông báo: không có thông báo chưa đọc", at: n.at });
   // Route thông báo chưa có trên Hub ⇒ không hiện dòng nào (tính năng ẩn).
 
   const worst = subs.some((x) => x.tone === "err") ? "err" : subs.some((x) => x.tone === "warn") ? "warn" : "ok";
   const errCount = subs.filter((x) => x.tone === "err").length;
   const state =
-    worst === "err" ? (errCount > 1 ? `Lỗi ở ${errCount} phần — xem từng dòng` : "Có lỗi — xem dòng dưới")
-    : session === "expired" ? "Một phần dừng — phiên Hub đã hết"
-    : "Đang chạy · 3 tab";
+    worst === "err" ? (errCount > 1 ? `Lỗi ở ${errCount} phần, xem từng dòng` : "Có lỗi, xem dòng dưới")
+    : session === "expired" ? "Một phần dừng vì phiên Hub đã hết"
+    : "Đang chạy, 3 tab";
   return { tone: worst, state, detail: "Mở PMS ezCloud, bấm nút Urban B ở góc phải dưới.", subs };
 }
