@@ -7,6 +7,7 @@
 import * as B from "./booking-ota.js";
 import * as H from "./hub-quay.js";
 import * as N from "./notifications.js";
+import * as W from "./web-orders.js";
 import { DEV_FLAGS } from "../env.js";
 import { HUB_COLLECT_KEY, parseHubSettings } from "../hub-config.js";
 
@@ -287,6 +288,26 @@ export async function indicators(hotelId) {
   return { state: session, why: cls.why, cached, failedAt: now(), message: cls.message, origin };
 }
 
+// ---------- Đơn web urbanb.vn lệch số booking (YC-171) ----------
+
+/** Cần phiên Hub còn sống: hết phiên thì khung báo đăng nhập, không có bản lưu (đơn đổi theo lễ tân bấm). */
+export async function webOrders(hotelId) {
+  const origin = await hubOriginNow();
+  const cls = H.classifyHubReply(await hubFetch(W.webOrdersUrl(origin, hotelId)));
+  await noteSession(cls);
+  const r = W.listState(cls);
+  if (r.state === "out") r.state = await sessionNow(cls);
+  return { ...r, at: now() };
+}
+
+export async function resolveWebOrder(hotelId, id) {
+  if (!hotelId || !id) return { ok: false, text: "Thiếu mã đơn." };
+  const origin = await hubOriginNow();
+  const r = W.resolveState(await hubFetch(origin + W.WEB_ORDERS_PATH, W.resolveInit(hotelId, id)));
+  if (r.state === "out") await noteSession({ state: "out" });
+  return r;
+}
+
 // ---------- Token ezCloud / Go2Joy ----------
 
 const pending = {};
@@ -524,6 +545,8 @@ const HANDLERS = {
   "quay:board": (m) => board(String(m.hotelId ?? "")),
   "quay:lock": (m) => lock(String(m.hotelId ?? ""), String(m.sourceKey ?? ""), Boolean(m.confirmPaid)),
   "quay:indicators": (m) => indicators(String(m.hotelId ?? "")),
+  "quay:webOrders": (m) => webOrders(String(m.hotelId ?? "")),
+  "quay:webOrderResolve": (m) => resolveWebOrder(String(m.hotelId ?? ""), String(m.id ?? "")),
   "quay:token": (m, sender) => onToken(m, sender?.tab?.id),
   "quay:pageHotel": (m, sender) => onPageHotel(m.hotelId, sender?.tab?.id),
   "quay:tabHotel": async (_m, sender) => ({ hotelId: sender?.tab?.id != null ? (await chrome.storage.session.get(`quayTab:${sender.tab.id}`).catch(() => ({})))[`quayTab:${sender.tab.id}`] ?? "" : "" }),

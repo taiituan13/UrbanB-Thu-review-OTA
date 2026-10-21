@@ -10,6 +10,7 @@ import * as B from "./booking-ota.js";
 import * as H from "./hub-quay.js";
 import * as I from "./indicators.js";
 import * as T from "./todo.js";
+import * as W from "./web-orders.js";
 import { QUAY_CSS } from "./ui-css.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -64,6 +65,8 @@ export function mount({ bridge, plugins = [] } = {}) {
     recent: null, // lượt đọc booking GẦN ĐÂY (q rỗng): nguồn của tab chính và nút gập, tìm không đè
     board: null,
     ind: null, // lời đáp quay:indicators
+    web: null, // lời đáp quay:webOrders — đơn web urbanb.vn lệch số booking (YC-171)
+    webBan: null, // kết quả lần bấm "Đã xử lý"
     lockBan: null,
     note: null, // lời báo đẩy token
     hello: false,
@@ -158,6 +161,15 @@ export function mount({ bridge, plugins = [] } = {}) {
     render();
   }
 
+  async function loadWebOrders() {
+    if (!canIndicators()) return;
+    const r = await send({ type: "quay:webOrders", hotelId: S.hotelId });
+    if (r.state === "out" || r.state === "expired") S.view.session = r.state;
+    // Lượt đọc hỏng giữ danh sách lượt trước: đơn lệch không tự hết chỉ vì Hub chập chờn.
+    S.web = r.state === "ok" ? r : { ...r, orders: S.web?.orders ?? null, canResolve: S.web?.canResolve ?? false, okAt: S.web?.okAt ?? S.web?.at ?? null };
+    render();
+  }
+
   let bookTimer = null;
   let indTimer = null;
   function refreshAll() {
@@ -165,6 +177,7 @@ export function mount({ bridge, plugins = [] } = {}) {
     if (S.q) loadRecent();
     loadBoard();
     loadIndicators();
+    loadWebOrders();
     clearTimeout(bookTimer);
     bookTimer = setTimeout(() => S.open && refreshAll(), B.AUTO_REFRESH_MS);
   }
@@ -177,6 +190,7 @@ export function mount({ bridge, plugins = [] } = {}) {
     await hello();
     loadRecent(); // số trên nút gập lúc tải trang (userscript: loadRecent)
     loadIndicators();
+    loadWebOrders();
     scheduleIndicators();
   }
 
@@ -187,6 +201,8 @@ export function mount({ bridge, plugins = [] } = {}) {
     S.recent = null;
     S.board = null;
     S.ind = null;
+    S.web = null;
+    S.webBan = null;
     start();
   });
 
@@ -251,12 +267,40 @@ export function mount({ bridge, plugins = [] } = {}) {
     return "";
   }
 
+  // YC-171 — đơn web urbanb.vn mà Apps Script tạo thiếu (hoặc thừa) booking ezCloud. Đứng đầu tab Booking OTA
+  // (H-1668 c); hết khi lễ tân bấm "Đã xử lý" (H-1669 a). Hub chưa có route ⇒ ẩn cả khối.
+  function webOrderCardHTML(o, canResolve) {
+    const c = W.webOrderCard(o);
+    const act = canResolve
+      ? `<div class="ota-row" style="margin:6px 0 0"><button class="ota-btn" data-act="webDone" data-id="${esc(o.id)}" data-code="${esc(o.orderCode)}">Đã xử lý</button><span class="ota-muted">Bấm sau khi PMS đã đủ booking của đơn</span></div>`
+      : `<div class="ota-muted">Lễ tân của cơ sở bấm Đã xử lý sau khi PMS đủ booking.</div>`;
+    return `<div class="ota-card" data-web-order="${esc(o.orderCode)}">
+      <div class="ota-t"><span>${esc(c.title)}</span>${c.received ? `<span class="ota-muted" style="white-space:nowrap">nhận ${esc(c.received)}</span>` : ""}</div>
+      <div class="ota-m bad">${esc(c.gap)}</div>
+      ${c.meta ? `<div class="ota-m">${esc(c.meta)}</div>` : ""}
+      <div class="ota-m">${esc(c.todo)}</div>${act}</div>`;
+  }
+
+  function webOrdersBlock() {
+    const w = S.web;
+    if (!w || w.state === "missing") return "";
+    const ban = S.webBan ? `<div class="qban ${S.webBan.ok ? "ok" : "bad"}" role="status">${esc(S.webBan.text)}<button data-act="webBanX">Ẩn</button></div>` : "";
+    const orders = w.orders ?? [];
+    const fail = w.state !== "ok" && w.state !== "out" && w.state !== "expired" && w.state !== "nobranch"
+      ? `<div class="ota-muted">Chưa đọc được đơn web lệch từ Hub${w.okAt ? `; danh sách của lượt ${H.hhmm(w.okAt)}` : ""}.</div>`
+      : "";
+    if (!orders.length) return ban || fail ? `${ban}${fail}` : "";
+    return `<section class="qsec-b" aria-label="Đơn web lệch số booking">${secHead("Đơn web lệch số booking", orders.length, true)}${ban}${fail}
+      <div class="${w.state !== "ok" ? "cb-stale" : ""}" style="display:flex;flex-direction:column;gap:8px">${orders.map((o) => webOrderCardHTML(o, w.canResolve)).join("")}</div></section>`;
+  }
+
   function bookingsTab() {
     const b = S.booking;
     const ban = S.lockBan ? `<div class="qban ${S.lockBan.ok ? "ok" : "bad"}" role="status">${esc(S.lockBan.text)}<button data-act="lockBanX">Ẩn</button></div>` : "";
     const tok = S.note && S.open ? `<div class="qban ${S.note.tone === "ok" ? "ok" : S.note.tone === "warn" ? "warn" : "bad"}" role="status">${esc(S.note.text)}<button data-act="noteX">Ẩn</button></div>` : "";
     const search = `<div class="qsearch"><input data-k="q" placeholder="Tìm theo số booking, tên khách, mã EZCloud..." value="${esc(S.q)}"><button class="ota-btn" data-act="search">Tìm</button></div>`;
-    if (!b) return `${ban}${tok}${search}<div class="ota-muted">Đang tải...</div>`;
+    const web = webOrdersBlock();
+    if (!b) return `${ban}${tok}${web}${search}<div class="ota-muted">Đang tải...</div>`;
     const problem = b.ok === false ? codeProblem(b) || `<div class="ota-card err">${esc(b.error)}</div>` : "";
     const matches = b.ok === false ? b.cached?.matches ?? null : b.matches ?? [];
     let list = "";
@@ -271,7 +315,7 @@ export function mount({ bridge, plugins = [] } = {}) {
       list = `${lead}<div class="${b.ok === false ? "cb-stale" : ""}" style="display:flex;flex-direction:column;gap:8px">${sorted.map(bookingCard).join("")}</div>`;
     }
     const loading = b.loading ? `<div class="ota-muted">Đang tải...</div>` : "";
-    return `${ban}${tok}${problem}${search}${loading}${list}`;
+    return `${ban}${tok}${web}${problem}${search}${loading}${list}`;
   }
 
   function boardTab() {
@@ -369,7 +413,8 @@ export function mount({ bridge, plugins = [] } = {}) {
     const t = T.todoModel({ recent: S.recent, ind: S.view?.session === "ok" ? indModel() : null });
     const m = S.view?.session === "ok" ? indModel() : null;
     const bad = t.issues.length > 0 || m?.level === "cb";
-    const badge = { todo: t.count ? `<span class="ct ${bad ? "bad" : ""}">${t.count}</span>` : "" };
+    const web = S.web?.orders?.length ?? 0;
+    const badge = { todo: t.count ? `<span class="ct ${bad ? "bad" : ""}">${t.count}</span>` : "", bookings: web ? `<span class="ct bad">${web}</span>` : "" };
     const on = (id) => (!S.overlay && S.tab === id ? "on" : "");
     return `<div class="qf-tabs" role="tablist">${T.FRAME_TABS.map(
       (x) => `<button role="tab" aria-selected="${on(x.id) === "on"}" class="${on(x.id)} ${x.id === "todo" ? "main" : ""}" data-act="tab" data-t="${x.id}">${esc(x.label)}${badge[x.id] ?? ""}</button>`,
@@ -468,6 +513,19 @@ export function mount({ bridge, plugins = [] } = {}) {
     else render();
   }
 
+  async function doWebDone(btn) {
+    const id = btn.dataset.id;
+    if (!window.confirm(`Ghi Đã xử lý cho đơn web ${btn.dataset.code}? Cảnh báo của đơn này sẽ tắt.`)) return;
+    btn.disabled = true;
+    btn.textContent = "Đang ghi...";
+    const r = await send({ type: "quay:webOrderResolve", hotelId: S.hotelId, id });
+    S.webBan = { ok: Boolean(r.ok), text: r.text ?? "" };
+    if (r.state === "out" && S.view) S.view.session = "out";
+    if (r.ok && r.orders && S.web) S.web = { ...S.web, orders: r.orders };
+    if (r.ok || r.gone) return loadWebOrders();
+    render();
+  }
+
   root.addEventListener("click", (e) => {
     const t = e.target.closest("[data-act]");
     if (!t) return;
@@ -487,6 +545,8 @@ export function mount({ bridge, plugins = [] } = {}) {
       return loadBookings();
     } else if (a === "lock") return doLock(t);
     else if (a === "lockBanX") S.lockBan = null;
+    else if (a === "webDone") return doWebDone(t);
+    else if (a === "webBanX") S.webBan = null;
     else if (a === "noteX") S.note = null;
     else if (a === "retry") return start();
     else if (a === "retryInd") return loadIndicators();
