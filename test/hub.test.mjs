@@ -41,7 +41,7 @@ const review = (i) => ({
 });
 
 test("Thân gửi Hub chỉ mang trường trong danh sách trắng: không raw, không mã bí mật", () => {
-  const [body] = hubBatches([{ ...review(1), secret: "s".repeat(64) }]);
+  const [body] = hubBatches([{ ...review(1), guestName: "Khách A", secret: "s".repeat(64) }]);
   assert.equal(body.action, "ingest");
   const row = body.reviews[0];
   assert.deepEqual(Object.keys(row).sort(), [...HUB_FIELDS].sort());
@@ -49,6 +49,13 @@ test("Thân gửi Hub chỉ mang trường trong danh sách trắng: không raw,
   assert.ok(!text.includes("lọt") && !text.includes("sss"), "raw hay secret lọt vào thân gửi Hub");
   assert.equal(row.reviewId, "1");
   assert.equal(row.score, 4.5);
+});
+
+test("Tên khách (YC-188): có thì gửi Hub; bài kênh chưa đo đường tên thì không có khoá", () => {
+  assert.ok(HUB_FIELDS.includes("guestName"));
+  const [body] = hubBatches([{ ...review(1), guestName: "Khách A" }, review(2)]);
+  assert.equal(body.reviews[0].guestName, "Khách A");
+  assert.ok(!("guestName" in body.reviews[1]));
 });
 
 test("Chia lô dưới trần 500 bài của Hub: 662 bài ⇒ 200 + 200 + 200 + 62", () => {

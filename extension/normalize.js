@@ -15,6 +15,21 @@ const STRIP_FIELDS = {
   go2joy: ["userNickName"],
 };
 
+/**
+ * YC-188 (H-1815 a): khoá giữ TÊN HIỂN THỊ của khách trên một bài thô, theo kênh, dạng đường chấm
+ * ("traveler.name"). `null` = chưa đo trên extranet thật (H-1853 a: người dùng tự đo trên máy mình)
+ * ⇒ kênh ấy không gửi tên. Chỉ điền một kênh khi đã có kết quả đo; khoá ấy vẫn phải nằm trong
+ * STRIP_FIELDS (hoặc bị gỡ riêng như Expedia) để JSON gốc không mang tên.
+ */
+export const GUEST_NAME_PATH = {
+  booking: null,
+  agoda: null,
+  trip: null,
+  traveloka: null,
+  expedia: null,
+  go2joy: null,
+};
+
 /** Giới hạn một ô Google Sheet là 50.000 ký tự; chừa lề. */
 const RAW_MAX = 45000;
 
@@ -342,6 +357,23 @@ export function normalizeGo2joy(item, { hotel, channelHotelId }) {
   return { review: finish(row), scores };
 }
 
+/** Đọc tên khách ở `path` trên bài thô. Không có đường, không phải chuỗi, hoặc rỗng ⇒ "". */
+export function guestNameAt(item, path) {
+  if (!path) return "";
+  let v = item;
+  for (const k of path.split(".")) v = v && typeof v === "object" ? v[k] : undefined;
+  return typeof v === "string" ? v.trim() : "";
+}
+
+/**
+ * Bài gửi Google Sheet: bỏ `guestName` (H-1852 a: tên chỉ đi Hub, Sheet giữ nguyên như cũ).
+ * Sheet ghi theo danh sách cột nên đằng nào cũng không có cột tên; gỡ ở đây để tên không rời máy
+ * theo đường Sheet.
+ */
+export function sheetReviews(reviews) {
+  return reviews.map(({ guestName: _name, ...rest }) => rest);
+}
+
 function scoreRow(review, code, name, score, scale) {
   return {
     key: `${review.key}|${code}`,
@@ -364,8 +396,12 @@ const NORMALIZERS = {
   go2joy: normalizeGo2joy,
 };
 
-/** Chuẩn hoá cả lô của một kênh. Bài lỗi không làm hỏng cả lô: được đếm và báo lại. */
-export function normalizeBatch(channel, items, ctx) {
+/**
+ * Chuẩn hoá cả lô của một kênh. Bài lỗi không làm hỏng cả lô: được đếm và báo lại.
+ * Tên khách đọc từ bài thô sau khi đã băm (`finish`), nên tên không bao giờ vào `hash`; kênh chưa
+ * có đường tên thì bài không có khoá `guestName`.
+ */
+export function normalizeBatch(channel, items, ctx, namePaths = GUEST_NAME_PATH) {
   const fn = NORMALIZERS[channel];
   if (!fn) throw new Error(`Kênh lạ: ${channel}`);
   const reviews = [];
@@ -374,6 +410,8 @@ export function normalizeBatch(channel, items, ctx) {
   for (const item of items) {
     try {
       const out = fn(item, ctx);
+      const name = guestNameAt(item, namePaths[channel]);
+      if (name) out.review.guestName = name;
       reviews.push(out.review);
       scores.push(...out.scores);
     } catch (e) {
