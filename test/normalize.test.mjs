@@ -1,6 +1,7 @@
 // Dữ liệu giả lập theo dạng trường đo được ngày 07/10/2026 — không dùng review thật.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   GUEST_NAME_PATH,
   contentHash,
@@ -324,4 +325,11 @@ test("Tên khách: bài gửi Sheet không mang guestName, các trường khác 
   const { guestName: _n, ...rest } = r;
   assert.deepEqual(sheet, rest);
   assert.equal(r.guestName, "Khách A", "không sửa bài gốc (vẫn gửi Hub)");
+});
+
+test("Tên khách: background.js gửi Sheet qua sheetReviews, gửi Hub bằng bài đủ", () => {
+  const bg = readFileSync(new URL("../extension/background.js", import.meta.url), "utf8");
+  assert.match(bg, /reviews: sheetReviews\(batch\.reviews\)/);
+  assert.doesNotMatch(bg, /reviews: batch\.reviews,/, "lượt gửi Sheet không được mang bài chưa gỡ tên");
+  assert.match(bg, /sendHub\(channel, batch\.reviews,/);
 });
