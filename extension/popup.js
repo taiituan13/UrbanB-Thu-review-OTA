@@ -20,7 +20,9 @@ function note(text, where = "note") {
  */
 async function renderCollect() {
   const cfg = await loadEffectiveConfig();
-  $("auto").textContent = scheduleText(cfg.collect);
+  const auto = scheduleText(cfg.collect, cfg.review);
+  $("auto").hidden = !auto;
+  $("auto").textContent = auto ?? "";
   const box = $("reviewSrc");
   box.textContent = "";
   for (const line of reviewSourceLines(cfg, CHANNELS)) {

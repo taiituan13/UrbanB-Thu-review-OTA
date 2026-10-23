@@ -232,8 +232,13 @@ export function alarmMinutes(intervalHours) {
   return Math.max(30, Math.round(Number(intervalHours || DEFAULT_CONFIG.intervalHours) * 60));
 }
 
-/** Chữ dưới nút Quét: chu kỳ và nguồn của nó. */
-export function scheduleText(eff) {
+/**
+ * Chữ dưới nút Quét: chu kỳ và nguồn của nó. YC-156 L4: thu review không tự chạy được (bị chặn theo
+ * `reviewMissingHelp`, hoặc không bật kênh nào) ⇒ null, popup ẩn dòng, kẻo đọc như máy đang tự quét.
+ */
+export function scheduleText(eff, review = null) {
+  if (review && reviewMissingHelp(review)) return null;
+  if (!CHANNELS.some((ch) => eff?.enabled?.[ch])) return null;
   const src = eff.fromHub.branch
     ? "theo cấu hình riêng của chi nhánh trên Hub"
     : eff.fromHub.intervalHours

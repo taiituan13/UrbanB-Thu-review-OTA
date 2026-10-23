@@ -124,3 +124,21 @@ test("Lịch quét và lượt quét đọc cấu hình đã áp Hub, không đ�
   }
   assert.match(body("runScan"), /syncHubSettings\(\)/, "runScan phải hỏi Hub trước khi quét");
 });
+
+test("🔴 YC-156 L4 — dòng 'tự quét mỗi N giờ' ẩn khi thu review không tự chạy được", () => {
+  const eff = effectiveCollect(DEFAULT_CONFIG, { intervalHours: 6, enabled: { booking: true } });
+  const ready = { sheetUrl: "https://s", secret: "x", hotel: "UB1", hubSeen: true };
+  assert.match(scheduleText(eff, ready), /mỗi 6 giờ/);
+  // Bị chặn: Chrome chưa đăng nhập Hub lần nào và máy không có Sheet.
+  assert.equal(scheduleText(eff, { sheetUrl: "", secret: "", hotel: "", hubSeen: false }), null);
+  // Bị chặn: chưa biết chi nhánh.
+  assert.equal(scheduleText(eff, { ...ready, hotel: "" }), null);
+  // Không bật kênh nào.
+  assert.equal(scheduleText(effectiveCollect(DEFAULT_CONFIG, { intervalHours: 6, enabled: {} }), ready), null);
+  // H-1903 b: chưa có Sheet nhưng vẫn gửi Hub ⇒ vẫn tự quét ⇒ dòng còn.
+  assert.match(scheduleText(eff, { sheetUrl: "", secret: "", hotel: "UB1", hubSeen: true }), /mỗi 6 giờ/);
+  // popup.js truyền cấu hình thu review vào và ẩn dòng khi null.
+  const js = readFileSync(new URL("../extension/popup.js", import.meta.url), "utf8");
+  assert.match(js, /scheduleText\(cfg\.collect, cfg\.review\)/);
+  assert.match(js, /\$\("auto"\)\.hidden = !auto/);
+});
