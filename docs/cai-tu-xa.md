@@ -69,6 +69,8 @@ từ Hub hay từ cấu hình cũ. Bấm **Thử Sheet**: dòng chữ hiện "Sh
 
 - Ô bật lên báo **"Hub chưa có cấu hình thu review"**: Quản trị hệ thống chưa điền Sheet thu review
   trên Hub. Máy có cấu hình cũ (lệnh có mã) thì vẫn chạy bằng cấu hình đó.
+- Ô bật lên báo **"Chưa ghi Sheet. Review vẫn gửi lên Hub"** (từ bản 1.4.2, `H-1903` b): máy không có
+  Sheet nào; review vẫn lên Hub, chỉ không ghi Sheet.
 - Dòng báo **Lỗi Sheet** thay vì "Sheet trả lời": URL Web App trên Hub sai, hoặc Web App chưa để
   quyền "Bất kỳ ai".
 

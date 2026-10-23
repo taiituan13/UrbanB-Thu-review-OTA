@@ -2,7 +2,7 @@
 // Mục "Khung trên PMS" dùng quay/hub-quay.js popupPmsRow.
 
 import { CHANNEL_LABEL } from "./report.js";
-import { HUB_COUNTER_PLACE, reviewMissingText } from "./hub-config.js";
+import { HUB_COUNTER_PLACE, reviewMissingText, sheetSkipText } from "./hub-config.js";
 
 /** Giờ "08:02" theo giờ máy. */
 export function hm(iso) {
@@ -24,8 +24,12 @@ export function noChannelText(cfg) {
  */
 export function reviewRow(cfg, status, channels) {
   const enabled = channels.filter((ch) => cfg?.enabled?.[ch]);
-  if (!cfg?.sheetUrl || !cfg?.secret || !cfg?.hotel)
-    return { tone: "warn", state: "Chưa cài đặt xong", when: "", detail: reviewMissingText(cfg.review ?? cfg) };
+  const review = cfg?.review ?? cfg ?? {};
+  const missing = reviewMissingText(review);
+  if (missing) return { tone: "warn", state: "Chưa cài đặt xong", when: "", detail: missing };
+  // H-1903 b: chưa có Sheet thì vẫn quét và gửi Hub; dòng nói rõ "chưa ghi Sheet", không phải lỗi chặn.
+  const skip = sheetSkipText(review);
+  const sheetNote = skip ? " Chưa ghi Sheet vì Hub chưa có cấu hình Sheet review." : "";
   if (!enabled.length) return { tone: "off", state: "Chưa bật kênh nào", when: "", detail: noChannelText(cfg) };
   const rows = enabled.map((ch) => ({ ch, s: status?.[ch] }));
   const bad = rows.filter((r) => r.s && r.s.state !== "ok");
@@ -54,16 +58,16 @@ export function reviewRow(cfg, status, channels) {
       state: login ? "Review chưa lên Hub, cần đăng nhập Hub" : `Gửi Hub lỗi ở ${hubBad.length} kênh`,
       when: latest ? hm(latest) : "",
       detail: login
-        ? "Sheet vẫn nhận bình thường. Bấm Đăng nhập Hub và đăng nhập bằng tài khoản của bạn. Lượt quét sau tự gửi lên Hub."
-        : `${names}: Sheet vẫn nhận. Xem từng kênh bên dưới, mỗi kênh có các bước cần làm và mã lỗi để gửi người quản lý.`,
+        ? `${skip ? "" : "Sheet vẫn nhận bình thường. "}Bấm Đăng nhập Hub và đăng nhập bằng tài khoản của bạn. Lượt quét sau tự gửi lên Hub.`
+        : `${names}: ${skip ? "" : "Sheet vẫn nhận. "}Xem từng kênh bên dưới, mỗi kênh có các bước cần làm và mã lỗi để gửi người quản lý.`,
     };
   }
-  if (never.length === rows.length) return { tone: "off", state: `Chưa quét lần nào, ${rows.length} kênh đang bật`, when: "", detail: "Bấm Quét review ngay, hoặc chờ máy tự quét." };
+  if (never.length === rows.length) return { tone: "off", state: `Chưa quét lần nào, ${rows.length} kênh đang bật`, when: "", detail: `Bấm Quét review ngay, hoặc chờ máy tự quét.${sheetNote}` };
   return {
     tone: "ok",
     state: `Đang chạy, ${rows.length} kênh`,
     when: latest ? hm(latest) : "",
-    detail: `Lượt trước được ${total} bài. Máy tự quét mỗi ${Math.max(1, Number(cfg.intervalHours) || 6)} giờ.`,
+    detail: `Lượt trước được ${total} bài. Máy tự quét mỗi ${Math.max(1, Number(cfg.intervalHours) || 6)} giờ.${sheetNote}`,
   };
 }
 
@@ -76,7 +80,17 @@ export function reviewSourceLines(cfg, channels) {
   const from = r.fromHub ?? {};
   const lines = [];
   if (from.sheet) lines.push({ text: "Sheet thu review: theo cấu hình trên Hub." });
-  else if (r.sheetUrl && r.secret) lines.push({ text: "Hub chưa có cấu hình thu review. Máy đang chạy bằng cấu hình cũ trong bộ nhớ.", warn: true });
+  else if (r.sheetUrl && r.secret)
+    lines.push({
+      // YC-156 L6: Hub mới nói lý do; thiếu quyền thì không nói nhầm "Hub chưa có cấu hình".
+      text:
+        r.sheetReason === "NO_BRANCH_ACCESS"
+          ? "Hub không gửi cấu hình Sheet cho tài khoản đang đăng nhập. Máy đang chạy bằng cấu hình cũ trong bộ nhớ."
+          : "Hub chưa có cấu hình thu review. Máy đang chạy bằng cấu hình cũ trong bộ nhớ.",
+      warn: true,
+    });
+  const skip = sheetSkipText(r);
+  if (skip) lines.push({ text: skip, warn: true });
   if (r.hotel) lines.push({ text: `Tên khách sạn: ${r.hotel} (${from.hotel ? "tên chi nhánh trên Hub" : "cấu hình cũ của máy"}).` });
   const missing = reviewMissingText(r);
   if (missing) lines.push({ text: missing, warn: true });

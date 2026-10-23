@@ -22,7 +22,7 @@ import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
 import { hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
-import { alarmMinutes, loadEffectiveConfig, reviewMissingText } from "./hub-config.js";
+import { alarmMinutes, loadEffectiveConfig, reviewMissingText, reviewSendsSheet, sheetSkipText } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
 import { PAGE_RUN_TIMEOUT_MS, REMOTE_TIMEOUT_MS, SHEET_TIMEOUT_MS, isTimeout, withTimeout } from "./quay/net.js";
 import {
@@ -456,8 +456,9 @@ async function postSheet(cfg, payload) {
 async function pingSheet() {
   const cfg = await loadEffectiveConfig();
   const hub = await pingHub();
-  if (!cfg.sheetUrl || !cfg.secret) {
-    const entry = makeLogEntry({ stage: "gửi Sheet", error: reviewMissingText(cfg.review) });
+  if (!reviewSendsSheet(cfg.review)) {
+    const why = reviewMissingText(cfg.review) ?? sheetSkipText(cfg.review) ?? "Máy chưa có Sheet review.";
+    const entry = makeLogEntry({ stage: "gửi Sheet", error: why });
     await queueLog(entry);
     return { ok: false, error: entry.message, ref: entry.ref, code: entry.code, hub };
   }
@@ -562,16 +563,20 @@ async function runScan(trigger) {
     // Sheet, tên khách sạn, mã chỗ nghỉ theo Hub (H-1527 a); Hub chưa có thì theo cấu hình cũ của máy.
     const missing = reviewMissingText(cfg.review);
     if (missing) return missing;
+    // YC-156 L5 · H-1903 b: chưa có Sheet review thì vẫn quét và gửi Hub, chỉ bỏ phần ghi Sheet.
+    const toSheet = reviewSendsSheet(cfg.review);
     // Một mã cho cả lượt (mọi kênh): Hub gom các lô của cùng một lần quét (YC-157).
     const runId = crypto.randomUUID();
     for (const channel of CHANNELS) {
       if (!cfg.enabled[channel]) continue;
-      await scanOne(channel, cfg, trigger, runId);
+      await scanOne(channel, cfg, trigger, runId, toSheet);
     }
     // Báo sống kèm trạng thái cuối của mọi kênh; chạy cả khi không bật kênh nào.
-    try {
-      await postSheet(cfg, { action: "heartbeat" });
-    } catch {}
+    if (toSheet) {
+      try {
+        await postSheet(cfg, { action: "heartbeat" });
+      } catch {}
+    }
     await chrome.storage.local.remove("scanCrash");
   } finally {
     running = false;
@@ -581,7 +586,7 @@ async function runScan(trigger) {
   }
 }
 
-async function scanOne(channel, cfg, trigger, runId) {
+async function scanOne(channel, cfg, trigger, runId, toSheet = true) {
   const startedAt = new Date().toISOString();
   const run = { at: startedAt, hotel: cfg.hotel, channel, trigger, version: VERSION, status: "", count: 0, note: "" };
   let tab = null;
@@ -619,20 +624,22 @@ async function scanOne(channel, cfg, trigger, runId) {
 
     stage = "gửi Sheet";
 
-    const sent = await postSheet(cfg, {
-      action: "ingest",
-      run,
-      reviews: sheetReviews(batch.reviews),
-      scores: batch.scores,
-      snapshots,
-    });
+    const sent = toSheet
+      ? await postSheet(cfg, {
+          action: "ingest",
+          run,
+          reviews: sheetReviews(batch.reviews),
+          scores: batch.scores,
+          snapshots,
+        })
+      : null;
     await saveChannelStatus(channel, {
       at: startedAt,
       // Giờ quét ỔN gần nhất (YC-158): gửi Hub hỏng thì review chưa lên Hub ⇒ giữ giờ ổn cũ.
       okAt: hub?.ok === false ? await lastOkAt(channel) : startedAt,
       state: "ok",
       count: batch.reviews.length,
-      message: `${sent.inserted} bài mới, ${sent.updated} bài cập nhật.`,
+      message: sent ? `${sent.inserted} bài mới, ${sent.updated} bài cập nhật.` : "Chưa ghi Sheet vì máy chưa có Sheet review.",
       error: partial && errorBrief(partial),
       hub,
     });
@@ -662,9 +669,11 @@ async function scanOne(channel, cfg, trigger, runId) {
       hub,
     });
     // Ghi lượt lỗi (kèm nhật ký lỗi) vào Sheet; gửi hỏng thì lỗi nằm lại hàng đợi cho lượt sau.
-    try {
-      await postSheet(cfg, { action: "ingest", run, reviews: [], scores: [], snapshots: [] });
-    } catch {}
+    if (toSheet) {
+      try {
+        await postSheet(cfg, { action: "ingest", run, reviews: [], scores: [], snapshots: [] });
+      } catch {}
+    }
   } finally {
     if (tab?.id != null) {
       try {

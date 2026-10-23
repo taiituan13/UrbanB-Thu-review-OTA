@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CHANNELS, DEFAULT_CONFIG } from "../extension/config.js";
-import { effectiveReview, parseHubSettings, parseReviewSheet, reviewMissingText } from "../extension/hub-config.js";
+import { effectiveReview, parseHubSettings, parseReviewSheet, reviewMissingHelp, reviewMissingText, reviewSendsSheet, sheetSkipText } from "../extension/hub-config.js";
 import { reviewRow, reviewSourceLines } from "../extension/popup-model.js";
 import * as H from "../extension/quay/hub-quay.js";
 
@@ -84,15 +84,17 @@ test("Tài khoản nhiều chi nhánh chưa chọn: máy cũ giữ tên cũ; má
   assert.match(reviewMissingText(fresh), /nhiều chi nhánh.*Chọn chi nhánh của máy này/);
 });
 
-test("Câu nhắc thiếu cấu hình: chưa nhận gì từ Hub ⇒ đăng nhập; Hub đã trả mà không có Sheet ⇒ báo Quản trị", () => {
+test("Câu nhắc thiếu cấu hình: chưa nhận gì từ Hub ⇒ đăng nhập; Hub đã trả mà không có Sheet ⇒ KHÔNG chặn, chỉ 'chưa ghi Sheet' (H-1903 b)", () => {
   assert.match(reviewMissingText(effectiveReview(DEFAULT_CONFIG, null, null, "")), /chưa nhận cấu hình từ Hub.*đăng nhập bằng tài khoản của bạn/);
-  assert.match(reviewMissingText(effectiveReview(DEFAULT_CONFIG, { at: 1 }, branches, "br_col")), /Hub chưa có cấu hình thu review\. Nhắn Quản trị hệ thống/);
+  const hubOnly = effectiveReview(DEFAULT_CONFIG, { at: 1 }, branches, "br_col");
+  assert.equal(reviewMissingText(hubOnly), null);
+  assert.match(sheetSkipText(hubOnly), /^Chưa ghi Sheet\. Review vẫn gửi lên Hub\. Hub chưa có cấu hình Sheet review\. Nhắn Quản trị hệ thống nhập Sheet review trên Hub: màn Kết nối, tab Mã kết nối Booking OTA, khối Sheet review/);
   assert.match(reviewMissingText(effectiveReview(DEFAULT_CONFIG, hub, [], "")), /chưa gắn với chi nhánh nào.*tài khoản Lễ tân của chi nhánh này/);
 });
 
 const effCfg = (cfgIn, h, list, chosen) => {
   const review = effectiveReview(cfgIn, h, list, chosen);
-  const { fromHub: _a, branchState: _b, hubSeen: _c, ...fields } = review;
+  const { fromHub: _a, branchState: _b, hubSeen: _c, sheetReason: _d, ...fields } = review;
   return { ...cfgIn, ...fields, review, collect: { fromHub: { enabled: false } } };
 };
 
@@ -114,7 +116,7 @@ test("Dòng Thu review chưa cài đặt xong không còn bảo dán mã URB1", 
   const row = reviewRow(effCfg(DEFAULT_CONFIG, { at: 1 }, [], ""), {}, CHANNELS);
   assert.equal(row.state, "Chưa cài đặt xong");
   assert.doesNotMatch(row.detail, /URB1|Nhận mã/);
-  assert.match(row.detail, /Hub chưa có cấu hình thu review/);
+  assert.match(row.detail, /chưa gắn với chi nhánh nào/);
 });
 
 test("🔴 Popup không còn mã URB1 và ô nhập tay (tên, URL Sheet, mã bí mật, kênh quét, mã Booking/Agoda/Expedia)", () => {
@@ -133,4 +135,75 @@ test("Lượt quét, huy hiệu, Thử Sheet dùng cấu hình đã áp Hub và 
   assert.match(body("runScan"), /const missing = reviewMissingText\(cfg\.review\);\s+if \(missing\) return missing;/);
   assert.match(body("refreshBadge"), /reviewMissingText\(cfg\.review\)/);
   assert.match(body("pingSheet"), /reviewMissingText\(cfg\.review\)/);
+});
+
+// ---------- YC-156 L5 (H-1903 b) và L6 ----------
+
+test("🔴 L5 — máy chưa có Sheet mà đã nhận lời đáp Hub: lượt quét CHẠY, gửi Hub, chỉ bỏ Sheet", () => {
+  const hubOnly = effectiveReview(DEFAULT_CONFIG, { at: 1 }, branches, "br_col");
+  // Không bị chặn ⇒ background.js runScan chạy vòng quét và sendHub.
+  assert.equal(reviewMissingHelp(hubOnly), null);
+  assert.equal(reviewSendsSheet(hubOnly), false);
+  // Tên và mã chỗ nghỉ theo cơ sở trên Hub, để lượt gửi Hub đúng chi nhánh.
+  assert.equal(hubOnly.hotel, "Colline");
+  assert.equal(hubOnly.bookingHotelId, "111");
+  // Có Sheet (Hub hoặc cấu hình cũ) ⇒ ghi Sheet như trước, không có câu "chưa ghi Sheet".
+  assert.equal(reviewSendsSheet(effectiveReview(DEFAULT_CONFIG, hub, branches, "br_col")), true);
+  assert.equal(sheetSkipText(effectiveReview(DEFAULT_CONFIG, hub, branches, "br_col")), null);
+  assert.equal(sheetSkipText(effectiveReview(old, { at: 1 }, branches, "br_col")), null);
+  // Máy còn Sheet cũ: tên giữ như cũ (không tách dữ liệu Sheet cũ thành hai tên).
+  assert.equal(effectiveReview(old, { at: 1 }, branches, "br_col").hotel, "Tên cũ");
+});
+
+test("🔴 L5 — popup: thu review không chặn khi thiếu Sheet; dòng nói rõ 'chưa ghi Sheet', không nói 'Sheet vẫn nhận'", () => {
+  const c = { ...effCfg(DEFAULT_CONFIG, { at: 1 }, branches, "br_col"), enabled: { booking: true }, intervalHours: 6 };
+  const never = reviewRow(c, {}, CHANNELS);
+  assert.notEqual(never.state, "Chưa cài đặt xong");
+  assert.match(never.detail, /Chưa ghi Sheet vì Hub chưa có cấu hình Sheet review/);
+  const ok = reviewRow(c, { booking: { state: "ok", count: 2, at: "2026-10-24T01:00:00Z", hub: { ok: true } } }, CHANNELS);
+  assert.equal(ok.tone, "ok");
+  assert.match(ok.detail, /Chưa ghi Sheet/);
+  const hubLogin = reviewRow(c, { booking: { state: "ok", count: 2, at: "2026-10-24T01:00:00Z", hub: { ok: false, login: true } } }, CHANNELS);
+  assert.doesNotMatch(hubLogin.detail, /Sheet vẫn nhận/);
+  const lines = reviewSourceLines(c, CHANNELS).map((l) => l.text).join("\n");
+  assert.match(lines, /Chưa ghi Sheet\. Review vẫn gửi lên Hub/);
+});
+
+test("🔴 L6 — Hub mới gửi reviewSheetReason; NO_BRANCH_ACCESS KHÔNG bị đọc thành 'Hub chưa có cấu hình'", () => {
+  const noAccess = { ...parseHubSettings({ ok: true, branches: [], reviewSheet: null, reviewSheetReason: "NO_BRANCH_ACCESS" }), at: 1 };
+  assert.equal(noAccess.reviewSheetReason, "NO_BRANCH_ACCESS");
+  assert.equal(parseHubSettings({ ok: true, reviewSheet: null, reviewSheetReason: "LẠ" }).reviewSheetReason, null);
+  const r = effectiveReview(DEFAULT_CONFIG, noAccess, [], "");
+  const text = reviewMissingText(r);
+  assert.match(text, /không lấy được cấu hình máy quầy của chi nhánh nào/);
+  assert.doesNotMatch(text, /Hub chưa có cấu hình/);
+  // Máy còn Sheet cũ: dòng nguồn nói đúng lý do.
+  const oldLines = reviewSourceLines(effCfg(old, noAccess, [], ""), CHANNELS).map((l) => l.text).join("\n");
+  assert.match(oldLines, /Hub không gửi cấu hình Sheet cho tài khoản đang đăng nhập/);
+  assert.doesNotMatch(oldLines, /Hub chưa có cấu hình/);
+});
+
+test("L6 — Hub cũ (không có reviewSheetReason) ⇒ lời như bản trước", () => {
+  const oldHub = { ...parseHubSettings({ ok: true, branches: [], reviewSheet: null }), at: 1 };
+  assert.equal("reviewSheetReason" in oldHub, false);
+  assert.match(reviewMissingText(effectiveReview(DEFAULT_CONFIG, oldHub, [], "")), /chưa gắn với chi nhánh nào/);
+  const oldLines = reviewSourceLines(effCfg(old, oldHub, [], ""), CHANNELS).map((l) => l.text);
+  assert.match(oldLines[0], /^Hub chưa có cấu hình thu review\. Máy đang chạy bằng cấu hình cũ/);
+});
+
+test("🔴 L5 — background.js: lượt quét chỉ dừng theo reviewMissingText; mọi lượt ghi Sheet đi sau cờ toSheet", () => {
+  const bg = readFileSync(new URL("../extension/background.js", import.meta.url), "utf8");
+  const body = (name) => bg.slice(bg.indexOf(`async function ${name}(`), bg.indexOf("\n}\n", bg.indexOf(`async function ${name}(`)));
+  const run = body("runScan");
+  assert.match(run, /const toSheet = reviewSendsSheet\(cfg\.review\)/);
+  assert.match(run, /scanOne\(channel, cfg, trigger, runId, toSheet\)/);
+  assert.doesNotMatch(run, /!cfg\.sheetUrl|!cfg\.secret/, "runScan không được chặn riêng vì thiếu Sheet");
+  assert.match(run, /if \(toSheet\) \{\s*try \{\s*await postSheet\(cfg, \{ action: "heartbeat" \}\)/);
+  const one = body("scanOne");
+  const posts = one.match(/postSheet\(/g) ?? [];
+  assert.equal(posts.length, 2);
+  assert.match(one, /const sent = toSheet\s*\?\s*await postSheet\(/);
+  assert.match(one, /if \(toSheet\) \{\s*try \{\s*await postSheet\(cfg, \{ action: "ingest", run, reviews: \[\]/);
+  // Hub vẫn đi trước, không phụ thuộc Sheet.
+  assert.ok(one.indexOf("await sendHub(") < one.indexOf("const sent = toSheet"));
 });

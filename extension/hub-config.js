@@ -13,6 +13,14 @@
 // `reviewIds: { booking, agoda, expedia }` (quay/hub-quay.js parseMine). Hub có Sheet ⇒ Hub thắng: URL Sheet,
 // mã bí mật theo Hub, tên khách sạn = tên cơ sở đang dùng, mã chỗ nghỉ theo cơ sở (ô nào null thì như cũ).
 // Hub vắng hoặc null ⇒ máy chạy bằng cấu hình cũ trong bộ nhớ (mã cài đặt URB1 hoặc ô nhập tay của bản trước).
+//
+// YC-156 L6: Hub mới kèm thêm `reviewSheetReason: "NOT_CONFIGURED" | "NO_BRANCH_ACCESS" | null` cạnh
+// `reviewSheet` (repo UrbanB connection-code.rules.ts reviewSheetReasonOf). `NO_BRANCH_ACCESS` = tài khoản
+// đang đăng nhập không lấy được cấu hình của chi nhánh nào, nên Hub không gửi Sheet dù Hub có thể đã có.
+// Hub cũ không có trường ⇒ máy nói như bản trước.
+//
+// YC-156 L5 · H-1903 b: máy chưa có Sheet thu review mà đã nhận lời đáp Hub thì vẫn quét và vẫn gửi review
+// lên Hub, chỉ bỏ phần ghi Sheet (`reviewSendsSheet`, `sheetSkipText`).
 
 import { helpText } from "./report.js";
 import { CHANNELS, DEFAULT_CONFIG, loadConfig } from "./config.js";
@@ -31,6 +39,9 @@ const SHEET_PLACE_STEP = `Nhắn Quản trị hệ thống nhập Sheet review t
 /** Cận kỹ thuật, khớp CHECK của Hub (counter_extension_settings_*_range). Ngoài cận ⇒ coi như vắng. */
 export const INTERVAL_HOURS_RANGE = { min: 1, max: 168 };
 export const TOAST_SECONDS_RANGE = { min: 1, max: 120 };
+
+/** Lý do Hub mới gửi kèm khi không có Sheet review (YC-156 L6). Giá trị lạ ⇒ coi như không có lý do. */
+export const REVIEW_SHEET_REASONS = ["NOT_CONFIGURED", "NO_BRANCH_ACCESS"];
 
 /** Khoá lưu bản cấu hình Hub gần nhất (chrome.storage.local). */
 export const HUB_COLLECT_KEY = "hubCollect";
@@ -56,6 +67,9 @@ export function parseHubSettings(json) {
   if (t !== undefined) out.toastSeconds = t;
   const sheet = parseReviewSheet(json?.reviewSheet);
   if (sheet) out.reviewSheet = sheet;
+  if (json && typeof json === "object" && Object.hasOwn(json, "reviewSheetReason")) {
+    out.reviewSheetReason = REVIEW_SHEET_REASONS.includes(json.reviewSheetReason) ? json.reviewSheetReason : null;
+  }
   return out;
 }
 
@@ -85,9 +99,12 @@ export function effectiveReview(cfg, hub, branches, chosenId) {
   const c = cfg ?? {};
   const sheet = hub?.reviewSheet ?? null;
   const pick = pickBranch(branches ?? null, chosenId ?? "");
-  const branch = sheet ? pick.branch ?? null : null;
-  const ids = branch?.reviewIds ?? {};
   const own = (v) => String(v ?? "").trim();
+  // H-1903 b: máy không có Sheet nào (Hub chưa có, máy cũng không có cấu hình cũ) vẫn gửi Hub, nên tên và mã
+  // chỗ nghỉ theo cơ sở trên Hub. Máy còn Sheet cũ thì giữ tên cũ, kẻo dữ liệu Sheet cũ bị tách hai tên.
+  const ownSheet = Boolean(own(c.sheetUrl) && own(c.secret));
+  const branch = sheet || !ownSheet ? pick.branch ?? null : null;
+  const ids = branch?.reviewIds ?? {};
   return {
     sheetUrl: sheet ? sheet.sheetUrl : own(c.sheetUrl),
     secret: sheet ? sheet.secret : own(c.secret),
@@ -104,7 +121,14 @@ export function effectiveReview(cfg, hub, branches, chosenId) {
     },
     branchState: pick.state,
     hubSeen: Boolean(hub?.at),
+    sheetReason: hub?.reviewSheetReason ?? null,
   };
+}
+
+/** Lượt quét có ghi Sheet không: chỉ khi máy có đủ URL Sheet và mã bí mật (theo Hub hoặc cấu hình cũ). */
+export function reviewSendsSheet(review) {
+  const r = review ?? {};
+  return Boolean(r.sheetUrl && r.secret);
 }
 
 /**
@@ -113,25 +137,17 @@ export function effectiveReview(cfg, hub, branches, chosenId) {
  */
 export function reviewMissingHelp(review) {
   const r = review ?? {};
-  if (!r.sheetUrl || !r.secret) {
-    return r.hubSeen
-      ? {
-          what: "Thu review chưa chạy được trên máy này.",
-          why: "Hub chưa có cấu hình thu review.",
-          steps: [
-            SHEET_PLACE_STEP,
-            "Khi Quản trị hệ thống báo xong, mở màn Cài extension trên Hub để máy nhận cấu hình.",
-          ],
-        }
-      : {
-          what: "Thu review chưa chạy được trên máy này.",
-          why: "Máy chưa nhận cấu hình từ Hub, vì Chrome này chưa đăng nhập Hub lần nào.",
-          steps: [
-            "Mở Hub trong Chrome này và đăng nhập bằng tài khoản của bạn.",
-            "Mở màn Cài extension trên Hub, máy sẽ tự nhận cấu hình.",
-            "Bấm biểu tượng Urban B trên thanh Chrome, rồi bấm Quét review ngay.",
-          ],
-        };
+  // H-1903 b: thiếu Sheet chỉ chặn khi máy cũng chưa nhận gì từ Hub (không có chỗ nào để gửi review).
+  if (!reviewSendsSheet(r) && !r.hubSeen) {
+    return {
+      what: "Thu review chưa chạy được trên máy này.",
+      why: "Máy chưa nhận cấu hình từ Hub, vì Chrome này chưa đăng nhập Hub lần nào.",
+      steps: [
+        "Mở Hub trong Chrome này và đăng nhập bằng tài khoản của bạn.",
+        "Mở màn Cài extension trên Hub, máy sẽ tự nhận cấu hình.",
+        "Bấm biểu tượng Urban B trên thanh Chrome, rồi bấm Quét review ngay.",
+      ],
+    };
   }
   if (!r.hotel) {
     if (r.branchState === "ask")
@@ -146,7 +162,11 @@ export function reviewMissingHelp(review) {
       };
     return {
       what: "Máy chưa biết mình thuộc chi nhánh nào.",
-      why: "Tài khoản Hub đang đăng nhập chưa gắn với chi nhánh nào.",
+      // YC-156 L6: Hub mới nói rõ tài khoản không lấy được cấu hình của chi nhánh nào (vd. thiếu quyền).
+      why:
+        r.sheetReason === "NO_BRANCH_ACCESS"
+          ? "Tài khoản Hub đang đăng nhập không lấy được cấu hình máy quầy của chi nhánh nào."
+          : "Tài khoản Hub đang đăng nhập chưa gắn với chi nhánh nào.",
       steps: [
         "Mở Hub, đăng xuất, rồi đăng nhập bằng tài khoản Lễ tân của chi nhánh này.",
         "Mở màn Cài extension trên Hub, máy sẽ tự nhận chi nhánh.",
@@ -154,6 +174,29 @@ export function reviewMissingHelp(review) {
     };
   }
   return null;
+}
+
+/**
+ * H-1903 b: thu review chạy, gửi Hub, nhưng không ghi Sheet vì máy chưa có Sheet review. Lời cho lễ tân nói
+ * rõ "chưa ghi Sheet" (không phải lỗi chặn). Còn bị chặn (`reviewMissingHelp`) hay có Sheet ⇒ null.
+ */
+export function sheetSkipHelp(review) {
+  const r = review ?? {};
+  if (reviewSendsSheet(r) || reviewMissingHelp(r)) return null;
+  return {
+    what: "Chưa ghi Sheet. Review vẫn gửi lên Hub.",
+    ...(r.sheetReason === "NO_BRANCH_ACCESS"
+      ? {
+          why: "Tài khoản Hub đang đăng nhập không lấy được cấu hình máy quầy của chi nhánh nào.",
+          steps: ["Mở Hub, đăng xuất, rồi đăng nhập bằng tài khoản Lễ tân của chi nhánh này."],
+        }
+      : { why: "Hub chưa có cấu hình Sheet review.", steps: [SHEET_PLACE_STEP] }),
+  };
+}
+
+export function sheetSkipText(review) {
+  const help = sheetSkipHelp(review);
+  return help ? helpText(help) : null;
 }
 
 /** Bản một dòng của `reviewMissingHelp`; đủ cấu hình ⇒ null. */
@@ -219,6 +262,6 @@ export async function loadEffectiveConfig() {
   const branches = stored[MINE_KEY]?.branches ?? null;
   const collect = effectiveCollect(cfg, hub, pickBranch(branches, stored[BRANCH_KEY] ?? "").branch ?? null);
   const review = effectiveReview(cfg, hub, branches, stored[BRANCH_KEY] ?? "");
-  const { fromHub: _, branchState: __, hubSeen: ___, ...fields } = review;
+  const { fromHub: _, branchState: __, hubSeen: ___, sheetReason: ____, ...fields } = review;
   return { ...cfg, ...fields, enabled: collect.enabled, intervalHours: collect.intervalHours, collect, review };
 }

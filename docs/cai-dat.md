@@ -69,7 +69,8 @@ khi lễ tân đăng nhập Hub (mục 6):
 
 Hub có Sheet thu review thì Hub thắng cấu hình cũ trong máy. Hub chưa có thì máy chạy tiếp bằng
 cấu hình cũ (từ mã cài đặt hay ô nhập của bản trước), và ô bật lên báo "Hub chưa có cấu hình thu
-review". Ô bật lên chỉ cho biết từng mục lấy từ đâu, không hiện URL Sheet hay mã bí mật.
+review". Từ bản 1.4.2 (`H-1903` b), máy không có Sheet nào vẫn quét và gửi review lên Hub, chỉ bỏ
+phần ghi Sheet; ô bật lên báo "Chưa ghi Sheet. Review vẫn gửi lên Hub". Ô bật lên chỉ cho biết từng mục lấy từ đâu, không hiện URL Sheet hay mã bí mật.
 
 1. Chép thư mục `extension/` sang máy.
 2. Mở `chrome://extensions`, bật **Chế độ dành cho nhà phát triển**, bấm
