@@ -58,7 +58,7 @@ Web App, mã bí mật, kênh quét hay mã Booking/Agoda/Expedia trong ô bật
 khi lễ tân đăng nhập Hub (mục 6):
 
 - **Sheet thu review** (URL Web App và mã bí mật): Quản trị hệ thống điền một lần cho cả chuỗi ở
-  màn Kết nối › Extension máy quầy trên Hub.
+  màn Kết nối › tab Mã kết nối Booking OTA › khối Sheet review trên Hub.
 - **Tên khách sạn** = tên cơ sở đang dùng trên Hub (tài khoản nhiều cơ sở thì chọn cơ sở trong ô
   bật lên). Tên này ghi vào cột "Khách sạn" và là tên của máy trong tab `Máy cài`.
 - **Mã Booking / Agoda / Expedia** của từng cơ sở: điền trên Hub khi cần. Để trống thì extension
@@ -180,7 +180,8 @@ trên `hub.urbanb.vn` hay `urbanb.xyz` (để thử); ô bật lên chỉ hiện
 thử không ghi gì lên Hub). Chưa đăng nhập hay hết phiên thì Sheet vẫn nhận, ô bật lên báo
 "Review chưa lên Hub · cần đăng nhập Hub".
 
-**Cấu hình đặt trên Hub** (`H-1348` a): Quản trị hệ thống đặt ở màn Kết nối › Extension máy quầy,
+**Cấu hình đặt trên Hub** (`H-1348` a): Quản trị hệ thống đặt ở màn Kết nối › tab Mã kết nối Booking OTA ›
+khối Extension máy quầy,
 một cấu hình cho cả chuỗi:
 
 - **Kênh quét** và **chu kỳ tự quét**. Máy hỏi Hub trước mỗi lượt quét và mỗi 30 phút. Có cấu

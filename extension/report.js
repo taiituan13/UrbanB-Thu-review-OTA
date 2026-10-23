@@ -106,7 +106,7 @@ const SHEET_KINDS = [
   ["SHEET-URL", /không phải JSON/i, {
     what: "Bảng tính review không trả lời đúng.",
     why: "Địa chỉ bảng tính trên Hub đã cũ, hoặc bảng tính đang bị khoá quyền.",
-    steps: ["Bấm Sao chép cạnh mã lỗi và gửi cho Quản trị hệ thống để kiểm bảng tính thu review trên Hub."],
+    steps: ["Bấm Sao chép cạnh mã lỗi và gửi cho Quản trị hệ thống để kiểm Sheet review trên Hub."],
   }],
   ["SHEET-BUSY", /bận/i, {
     what: "Bảng tính review đang bận nên chưa nhận bài.",

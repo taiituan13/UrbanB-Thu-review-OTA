@@ -5,7 +5,7 @@ từng khách sạn** trong Sheet. Người ở khách sạn chỉ dán lệnh �
 extension tự điền Cài đặt và tự thử Sheet. Muốn cập nhật thì chạy lệnh cài thường (không cần mã).
 
 **Từ bản 1.2.0** (`H-1527` a) Sheet thu review, tên khách sạn và mã chỗ nghỉ đặt trên Hub (màn Kết nối ›
-Extension máy quầy); máy tự nhận khi lễ tân đăng nhập Hub, ô bật lên không còn ô nhập tay hay ô Mã cài
+tab Mã kết nối Booking OTA › khối Sheet review); máy tự nhận khi lễ tân đăng nhập Hub, ô bật lên không còn ô nhập tay hay ô Mã cài
 đặt (xem [cai-dat.md](cai-dat.md) mục 2). Lệnh có mã vẫn chạy được: máy nhận mã từ tệp
 `ma-cai-dat.txt` như cũ, nhưng cấu hình trong mã chỉ dùng khi Hub chưa có Sheet thu review. Hub đã có
 thì chỉ cần lệnh chung.

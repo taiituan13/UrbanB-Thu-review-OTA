@@ -1,5 +1,5 @@
 // Cấu hình thu review đặt trên Hub (YC-152 mục 2 · H-1348 a · F8 của YC-120): một cấu hình cho cả chuỗi,
-// Quản trị hệ thống sửa ở màn Kết nối › Extension máy quầy. Phần thuần ở trên, phần đọc bộ nhớ ở cuối.
+// Quản trị hệ thống sửa ở màn Kết nối › tab Mã kết nối Booking OTA › khối Extension máy quầy (H-1904 a). Phần thuần ở trên, phần đọc bộ nhớ ở cuối.
 //
 // Hợp đồng (repo UrbanB, chỉ đọc: src/app/api/extension/connection/route.ts, counter-settings.rules.ts):
 // mọi lời đáp 200 của GET /api/extension/connection (ezcloudHotelId, branchId, scope=mine) có thể kèm
@@ -18,6 +18,15 @@ import { helpText } from "./report.js";
 import { CHANNELS, DEFAULT_CONFIG, loadConfig } from "./config.js";
 import { APPS_SCRIPT_URL_RE } from "./env.js";
 import { pickBranch } from "./quay/hub-quay.js";
+
+/**
+ * Chỉ đường trên Hub (YC-156 L2 · H-1904 a): tên thật của màn, tab và khối, đo trên Hub. Màn Kết nối có tab
+ * đầu "Mã kết nối Booking OTA"; trong tab ấy khối "Sheet review" giữ Sheet thu review, khối "Extension máy
+ * quầy" giữ kênh quét và chu kỳ. Câu cũ chỉ tới một "phần" và một "bảng tính" không có trên Hub.
+ */
+export const HUB_SHEET_PLACE = "màn Kết nối, tab Mã kết nối Booking OTA, khối Sheet review";
+export const HUB_COUNTER_PLACE = "màn Kết nối, tab Mã kết nối Booking OTA, khối Extension máy quầy";
+const SHEET_PLACE_STEP = `Nhắn Quản trị hệ thống nhập Sheet review trên Hub: ${HUB_SHEET_PLACE}.`;
 
 /** Cận kỹ thuật, khớp CHECK của Hub (counter_extension_settings_*_range). Ngoài cận ⇒ coi như vắng. */
 export const INTERVAL_HOURS_RANGE = { min: 1, max: 168 };
@@ -110,7 +119,7 @@ export function reviewMissingHelp(review) {
           what: "Thu review chưa chạy được trên máy này.",
           why: "Hub chưa có cấu hình thu review.",
           steps: [
-            "Nhắn Quản trị hệ thống điền bảng tính thu review trên Hub, ở màn Kết nối, phần Extension máy quầy.",
+            SHEET_PLACE_STEP,
             "Khi Quản trị hệ thống báo xong, mở màn Cài extension trên Hub để máy nhận cấu hình.",
           ],
         }

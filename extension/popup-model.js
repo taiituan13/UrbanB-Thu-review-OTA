@@ -2,7 +2,7 @@
 // Mục "Khung trên PMS" dùng quay/hub-quay.js popupPmsRow.
 
 import { CHANNEL_LABEL } from "./report.js";
-import { reviewMissingText } from "./hub-config.js";
+import { HUB_COUNTER_PLACE, reviewMissingText } from "./hub-config.js";
 
 /** Giờ "08:02" theo giờ máy. */
 export function hm(iso) {
@@ -14,8 +14,8 @@ export function hm(iso) {
 /** Câu khi chưa bật kênh nào: kênh đặt trên Hub thì người ở quầy không tự bật được. */
 export function noChannelText(cfg) {
   return cfg?.collect?.fromHub?.enabled
-    ? "Cấu hình trên Hub chưa bật kênh nào. Nhắn Quản trị hệ thống bật kênh ở màn Kết nối, phần Extension máy quầy."
-    : "Kênh quét do Hub đặt. Nhắn Quản trị hệ thống bật kênh ở màn Kết nối, phần Extension máy quầy.";
+    ? `Cấu hình trên Hub chưa bật kênh nào. Nhắn Quản trị hệ thống bật kênh trên Hub: ${HUB_COUNTER_PLACE}.`
+    : `Kênh quét do Hub đặt. Nhắn Quản trị hệ thống bật kênh trên Hub: ${HUB_COUNTER_PLACE}.`;
 }
 
 /**
