@@ -138,3 +138,18 @@ test("YC-159 — ui.js nối visibilitychange vào lượt đọc chỉ báo", (
   assert.match(body, /reloadIndicatorsOnVisible\(indAskedAt/);
   assert.match(body, /loadIndicators\(\)/);
 });
+
+test("🔴 YC-156 L3 — tiêu đề Khung trên PMS không nói 'Đang chạy' cạnh dòng 'chưa mở PMS'", () => {
+  const closed = H.popupPmsRow({ session: "ok", codeState: "ok", notifications: { state: "ok", unread: 0, at: 1 } });
+  assert.match(closed.subs[0].text, /chưa mở PMS/);
+  assert.equal(closed.state, "Chưa mở PMS");
+  assert.equal(closed.tone, "off");
+  assert.doesNotMatch(closed.state, /Đang chạy/);
+  // Đối chứng: PMS đã mở và chạy ổn ⇒ "Đang chạy"; có lỗi thì lỗi vẫn thắng.
+  const ok = H.popupPmsRow({ session: "ok", branchName: "UB1", booking: { count: 5, issues: 0, at: 1 }, indicators: { exceeded: 0, at: 1 } });
+  assert.equal(ok.state, "Đang chạy");
+  assert.equal(ok.tone, "ok");
+  assert.equal(H.popupPmsRow({ session: "ok", codeState: "none", branchName: "UB1" }).tone, "err");
+  // Cờ nội bộ không lọt ra dòng con.
+  assert.ok(!closed.subs.some((x) => "pmsClosed" in x));
+});

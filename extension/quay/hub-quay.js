@@ -456,7 +456,7 @@ export function popupPmsRow(snap) {
   else if (snap.codeState === "rejected") subs.push({ tone: "err", text: `Booking OTA và Khoá G2J: Google Sheet của khách sạn không nhận mã kết nối của ${branch}. Máy đã báo Hub, báo Quản trị hệ thống nhập lại mã.`, at: b?.at });
   else if (b?.error) subs.push({ tone: "err", text: `Booking OTA và Khoá G2J: ${b.error}`, at: b.at });
   else if (b) subs.push({ tone: b.issues ? "warn" : "ok", text: `Booking OTA và Khoá G2J: ${b.count} booking${b.issues ? `, ${b.issues} booking lỗi` : ""}${snap.tokenAt ? `. Đã gửi phiên đăng nhập PMS lúc ${hhmm(snap.tokenAt)}` : ""}`, at: b.at });
-  else subs.push({ tone: "off", text: "Booking OTA và Khoá G2J: chưa mở PMS", at: null });
+  else subs.push({ tone: "off", text: "Booking OTA và Khoá G2J: chưa mở PMS", at: null, pmsClosed: true });
 
   const ind = snap.indicators;
   if (session === "expired") subs.push({ tone: "warn", text: "Chỉ báo: dừng cập nhật tới khi đăng nhập lại", at: ind?.at });
@@ -472,9 +472,14 @@ export function popupPmsRow(snap) {
 
   const worst = subs.some((x) => x.tone === "err") ? "err" : subs.some((x) => x.tone === "warn") ? "warn" : "ok";
   const errCount = subs.filter((x) => x.tone === "err").length;
+  // YC-156 L3: khung chưa chạy trên PMS (máy chưa mở PMS từ lần cài hay đổi Hub gần nhất) thì tiêu đề không
+  // được nói "Đang chạy" cạnh dòng "chưa mở PMS".
+  const pmsClosed = worst === "ok" && subs.some((x) => x.pmsClosed);
   const state =
     worst === "err" ? (errCount > 1 ? `Lỗi ở ${errCount} phần, xem từng dòng` : "Có lỗi, xem dòng dưới")
     : session === "expired" ? "Một phần dừng vì phiên Hub đã hết"
-    : "Đang chạy, 3 tab";
-  return { tone: worst, state, detail: "Mở PMS ezCloud, bấm nút Urban B ở góc phải dưới.", subs };
+    : pmsClosed ? "Chưa mở PMS"
+    : "Đang chạy";
+  const clean = subs.map(({ pmsClosed: _, ...x }) => x);
+  return { tone: pmsClosed ? "off" : worst, state, detail: "Mở PMS ezCloud, bấm nút Urban B ở góc phải dưới.", subs: clean };
 }
