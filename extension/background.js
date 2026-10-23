@@ -16,7 +16,7 @@ import {
   saveConfig,
 } from "./config.js";
 import { SheetError, makeLogEntry, parseSheetReply, withRetry } from "./report.js";
-import { normalizeBatch } from "./normalize.js";
+import { normalizeBatch, sheetReviews } from "./normalize.js";
 import { hubBatches, hubRunMeta, hubSnapshots, hubSummaryText, ingestRequest, parseIngestReply, rejectedText, sumHubReplies } from "./hub.js";
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
@@ -622,7 +622,7 @@ async function scanOne(channel, cfg, trigger, runId) {
     const sent = await postSheet(cfg, {
       action: "ingest",
       run,
-      reviews: batch.reviews,
+      reviews: sheetReviews(batch.reviews),
       scores: batch.scores,
       snapshots,
     });

@@ -21,7 +21,8 @@ export const HUB_BATCH = 200;
 
 /**
  * Các trường Hub nhận. Danh sách trắng: JSON gốc (`raw`) và mọi thứ khác không bao giờ rời máy
- * theo đường này. Tên khách đã bị gỡ từ bước chuẩn hoá.
+ * theo đường này. `guestName` (YC-188) chỉ có ở bài của kênh đã đo đường tên (normalize.js
+ * GUEST_NAME_PATH); Hub nhận trường này tuỳ chọn, bản Hub cũ bỏ qua khoá lạ.
  */
 export const HUB_FIELDS = [
   "channel",
@@ -39,6 +40,7 @@ export const HUB_FIELDS = [
   "reply",
   "replyDate",
   "hash",
+  "guestName",
 ];
 
 /** Lỗi khi gửi Hub; cùng dạng SheetError để dùng chung withRetry. */

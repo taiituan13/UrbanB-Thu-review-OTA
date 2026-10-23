@@ -1,7 +1,16 @@
 // Dữ liệu giả lập theo dạng trường đo được ngày 07/10/2026 — không dùng review thật.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { contentHash, normalizeBatch, parseMsDate, stripPersonal } from "../extension/normalize.js";
+import { readFileSync } from "node:fs";
+import {
+  GUEST_NAME_PATH,
+  contentHash,
+  guestNameAt,
+  normalizeBatch,
+  parseMsDate,
+  sheetReviews,
+  stripPersonal,
+} from "../extension/normalize.js";
 
 const ctx = { hotel: "KS Thử", channelHotelId: "111" };
 
@@ -271,4 +280,56 @@ test("Go2Joy: không nhận xét, có phản hồi, loại đặt phòng lạ", 
   assert.equal(r.replyDate, "2026-10-09T08:00:00");
   assert.equal(r.guestType, "9", "loại lạ giữ nguyên số để còn tra");
   assert.equal(normalizeBatch("go2joy", [{ ...go2joy, bookingType: 2 }], {}).reviews[0].guestType, "Qua đêm");
+});
+
+// YC-188 (H-1815 a, H-1852 a, H-1853 a): tên khách đi Hub, không vào hash, không đi Sheet.
+test("Tên khách: kênh chưa đo đường tên thì bài không có khoá guestName", () => {
+  for (const [channel, path] of Object.entries(GUEST_NAME_PATH)) {
+    assert.equal(path, null, `${channel}: chưa có kết quả đo extranet thì không được điền đường tên`);
+  }
+  const r = normalizeBatch("booking", [booking], ctx).reviews[0];
+  assert.ok(!("guestName" in r));
+});
+
+test("Tên khách: kênh có đường tên ⇒ đọc, cắt khoảng trắng; JSON gốc vẫn không mang tên", () => {
+  const paths = { ...GUEST_NAME_PATH, booking: "name" };
+  const r = normalizeBatch("booking", [{ ...booking, name: "  Khách A  " }], ctx, paths).reviews[0];
+  assert.equal(r.guestName, "Khách A");
+  assert.ok(!r.raw.includes("Khách A"), "tên khách phải bị gỡ khỏi JSON gốc");
+  const blank = normalizeBatch("booking", [{ ...booking, name: "   " }], ctx, paths).reviews[0];
+  assert.ok(!("guestName" in blank), "tên rỗng thì không gửi khoá");
+});
+
+test("Tên khách: không làm đổi hash", () => {
+  const paths = { ...GUEST_NAME_PATH, booking: "name" };
+  const plain = normalizeBatch("booking", [booking], ctx).reviews[0];
+  const a = normalizeBatch("booking", [{ ...booking, name: "Khách A" }], ctx, paths).reviews[0];
+  const b = normalizeBatch("booking", [{ ...booking, name: "Khách B" }], ctx, paths).reviews[0];
+  assert.equal(a.hash, plain.hash);
+  assert.equal(b.hash, plain.hash);
+});
+
+test("Tên khách: đọc theo đường chấm; sai kiểu hoặc thiếu nút ⇒ rỗng", () => {
+  assert.equal(guestNameAt({ traveler: { name: "Khách A" } }, "traveler.name"), "Khách A");
+  assert.equal(guestNameAt({ traveler: null }, "traveler.name"), "");
+  assert.equal(guestNameAt({ traveler: { name: 7 } }, "traveler.name"), "");
+  assert.equal(guestNameAt({ name: "Khách A" }, null), "");
+});
+
+test("Tên khách: bài gửi Sheet không mang guestName, các trường khác giữ nguyên", () => {
+  const paths = { ...GUEST_NAME_PATH, booking: "name" };
+  const r = normalizeBatch("booking", [{ ...booking, name: "Khách A" }], ctx, paths).reviews[0];
+  const [sheet] = sheetReviews([r]);
+  assert.ok(!("guestName" in sheet));
+  assert.ok(!JSON.stringify(sheet).includes("Khách A"));
+  const { guestName: _n, ...rest } = r;
+  assert.deepEqual(sheet, rest);
+  assert.equal(r.guestName, "Khách A", "không sửa bài gốc (vẫn gửi Hub)");
+});
+
+test("Tên khách: background.js gửi Sheet qua sheetReviews, gửi Hub bằng bài đủ", () => {
+  const bg = readFileSync(new URL("../extension/background.js", import.meta.url), "utf8");
+  assert.match(bg, /reviews: sheetReviews\(batch\.reviews\)/);
+  assert.doesNotMatch(bg, /reviews: batch\.reviews,/, "lượt gửi Sheet không được mang bài chưa gỡ tên");
+  assert.match(bg, /sendHub\(channel, batch\.reviews,/);
 });
