@@ -2,7 +2,34 @@
 // Mục "Khung trên PMS" dùng quay/hub-quay.js popupPmsRow.
 
 import { CHANNEL_LABEL } from "./report.js";
-import { HUB_COUNTER_PLACE, reviewMissingText, sheetSkipText } from "./hub-config.js";
+import { HUB_COUNTER_PLACE, SETUP_PAGE_PATH, reviewMissingText, sheetSkipText } from "./hub-config.js";
+import { HUB_LABELS, HUB_ORIGINS } from "./env.js";
+
+/**
+ * YC-156 L7 — dòng đầu popup: tài khoản nào đang đăng nhập Hub nào. Tên lấy từ route thông báo của Hub
+ * (`snap.notifications.me`); popup hỏi lại route ấy mỗi lần mở nên tên có ngay cả khi chưa mở PMS.
+ */
+export function whoText(snap) {
+  const session = snap?.session ?? "out";
+  const hub = HUB_LABELS[snap?.origin] ?? snap?.origin ?? "Hub";
+  if (session === "out") return `Chưa đăng nhập ${hub}`;
+  if (session === "expired") return `Phiên ${hub} đã hết`;
+  if (snap?.net) return `Không gọi được ${hub}, đang hiện lượt trước`;
+  const me = String(snap?.notifications?.me ?? "").trim();
+  return `${me ? me + " đã đăng nhập " : "Đã đăng nhập "}${hub}${snap?.branchName ? ", đang mở " + snap.branchName : ""}`;
+}
+
+/**
+ * YC-156 L1 — các Hub khác máy có thể chuyển sang. Máy tự theo Hub của màn Cài extension (quay/sw.js
+ * extStatus), nên chuyển = mở màn ấy trên Hub kia. Chỉ các gốc trong env.js, không nhận URL lạ.
+ */
+export function hubSwitchTargets(currentOrigin) {
+  return HUB_ORIGINS.filter((o) => o !== currentOrigin).map((o) => ({
+    origin: o,
+    label: HUB_LABELS[o] ?? o,
+    url: o + SETUP_PAGE_PATH,
+  }));
+}
 
 /** Giờ "08:02" theo giờ máy. */
 export function hm(iso) {

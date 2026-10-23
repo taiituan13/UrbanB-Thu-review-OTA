@@ -40,6 +40,9 @@ const SHEET_PLACE_STEP = `Nhắn Quản trị hệ thống nhập Sheet review t
 export const INTERVAL_HOURS_RANGE = { min: 1, max: 168 };
 export const TOAST_SECONDS_RANGE = { min: 1, max: 120 };
 
+/** Màn Cài extension trên Hub; mở màn này trên Hub nào thì máy theo Hub đó (quay/hub-quay.js isExtensionPage). */
+export const SETUP_PAGE_PATH = "/extension";
+
 /** Lý do Hub mới gửi kèm khi không có Sheet review (YC-156 L6). Giá trị lạ ⇒ coi như không có lý do. */
 export const REVIEW_SHEET_REASONS = ["NOT_CONFIGURED", "NO_BRANCH_ACCESS"];
 
@@ -70,7 +73,24 @@ export function parseHubSettings(json) {
   if (json && typeof json === "object" && Object.hasOwn(json, "reviewSheetReason")) {
     out.reviewSheetReason = REVIEW_SHEET_REASONS.includes(json.reviewSheetReason) ? json.reviewSheetReason : null;
   }
+  if (hubHasSetupPage(json)) out.setupPage = true;
   return out;
+}
+
+/**
+ * YC-156 L1 — Hub này có màn Cài extension (`/extension`) chưa. Production cũ chưa có màn ấy (mở ra là 404),
+ * nên chỉ tin dấu của Hub mới: trường `reviewSheetReason` (Hub có L6) hoặc `reviewIds` trong danh sách cơ sở
+ * scope=mine (thêm cùng đợt với màn Cài extension). Không có dấu ⇒ coi như chưa có, nút mở trang chủ Hub.
+ */
+export function hubHasSetupPage(json) {
+  if (!json || typeof json !== "object") return false;
+  if (Object.hasOwn(json, "reviewSheetReason")) return true;
+  return Array.isArray(json.branches) && json.branches.some((b) => b && typeof b === "object" && Object.hasOwn(b, "reviewIds"));
+}
+
+/** Đường nút "Mở Hub" của popup: màn Cài extension khi Hub có màn ấy, không thì trang chủ Hub. */
+export function setupPagePath(hub) {
+  return hub?.setupPage ? SETUP_PAGE_PATH : "/";
 }
 
 /**

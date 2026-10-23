@@ -3,8 +3,8 @@ import { formatErrorReport } from "./report.js";
 import { UPDATE_COMMAND, updateNotice } from "./update.js";
 import { HUB_LABELS } from "./env.js";
 import { branchPicker, popupPmsRow } from "./quay/hub-quay.js";
-import { noChannelText, reviewRow, reviewSourceLines } from "./popup-model.js";
-import { loadEffectiveConfig, reviewMissingText, scheduleText } from "./hub-config.js";
+import { hubSwitchTargets, noChannelText, reviewRow, reviewSourceLines, whoText } from "./popup-model.js";
+import { loadEffectiveConfig, loadHubCollect, reviewMissingText, scheduleText, setupPagePath } from "./hub-config.js";
 
 const $ = (id) => document.getElementById(id);
 const STATE_TEXT = { ok: "ổn", error: "lỗi", login: "cần đăng nhập lại" };
@@ -52,11 +52,8 @@ async function renderQuay() {
   }
   const session = snap?.session ?? "out";
   const hubLabel = HUB_LABELS[snap?.origin] ?? snap?.origin ?? "Hub";
-  $("who").textContent =
-    session === "out" ? `Chưa đăng nhập ${hubLabel}`
-    : session === "expired" ? `Phiên ${hubLabel} đã hết`
-    : snap?.net ? `Không gọi được ${hubLabel}, đang hiện lượt trước`
-    : `${snap?.notifications?.me ? snap.notifications.me + " đã đăng nhập " : "Đã đăng nhập "}${hubLabel}${snap?.branchName ? ", đang mở " + snap.branchName : ""}`;
+  $("who").textContent = whoText(snap);
+  refreshAccountName(session);
   $("outBox").hidden = session !== "out";
   $("expired").hidden = session !== "expired";
   $("tm").hidden = !snap?.tampermonkey;
@@ -76,6 +73,33 @@ async function renderQuay() {
     subs.append(d, t, m);
   }
   $("hubNow").textContent = hubLabel;
+  $("hubLineNow").textContent = hubLabel;
+  renderHubSwitch(snap?.origin);
+}
+
+/** Nút chuyển Hub trong Cài đặt › Hub (YC-156 L1): mở màn Cài extension trên Hub kia trong tab mới. */
+function renderHubSwitch(origin) {
+  const box = $("hubSwitch");
+  box.textContent = "";
+  if (!origin) return;
+  for (const t of hubSwitchTargets(origin)) {
+    const b = document.createElement("button");
+    b.className = "secondary";
+    b.textContent = `Chuyển sang ${t.label}`;
+    b.onclick = () => chrome.tabs.create({ url: t.url });
+    box.appendChild(b);
+  }
+}
+
+/**
+ * L7: mỗi lần mở popup hỏi lại route thông báo một lượt để có tên tài khoản đang đăng nhập, kể cả khi chưa mở
+ * PMS (trước đây chỉ khung trên PMS hỏi route ấy). Ảnh trạng thái đổi thì popup tự vẽ lại (onChanged quaySnap).
+ */
+let askedName = false;
+function refreshAccountName(session) {
+  if (askedName || session === "out" || session === "expired") return;
+  askedName = true;
+  chrome.runtime.sendMessage({ type: "quay:notifications" }).catch(() => {});
 }
 
 /** Ô chọn cơ sở (H-1351 c): đọc danh sách cơ sở của người đăng nhập qua lượt chỉ đọc scope=mine. */
@@ -284,7 +308,13 @@ $("scan").onclick = async () => {
 
 for (const b of document.querySelectorAll("[data-login]"))
   b.onclick = () => chrome.runtime.sendMessage({ type: "quay:openHub", path: "/login" });
-$("openHub").onclick = () => chrome.runtime.sendMessage({ type: "quay:openHub", path: "/" });
+// L1: mở màn Cài extension (Hub có màn ấy) thay cho trang chủ, đúng chỗ các câu nhắc chỉ tới.
+$("openHub").onclick = async () =>
+  chrome.runtime.sendMessage({ type: "quay:openHub", path: setupPagePath(await loadHubCollect().catch(() => null)) });
+$("hubLineOpen").onclick = () => {
+  $("settings").open = true;
+  $("hubGroup").scrollIntoView({ block: "start" });
+};
 $("quayBranch").onchange = async () => {
   const r = await chrome.runtime.sendMessage({ type: "quay:setBranch", branchId: $("quayBranch").value });
   note(r?.ok ? "Đã chọn chi nhánh của máy quầy." : `Không chọn được chi nhánh: ${r?.error ?? "không rõ"}`);

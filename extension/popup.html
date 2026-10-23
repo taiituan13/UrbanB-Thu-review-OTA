@@ -120,6 +120,7 @@
   .two { display: flex; gap: 8px; margin-top: 10px; }
   .two button { flex: 1; min-height: 36px; }
   select { width: 100%; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); font: inherit; }
+  button.link { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; min-height: 0; }
   h3.grp { margin: 14px 0 0; font-size: 12px; color: var(--fg); text-transform: uppercase; letter-spacing: 0.03em; }
 </style>
 </head>
@@ -194,6 +195,8 @@
     <button class="secondary" id="openHub">Mở Hub</button>
   </div>
   <div class="small" id="auto"></div>
+  <!-- YC-156 L1: Hub đang dùng luôn thấy được; "Đổi Hub" mở Cài đặt › Hub. -->
+  <div class="small" id="hubLine">Hub đang dùng: <b id="hubLineNow">…</b> · <button class="link" id="hubLineOpen">Đổi Hub</button></div>
   <div class="note" id="note"></div>
   <div id="last"></div>
 
@@ -209,9 +212,10 @@
     </summary>
     <div class="panel">
 
-    <h3 class="grp">Hub</h3>
+    <h3 class="grp" id="hubGroup">Hub</h3>
     <div class="small">Hub đang dùng: <b id="hubNow">…</b></div>
-    <div class="small">Máy tự theo Hub của màn <b>Cài extension</b>: mở màn ấy trên Hub nào thì máy đăng nhập, nhận mã kết nối và gửi review lên Hub đó.</div>
+    <div class="small">Máy tự theo Hub của màn <b>Cài extension</b>: mở màn ấy trên Hub nào thì máy đăng nhập, nhận mã kết nối và gửi review lên Hub đó. Chuyển Hub thì review, Booking OTA và thông báo của máy đi về Hub mới.</div>
+    <div class="row" id="hubSwitch"></div>
 
     <h3 class="grp">Thu review OTA</h3>
     <!-- H-1527 a: Sheet, tên khách sạn, mã chỗ nghỉ, kênh quét lấy từ Hub; ở đây chỉ để xem. -->

@@ -56,3 +56,44 @@ test("🔴 YC-156 L2 — chỉ đường đúng tên trên Hub: màn Kết nối
   const all = [sheet, readFileSync(new URL("../extension/hub-config.js", import.meta.url), "utf8")].join("\n");
   assert.doesNotMatch(all, /bảng tính thu review|phần Extension máy quầy/);
 });
+
+test("🔴 YC-156 L7 — dòng đầu popup ghi tên tài khoản đang đăng nhập Hub; popup tự hỏi tên khi mở", async () => {
+  const { whoText } = await import("../extension/popup-model.js");
+  const snap = { session: "ok", origin: "https://hub.urbanb.vn", notifications: { state: "ok", me: "Nguyễn Lễ Tân" }, branchName: "UB1" };
+  assert.equal(whoText(snap), "Nguyễn Lễ Tân đã đăng nhập hub.urbanb.vn, đang mở UB1");
+  assert.equal(whoText({ ...snap, origin: "https://urbanb.xyz", branchName: "" }), "Nguyễn Lễ Tân đã đăng nhập urbanb.xyz (bãi thử)");
+  assert.equal(whoText({ ...snap, notifications: undefined }), "Đã đăng nhập hub.urbanb.vn, đang mở UB1");
+  assert.equal(whoText({ session: "out", origin: "https://hub.urbanb.vn" }), "Chưa đăng nhập hub.urbanb.vn");
+  assert.equal(whoText({ ...snap, session: "expired" }), "Phiên hub.urbanb.vn đã hết");
+  // Tên chỉ có khi route thông báo đã được hỏi: popup hỏi một lượt mỗi lần mở (không chờ khung trên PMS).
+  const js = readFileSync(new URL("../extension/popup.js", import.meta.url), "utf8");
+  assert.match(js, /\$\("who"\)\.textContent = whoText\(snap\);\s*refreshAccountName\(session\);/);
+  assert.match(js, /sendMessage\(\{ type: "quay:notifications" \}\)/);
+});
+
+test("🔴 YC-156 L1 — nút Mở Hub mở màn Cài extension khi Hub có màn ấy; Hub cũ thì trang chủ", async () => {
+  const { hubHasSetupPage, parseHubSettings, setupPagePath } = await import("../extension/hub-config.js");
+  // Hub mới (có L6) ⇒ /extension.
+  assert.equal(setupPagePath(parseHubSettings({ ok: true, reviewSheet: null, reviewSheetReason: "NOT_CONFIGURED" })), "/extension");
+  // Hub có reviewIds trong scope=mine (cùng đợt với màn Cài extension) ⇒ /extension.
+  assert.equal(hubHasSetupPage({ ok: true, branches: [{ id: "b", reviewIds: { booking: null } }], reviewSheet: null }), true);
+  // Production cũ: không có dấu nào ⇒ "/" (không mở trang 404).
+  assert.equal(setupPagePath(parseHubSettings({ ok: true, branches: [{ id: "b" }], reviewSheet: null })), "/");
+  assert.equal(setupPagePath(null), "/");
+  const js = readFileSync(new URL("../extension/popup.js", import.meta.url), "utf8");
+  assert.match(js, /type: "quay:openHub", path: setupPagePath\(/);
+  assert.doesNotMatch(js, /type: "quay:openHub", path: "\/" \}/);
+});
+
+test("🔴 YC-156 L1 — lối đổi Hub thấy được: dòng Hub đang dùng ngoài Cài đặt, nút chuyển sang Hub kia", async () => {
+  const { hubSwitchTargets } = await import("../extension/popup-model.js");
+  assert.deepEqual(hubSwitchTargets("https://hub.urbanb.vn"), [
+    { origin: "https://urbanb.xyz", label: "urbanb.xyz (bãi thử)", url: "https://urbanb.xyz/extension" },
+  ]);
+  assert.deepEqual(hubSwitchTargets("https://urbanb.xyz").map((t) => t.url), ["https://hub.urbanb.vn/extension"]);
+  const html = readFileSync(new URL("../extension/popup.html", import.meta.url), "utf8");
+  // Dòng Hub nằm NGOÀI khối Cài đặt gập sẵn.
+  assert.ok(html.indexOf('id="hubLine"') > 0 && html.indexOf('id="hubLine"') < html.indexOf('<details id="settings"'));
+  assert.match(html, /id="hubLineOpen">Đổi Hub</);
+  assert.match(html, /id="hubSwitch"/);
+});
