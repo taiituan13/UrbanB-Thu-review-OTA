@@ -18,6 +18,12 @@ test("URL route: connection kèm báo, indicators, case, results", () => {
   assert.equal(u.searchParams.get("ezcloudHotelId"), "4123");
   assert.equal(u.searchParams.get("report"), "rejected");
   assert.equal(u.searchParams.get("message").length, 300);
+  // YC-192: kèm tên khách sạn trên ezCloud và mã máy khi hỏi theo mã khách sạn; không có thì không thêm khoá.
+  const seen = new URL(H.connectionUrl(HUB, "4123", null, { hotelName: "KS Thu - Q1", deviceId: "dev-1" }));
+  assert.equal(seen.searchParams.get("ezcloudHotelName"), "KS Thu - Q1");
+  assert.equal(seen.searchParams.get("deviceId"), "dev-1");
+  assert.equal(H.connectionUrl(HUB, "4123", null, { hotelName: "", deviceId: "" }), HUB + "/api/extension/connection?ezcloudHotelId=4123");
+  assert.equal(H.connectionUrl(HUB, "", null, { hotelName: "x", deviceId: "d" }), HUB + "/api/extension/connection");
   assert.equal(H.indicatorsUrl(HUB, "4123"), HUB + "/api/extension/indicators?ezcloudHotelId=4123");
   assert.equal(H.caseUrl(HUB, "s1"), HUB + "/cong-suat/ket-qua?case=s1");
   assert.equal(H.resultsUrl(HUB, "b1"), HUB + "/cong-suat/ket-qua?br=b1");

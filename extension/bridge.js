@@ -73,14 +73,23 @@
   // trong ezcloud-ota-booking-sync/hotels/COL.json). Chỉ nhận đúng dạng này. Tiêu đề đổi khi đổi cơ sở
   // mà không tải lại trang ⇒ đọc lại mỗi 2 giây (chỉ so chuỗi, không gọi gì khi mã không đổi).
   const TITLE_HOTEL_RE = /^\s*ezCloudHotel\s+(\d{3,9})\s+-\s/i;
+  // YC-192: đoạn giữa là TÊN khách sạn trên ezCloud (production 24/10: mã 15739 tên "67"); tên có thể chứa " - "
+  // ("TRẦN LONG - QUẬN 12") nên tên = mọi đoạn trừ đoạn cuối (tài khoản). Chỉ một đoạn ⇒ coi là tên.
+  const titleName = (title) => {
+    const parts = String(title).replace(TITLE_HOTEL_RE, "").split(" - ");
+    return (parts.length > 1 ? parts.slice(0, -1).join(" - ") : parts[0]).trim().slice(0, 200);
+  };
   let titleHotel = "";
   const readTitle = () => {
-    const id = (String(document.title ?? "").match(TITLE_HOTEL_RE) || [])[1] || "";
-    if (!id || id === titleHotel) return;
-    titleHotel = id;
+    const title = String(document.title ?? "");
+    const id = (title.match(TITLE_HOTEL_RE) || [])[1] || "";
+    if (!id) return;
+    const key = id + "|" + titleName(title);
+    if (key === titleHotel) return;
+    titleHotel = key;
     setHotel(id);
     try {
-      chrome.runtime.sendMessage({ type: "quay:pageHotel", hotelId: id }, () => void chrome.runtime.lastError);
+      chrome.runtime.sendMessage({ type: "quay:pageHotel", hotelId: id, hotelName: titleName(title) }, () => void chrome.runtime.lastError);
     } catch {}
   };
   readTitle();

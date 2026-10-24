@@ -27,6 +27,7 @@ const K = {
   branch: BRANCH_KEY,
   pmsSeen: "quayPmsSeen",
   conn: (h) => `quayConn:${h}`,
+  hotelName: (h) => `quayHotelName:${h}`,
   report: (h) => `quayReport:${h}`,
   ind: (h) => `quayInd:${h}`,
   book: (h) => `quayBook:${h}`,
@@ -170,7 +171,8 @@ async function connectionFor(target, { force = false, report = null } = {}) {
     return { session: "ok", branch: cached.branch, otaSync: H.usableOtaSync(undefined, cached), cached: true };
   }
   const origin = await hubOriginNow();
-  const url = target.branchId ? H.branchConnectionUrl(origin, target.branchId, report) : H.connectionUrl(origin, target.hotelId, report);
+  const seen = target.hotelId ? { hotelName: (await get(K.hotelName(target.hotelId))) ?? "", deviceId: await getDeviceId() } : null;
+  const url = target.branchId ? H.branchConnectionUrl(origin, target.branchId, report) : H.connectionUrl(origin, target.hotelId, report, seen);
   const reply = await hubFetch(url);
   const cls = H.classifyHubReply(reply);
   await noteSession(cls);
@@ -359,10 +361,13 @@ async function rememberHotel(hotelId, tabId) {
 }
 
 /** Mã khách sạn bridge.js đọc từ tiêu đề tab PMS (PMS 10/2026 không còn gửi token kèm request, làn yc152-ma-ks). */
-export async function onPageHotel(hotelId, tabId) {
+export async function onPageHotel(hotelId, tabId, hotelName = "") {
   const id = String(hotelId ?? "");
   if (!/^\d+$/.test(id)) return { ok: false };
   await rememberHotel(id, tabId);
+  // YC-192: tên khách sạn trên ezCloud (tiêu đề tab) đi kèm lượt hỏi mã kết nối, để Hub liệt kê mã chưa ghép.
+  const name = String(hotelName ?? "").trim().slice(0, 200);
+  if (name) await set(K.hotelName(id), name);
   await set(K.pmsSeen, { at: now(), hotelId: id });
   return { ok: true };
 }
@@ -661,7 +666,7 @@ const HANDLERS = {
   "quay:review": () => reviewStatus(),
   "quay:webOrderResolve": (m) => resolveWebOrder(String(m.hotelId ?? ""), String(m.id ?? "")),
   "quay:token": (m, sender) => onToken(m, sender?.tab?.id),
-  "quay:pageHotel": (m, sender) => onPageHotel(m.hotelId, sender?.tab?.id),
+  "quay:pageHotel": (m, sender) => onPageHotel(m.hotelId, sender?.tab?.id, m.hotelName),
   "quay:tabHotel": async (_m, sender) => ({ hotelId: sender?.tab?.id != null ? (await chrome.storage.session.get(`quayTab:${sender.tab.id}`).catch(() => ({})))[`quayTab:${sender.tab.id}`] ?? "" : "" }),
   "quay:openHub": (m) => openHub(String(m.path ?? "/")),
   "quay:status": () => statusForPopup(),

@@ -43,9 +43,15 @@ export function hubOrigin(raw) {
   return DEFAULT_HUB_ORIGIN;
 }
 
-export function connectionUrl(origin, hotelId, report) {
+/**
+ * `seen` (YC-192, tuỳ chọn) = `{ hotelName, deviceId }`: tên khách sạn trên ezCloud đọc từ tiêu đề tab và mã máy.
+ * Mã chưa ghép thì Hub ghi lại lượt thấy để Quản trị chọn chi nhánh ghép; Hub bản cũ bỏ qua hai tham số này.
+ */
+export function connectionUrl(origin, hotelId, report, seen = null) {
   const q = new URLSearchParams();
   if (hotelId) q.set("ezcloudHotelId", hotelId);
+  if (hotelId && seen?.hotelName) q.set("ezcloudHotelName", String(seen.hotelName).slice(0, 200));
+  if (hotelId && seen?.deviceId) q.set("deviceId", String(seen.deviceId).slice(0, 100));
   if (report) {
     q.set("report", report.kind);
     if (report.message) q.set("message", String(report.message).slice(0, 300));
