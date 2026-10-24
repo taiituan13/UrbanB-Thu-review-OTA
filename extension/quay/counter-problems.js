@@ -55,7 +55,6 @@ export function counterProblems({
 } = {}) {
   const out = [];
   const add = (code, detail = null, since = null) => {
-    if (out.some((p) => p.code === code)) return;
     const p = { code };
     if (text(detail)) p.detail = text(detail);
     if (iso(since)) p.since = iso(since);
