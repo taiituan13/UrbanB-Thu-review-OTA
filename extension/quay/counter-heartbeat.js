@@ -4,11 +4,12 @@
 //
 // Hợp đồng (repo UrbanB, chỉ đọc: src/modules/reviews/counter-extension/counter-device.rules.ts):
 //   POST /api/extension/connection
-//   { deviceId, version, branchId?, channels?, failures?, tokenPush?, g2jLock? }
+//   { deviceId, version, branchId?, channels?, failures?, tokenPush?, g2jLock?, problems? }
 // - `channels` vắng ⇒ Hub giữ ảnh kênh cũ (lượt báo sau lần đẩy phiên hay lần khoá không mang ảnh kênh).
 // - `failures`: từng lượt lỗi `{ channel, kind: error|login, code?, ref, at }`; Hub chỉ ghi thêm, lượt trùng
 //   `ref` không ghi lại ⇒ gửi lại an toàn.
 // - `tokenPush`: `{ at, kind: ezcloud|go2joy, result: saved|waiting|rejected }` · `g2jLock`: `{ at }`.
+// - `problems` (YC-193): ảnh mọi lỗi đang hiện cho lễ tân (counter-problems.js); mảng rỗng ⇒ máy hết lỗi.
 // Lời đáp: 200 `{ ok, failuresAdded }` · 400 INVALID_BODY · 401 NOT_SIGNED_IN · 403 OUT_OF_SCOPE / FORBIDDEN_ORIGIN ·
 //          404 BRANCH_NOT_FOUND.
 // Không gửi lời hướng dẫn, URL hay mã bí mật: lời hướng dẫn sống trong extension, đổi theo bản.
@@ -62,13 +63,14 @@ export function tokenPushOf(kind, outcome, at) {
  * Thân lượt báo. `model` null ⇒ không mang ảnh kênh (Hub giữ ảnh cũ). `branchId` rỗng ⇒ vắng: Hub giữ
  * chi nhánh cũ của máy (máy nhiều chi nhánh chưa chọn chi nhánh vẫn báo được là còn sống).
  */
-export function heartbeatBody({ deviceId, version, branchId = "", model = null, failures = [], tokenPush = null, g2jLock = null }) {
+export function heartbeatBody({ deviceId, version, branchId = "", model = null, failures = [], tokenPush = null, g2jLock = null, problems = null }) {
   const body = { deviceId: String(deviceId ?? ""), version: String(version ?? "") };
   if (branchId) body.branchId = String(branchId);
   if (model) body.channels = heartbeatChannels(model);
   if (failures?.length) body.failures = failures.slice(0, HEARTBEAT_FAILURES_MAX);
   if (tokenPush) body.tokenPush = tokenPush;
   if (g2jLock) body.g2jLock = g2jLock;
+  if (Array.isArray(problems)) body.problems = problems;
   return body;
 }
 

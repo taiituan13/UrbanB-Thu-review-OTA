@@ -9,6 +9,7 @@ import * as H from "./hub-quay.js";
 import * as N from "./notifications.js";
 import * as W from "./web-orders.js";
 import * as C from "./counter-heartbeat.js";
+import * as P from "./counter-problems.js";
 import { DEV_FLAGS } from "../env.js";
 import { BRANCH_KEY, HUB_COLLECT_KEY, MINE_KEY, loadEffectiveConfig, parseHubSettings, reviewMissingHelp, reviewMissingText } from "../hub-config.js";
 import { CHANNELS, getDeviceId, loadStatus } from "../config.js";
@@ -33,11 +34,17 @@ const K = {
   book: (h) => `quayBook:${h}`,
   board: (h) => `quayBoard:${h}`,
   tok: (k) => `quayTokenAt:${k}`,
+  faults: P.FAULTS_KEY,
 };
 
 const get = async (key) => (await chrome.storage.local.get(key))[key];
 const set = (key, value) => chrome.storage.local.set({ [key]: value });
 const now = () => Date.now();
+
+/** YC-193 — ghi (hoặc xoá, khi `fault` null) một lỗi SW biết lúc gọi, để lượt báo sống mang lên Hub. */
+async function noteFault(kind, fault) {
+  await set(K.faults, P.withFault(await get(K.faults), kind, fault));
+}
 
 /** Giữ service worker sống trong lượt gọi dài (Chrome dừng worker sau ~30 giây không có sự kiện). */
 async function keepAlive(promise) {
@@ -265,8 +272,10 @@ export async function board(hotelId) {
     const { result } = await withCode(hotelId, B.boardParams());
     const entry = { result, at: now() };
     await set(K.board(hotelId), entry);
+    await noteFault("board", null);
     return { ok: true, ...entry };
   } catch (e) {
+    await noteFault("board", { at: now(), message: e.message });
     return { ok: false, error: e.message, kind: e.kind, codeState: codeStateOf(e.conn, e), cached: await get(K.board(hotelId)) };
   }
 }
@@ -276,9 +285,11 @@ export async function lock(hotelId, sourceKey, confirmPaid) {
     const { result } = await withCode(hotelId, B.lockParams(sourceKey, confirmPaid));
     const outcome = B.lockOutcome(result);
     // YC-157 · H-1535 a: Hub hiện lần Khoá G2J thành công gần nhất (và ai đang đăng nhập lúc ấy).
+    await noteFault("lock", outcome.ok ? null : { at: now(), message: outcome.text });
     if (outcome.ok) sendHeartbeat({ g2jLock: { at: new Date(now()).toISOString() } }).catch(() => {});
     return { ok: true, ...outcome };
   } catch (e) {
+    await noteFault("lock", { at: now(), message: e.message });
     return { ok: false, text: e.message };
   }
 }
@@ -294,9 +305,12 @@ export async function indicators(hotelId) {
   if (cls.state === "ok") {
     const entry = { data: cls.data, at: now() };
     await set(K.ind(hotelId), entry);
+    await noteFault("indicators", null);
     return { state: "ok", ...entry, origin };
   }
   const session = await sessionNow(cls);
+  // Hết phiên đã có mã riêng (HUB_*): chỉ ghi lỗi Chỉ báo khi Hub không trả lời được.
+  if (cls.state !== "out") await noteFault("indicators", { at: now(), message: cls.message });
   // Mất mạng / Hub lỗi ⇒ hiện số lượt trước, ghi rõ giờ (mockup trạng thái "net").
   return { state: session, why: cls.why, cached, failedAt: now(), message: cls.message, origin };
 }
@@ -559,6 +573,24 @@ async function heartbeatBranchId() {
   return typeof id === "string" ? id : "";
 }
 
+/** YC-193 — ảnh mọi lỗi đang hiện cho lễ tân, đọc từ bộ nhớ (counter-problems.js). */
+async function problemsNow(version) {
+  const keys = [K.snap, K.faults, K.tok("ezcloud"), K.tok("go2joy"), K.mine, K.branch, "scanCrash", "lastError", "update"];
+  const got = await chrome.storage.local.get(keys);
+  const cfg = await loadEffectiveConfig();
+  return P.counterProblems({
+    snap: got[K.snap] ?? null,
+    faults: got[K.faults] ?? null,
+    tokenAt: { ezcloud: got[K.tok("ezcloud")], go2joy: got[K.tok("go2joy")] },
+    scanCrash: got.scanCrash ?? null,
+    lastError: got.lastError ?? null,
+    update: got.update ?? null,
+    version,
+    reviewMissing: Boolean(reviewMissingText(cfg.review)),
+    g2jAsk: H.pickBranch(got[K.mine]?.branches ?? null, got[K.branch] ?? "").state === "ask",
+  });
+}
+
 /**
  * Một lượt báo Hub. `scan` ⇒ kèm ảnh kênh và lượt lỗi của lần quét vừa xong; không ⇒ Hub giữ ảnh kênh
  * cũ. Lượt lỗi chưa báo được (mất mạng, hết phiên) nằm lại hàng đợi, gửi kèm lượt sau. Không ném.
@@ -571,14 +603,16 @@ export async function sendHeartbeat({ scan = false, tokenPush = null, g2jLock = 
     model = reviewModelOf(cfg, status);
     failures = C.mergeFailures(failures, C.failuresOf(model));
   }
+  const version = chrome.runtime.getManifest().version;
   const body = C.heartbeatBody({
     deviceId: await getDeviceId(),
-    version: chrome.runtime.getManifest().version,
+    version,
     branchId: await heartbeatBranchId(),
     model,
     failures,
     tokenPush,
     g2jLock,
+    problems: await problemsNow(version),
   });
   const { url, init } = C.heartbeatRequest(await hubOriginNow(), body);
   const reply = await hubFetch(url, init);
