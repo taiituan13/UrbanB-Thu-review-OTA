@@ -22,7 +22,7 @@ import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
 import { hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
-import { alarmMinutes, loadEffectiveConfig, reviewMissingText, reviewSendsSheet, sheetSkipText } from "./hub-config.js";
+import { alarmMinutes, loadEffectiveConfig, reviewMissingText, reviewSendsSheet, scanAlarmFor, sheetSkipText } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
 import { autoRescanChannel } from "./login-watch.js";
 import { PAGE_RUN_TIMEOUT_MS, REMOTE_TIMEOUT_MS, SHEET_TIMEOUT_MS, isTimeout, withTimeout } from "./quay/net.js";
@@ -54,14 +54,13 @@ async function schedule() {
 }
 
 /**
- * Chu kỳ trên Hub đổi ⇒ đổi báo thức. Chu kỳ như cũ thì để nguyên (không lùi giờ quét kế tiếp).
- * Chu kỳ mới tính từ lúc đổi.
+ * Chu kỳ trên Hub đổi ⇒ đổi chu kỳ báo thức. Chu kỳ như cũ thì để nguyên. Giờ quét kế tiếp không bao
+ * giờ bị lùi: lấy cái sớm hơn giữa giờ đã hẹn và lúc này cộng chu kỳ mới (`scanAlarmFor`).
  */
 async function followHubInterval() {
   const minutes = alarmMinutes((await loadEffectiveConfig()).intervalHours);
-  const alarm = await chrome.alarms.get(ALARM);
-  if (alarm?.periodInMinutes === minutes) return;
-  await chrome.alarms.create(ALARM, { delayInMinutes: minutes, periodInMinutes: minutes });
+  const next = scanAlarmFor(await chrome.alarms.get(ALARM), minutes, Date.now());
+  if (next) await chrome.alarms.create(ALARM, next);
 }
 
 /** Hỏi Hub cấu hình chung (chỉ đọc). Không gọi được Hub thì giữ bản đã nhận; không chặn lượt quét. */

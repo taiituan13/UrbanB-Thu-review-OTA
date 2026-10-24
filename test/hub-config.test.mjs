@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DEFAULT_CONFIG } from "../extension/config.js";
-import { alarmMinutes, effectiveCollect, parseHubSettings, scheduleText } from "../extension/hub-config.js";
+import { alarmMinutes, effectiveCollect, parseHubSettings, scanAlarmFor, scheduleText } from "../extension/hub-config.js";
 import * as H from "../extension/quay/hub-quay.js";
 import * as N from "../extension/quay/notifications.js";
 
@@ -95,6 +95,35 @@ test("Báo thức: giờ ⇒ phút, không dày hơn 30 phút; chữ dưới nú
   assert.equal(alarmMinutes(undefined), DEFAULT_CONFIG.intervalHours * 60);
   assert.match(scheduleText(effectiveCollect(DEFAULT_CONFIG, { intervalHours: 3 })), /mỗi 3 giờ \(theo cấu hình trên Hub\)/);
   assert.match(scheduleText(effectiveCollect(DEFAULT_CONFIG, null)), /mỗi 6 giờ \(mặc định, chưa nhận cấu hình từ Hub\)/);
+});
+
+// YC-213: máy mới cài hẹn lượt quét đầu sau 5 phút; một phút sau Hub gửi chu kỳ khác mặc định. Lối cũ hẹn
+// lại trọn chu kỳ mới ⇒ lượt quét đầu lùi hàng giờ, máy vắng mặt trên Hub. Giờ quét kế không bao giờ bị lùi.
+test("Chu kỳ Hub đổi: giờ quét kế là cái sớm hơn giữa giờ đã hẹn và lúc này + chu kỳ mới", () => {
+  const now = Date.UTC(2026, 9, 24, 8, 0);
+  const min = 60_000;
+  // Máy vừa cài: báo thức 6 giờ, lượt đầu còn 4 phút; Hub gửi 3 giờ ⇒ vẫn quét sau 4 phút, chu kỳ 3 giờ.
+  const fresh = { name: "scan", scheduledTime: now + 4 * min, periodInMinutes: 360 };
+  assert.deepEqual(scanAlarmFor(fresh, 180, now), { when: now + 4 * min, periodInMinutes: 180 });
+  // Hub rút chu kỳ 6 → 3 giờ, lượt kế còn 5 giờ ⇒ lượt kế không muộn hơn 3 giờ nữa.
+  const late = { name: "scan", scheduledTime: now + 300 * min, periodInMinutes: 360 };
+  assert.deepEqual(scanAlarmFor(late, 180, now), { when: now + 180 * min, periodInMinutes: 180 });
+  // Hub nới chu kỳ 3 → 6 giờ, lượt kế còn 2 giờ ⇒ lượt đã hẹn chạy đúng giờ, các lượt sau theo 6 giờ.
+  const soon = { name: "scan", scheduledTime: now + 120 * min, periodInMinutes: 180 };
+  assert.deepEqual(scanAlarmFor(soon, 360, now), { when: now + 120 * min, periodInMinutes: 360 });
+  // Không có báo thức sẵn ⇒ hẹn theo chu kỳ mới.
+  assert.deepEqual(scanAlarmFor(undefined, 180, now), { when: now + 180 * min, periodInMinutes: 180 });
+  // Chu kỳ như cũ ⇒ để nguyên báo thức.
+  assert.equal(scanAlarmFor(late, 360, now), null);
+});
+
+test("followHubInterval tạo báo thức theo scanAlarmFor, không hẹn lại trọn chu kỳ mới", () => {
+  const bg = readFileSync(new URL("../extension/background.js", import.meta.url), "utf8");
+  const body = bg.slice(bg.indexOf("async function followHubInterval"), bg.indexOf("async function syncHubSettings"));
+  assert.match(body, /scanAlarmFor\(await chrome\.alarms\.get\(ALARM\), minutes, Date\.now\(\)\)/);
+  assert.doesNotMatch(body, /delayInMinutes/);
+  // Báo thức "scan" chỉ được tạo ở schedule() (lượt đầu sau 5 phút) và followHubInterval.
+  assert.equal((bg.match(/chrome\.alarms\.create\(ALARM,/g) ?? []).length, 2);
 });
 
 test("Cấu hình đọc bằng lượt liệt kê chỉ đọc scope=mine (không kèm mã khách sạn, không report)", () => {

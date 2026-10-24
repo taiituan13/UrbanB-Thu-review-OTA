@@ -253,6 +253,19 @@ export function alarmMinutes(intervalHours) {
 }
 
 /**
+ * Báo thức quét mới khi chu kỳ đổi (YC-213), dạng tham số của `chrome.alarms.create`; null ⇒ để nguyên.
+ * Không bao giờ lùi lượt quét kế tiếp: giờ quét kế là cái sớm hơn giữa giờ đã hẹn (`alarm.scheduledTime`)
+ * và lúc này cộng chu kỳ mới. Máy vừa cài vẫn quét lần đầu sau 5 phút dù Hub gửi chu kỳ khác mặc định;
+ * Hub nới chu kỳ thì lượt đã hẹn vẫn chạy đúng giờ, các lượt sau theo chu kỳ mới.
+ */
+export function scanAlarmFor(alarm, minutes, now) {
+  if (alarm?.periodInMinutes === minutes) return null;
+  const fresh = now + minutes * 60_000;
+  const when = Number.isFinite(alarm?.scheduledTime) ? Math.min(alarm.scheduledTime, fresh) : fresh;
+  return { when, periodInMinutes: minutes };
+}
+
+/**
  * Chữ dưới nút Quét: chu kỳ và nguồn của nó. YC-156 L4: thu review không tự chạy được (bị chặn theo
  * `reviewMissingHelp`, hoặc không bật kênh nào) ⇒ null, popup ẩn dòng, kẻo đọc như máy đang tự quét.
  */
