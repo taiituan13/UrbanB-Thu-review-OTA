@@ -3,6 +3,7 @@ import { formatErrorReport } from "./report.js";
 import { UPDATE_COMMAND, updateNotice } from "./update.js";
 import { branchPicker, popupPmsRow } from "./quay/hub-quay.js";
 import { hubLabel, hubSwitchTargets, needsReload, noChannelText, reviewRow, reviewSourceLines, whoText } from "./popup-model.js";
+import { LOGIN_PAGE } from "./login-watch.js";
 import { loadEffectiveConfig, loadHubCollect, reviewMissingText, scheduleText, setupPagePath } from "./hub-config.js";
 
 const $ = (id) => document.getElementById(id);
@@ -128,8 +129,8 @@ async function renderReviewRow() {
   const [cfg, status] = await Promise.all([loadEffectiveConfig(), loadStatus()]);
   const row = reviewRow(cfg, status, CHANNELS);
   paintRow("rv", row);
-  // Có kênh lỗi ⇒ mở sẵn danh sách kênh để thấy mã lỗi ngay.
-  if (row.tone === "err") $("rvMore").open = true;
+  // Có kênh lỗi ⇒ mở sẵn danh sách kênh để thấy mã lỗi ngay; kênh cần đăng nhập ⇒ thấy ngay hai nút (YC-199).
+  if (row.tone === "err" || Object.values(status ?? {}).some((s) => s?.state === "login")) $("rvMore").open = true;
 }
 
 async function fill() {
@@ -176,6 +177,35 @@ function errorBox(entry) {
   return box;
 }
 
+/**
+ * YC-199: dòng kênh cần đăng nhập lại có hai nút — mở trang đăng nhập của kênh (tab mới, ngay trước mặt), và quét
+ * lại riêng kênh này. Đăng nhập xong thì máy cũng tự quét lại kênh ấy (background.js), nút để bấm khi không muốn chờ.
+ */
+function loginActions(ch) {
+  const row = document.createElement("div");
+  row.className = "acts";
+  const open = document.createElement("button");
+  open.className = "secondary";
+  open.textContent = "Mở trang đăng nhập";
+  open.onclick = () => chrome.tabs.create({ url: LOGIN_PAGE[ch], active: true });
+  const again = document.createElement("button");
+  again.className = "secondary";
+  again.textContent = "Quét lại kênh này";
+  again.onclick = async () => {
+    again.disabled = true;
+    note(`Đang quét lại ${CHANNEL_LABEL[ch] ?? ch}…`);
+    try {
+      const r = await chrome.runtime.sendMessage({ type: "scanChannel", channel: ch });
+      note(r?.ok ? `Xong lượt quét ${CHANNEL_LABEL[ch] ?? ch}.` : `Lỗi: ${r?.error ?? "không rõ"}`);
+    } finally {
+      again.disabled = false;
+    }
+    await renderStatus();
+  };
+  row.append(open, again);
+  return row;
+}
+
 /** Giờ ngắn gọn: "14:05 8/10". */
 function shortTime(iso) {
   const d = new Date(iso);
@@ -206,6 +236,7 @@ async function renderStatus() {
     div.querySelector(".name").textContent = CHANNEL_LABEL[ch];
     div.querySelector(".when").textContent = when;
     div.querySelector(".detail").textContent = detail;
+    if (s?.state === "login") div.querySelector(".body").appendChild(loginActions(ch));
     if (s?.error?.ref) {
       div.querySelector(".body").appendChild(errorBox(s.error));
       shown.add(s.error.ref);

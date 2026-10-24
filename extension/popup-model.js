@@ -94,7 +94,7 @@ export function reviewRow(cfg, status, channels) {
       state: login.length === bad.length ? `${bad.length} kênh cần đăng nhập lại` : `${bad.length} kênh lỗi`,
       when: latest ? hm(latest) : "",
       detail: login.length === bad.length
-        ? `${names}: mở trang quản lý khách sạn của kênh trong Chrome này và đăng nhập. Lượt quét sau tự chạy.`
+        ? `${names}: bấm Mở trang đăng nhập ở dòng kênh bên dưới và đăng nhập trong Chrome này. Đăng nhập xong máy tự quét lại kênh ấy.`
         : `${names}: xem từng kênh bên dưới, mỗi kênh có các bước cần làm và mã lỗi để gửi người quản lý.`,
     };
   }

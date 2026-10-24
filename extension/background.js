@@ -24,6 +24,7 @@ import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } f
 import { hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
 import { alarmMinutes, loadEffectiveConfig, reviewMissingText, reviewSendsSheet, sheetSkipText } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
+import { autoRescanChannel } from "./login-watch.js";
 import { PAGE_RUN_TIMEOUT_MS, REMOTE_TIMEOUT_MS, SHEET_TIMEOUT_MS, isTimeout, withTimeout } from "./quay/net.js";
 import {
   bookingSessionInPage,
@@ -167,6 +168,19 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg?.type === "scanNow") {
     runScan("bấm tay").then(
+      (problem) => reply(problem ? { ok: false, error: problem } : { ok: true }),
+      (e) => scanCrashed(e).then(() => reply({ ok: false, error: String(e) })),
+    );
+    return true;
+  }
+  // YC-199: nút "Quét lại kênh này" trên dòng kênh cần đăng nhập — chỉ quét kênh ấy.
+  if (msg?.type === "scanChannel") {
+    const channel = String(msg.channel ?? "");
+    if (!CHANNELS.includes(channel)) {
+      reply({ ok: false, error: "Kênh không hợp lệ" });
+      return false;
+    }
+    runScan("bấm tay", [channel]).then(
       (problem) => reply(problem ? { ok: false, error: problem } : { ok: true }),
       (e) => scanCrashed(e).then(() => reply({ ok: false, error: String(e) })),
     );
@@ -552,8 +566,11 @@ async function scanCrashed(e) {
 
 let running = false;
 
-/** Trả chuỗi mô tả nếu lượt quét không chạy được; undefined nếu đã chạy xong. */
-async function runScan(trigger) {
+/**
+ * Trả chuỗi mô tả nếu lượt quét không chạy được; undefined nếu đã chạy xong. `only` = danh sách kênh cần quét
+ * (YC-199: quét lại một kênh); bỏ trống ⇒ mọi kênh đang bật.
+ */
+async function runScan(trigger, only = null) {
   if (running) return "Đang có một lượt quét chạy, đợi nó xong.";
   running = true;
   try {
@@ -569,6 +586,7 @@ async function runScan(trigger) {
     const runId = crypto.randomUUID();
     for (const channel of CHANNELS) {
       if (!cfg.enabled[channel]) continue;
+      if (only && !only.includes(channel)) continue;
       await scanOne(channel, cfg, trigger, runId, toSheet);
     }
     // Báo sống kèm trạng thái cuối của mọi kênh; chạy cả khi không bật kênh nào.
@@ -585,6 +603,28 @@ async function runScan(trigger) {
     await refreshBadge();
   }
 }
+
+// ---------- YC-199: tự quét lại kênh sau khi lễ tân đăng nhập ----------
+
+/** Giờ tự quét lại gần nhất của từng kênh (chỉ trong phiên chạy nền này; mất khi Chrome dừng nó là không sao). */
+const autoRescanTried = {};
+
+/**
+ * Một tab tải xong trang quản lý của kênh đang báo "cần đăng nhập lại" ⇒ lễ tân vừa đăng nhập xong: quét lại riêng
+ * kênh ấy, không cần bấm. Tab do chính lượt quét mở thì `running` đang bật nên không kích.
+ */
+chrome.tabs.onUpdated.addListener((_tabId, info, tab) => {
+  if (info.status !== "complete" || running) return;
+  const url = tab?.url ?? "";
+  if (!url.startsWith("https://")) return;
+  (async () => {
+    const [cfg, status] = await Promise.all([loadEffectiveConfig(), loadStatus()]);
+    const channel = autoRescanChannel({ url, enabled: cfg.enabled, status, running, lastTry: autoRescanTried, now: Date.now() });
+    if (!channel) return;
+    autoRescanTried[channel] = Date.now();
+    await runScan("tự quét sau đăng nhập", [channel]);
+  })().catch(scanCrashed);
+});
 
 async function scanOne(channel, cfg, trigger, runId, toSheet = true) {
   const startedAt = new Date().toISOString();

@@ -69,7 +69,8 @@ export const NOT_SIGNED_IN_TEXT = "Chưa đăng nhập Hub, hoặc phiên Hub đ
  * Kiểu lượt gửi Hub (YC-157): mã ổn định thay chữ tiếng Việt của Sheet. Hub chỉ hiện nhãn cho mã nó
  * biết; kiểu lạ thì không gửi.
  */
-export const HUB_TRIGGER = { "hẹn giờ": "schedule", "bấm tay": "manual" };
+// YC-199: lượt tự quét lại sau khi lễ tân đăng nhập kênh là lượt máy tự chạy, không phải người bấm ⇒ "schedule".
+export const HUB_TRIGGER = { "hẹn giờ": "schedule", "bấm tay": "manual", "tự quét sau đăng nhập": "schedule" };
 
 /**
  * Thông tin lượt gửi kèm mỗi lô (hợp đồng `device.deviceId` · `run.trigger` · `run.id`, Hub đọc ở
