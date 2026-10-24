@@ -4,14 +4,37 @@
 import { CHANNEL_LABEL } from "./report.js";
 import { HUB_COUNTER_PLACE, SETUP_PAGE_PATH, reviewMissingText, sheetSkipText } from "./hub-config.js";
 import { HUB_LABELS, HUB_ORIGINS } from "./env.js";
+import { isNewer } from "./update.js";
+
+/** Câu khi phần chạy nền của extension không trả lời popup (thường là vừa chép bản mới, chưa nạp xong). */
+export const NO_WORKER_TEXT = "Extension chưa trả lời. Đóng ô này rồi mở lại; vẫn vậy thì vào chrome://extensions bấm nạp lại Urban B.";
+
+/**
+ * Nhãn Hub máy đang dùng. Phần chạy nền luôn trả gốc Hub (mặc định khi chưa chọn), nên thiếu gốc nghĩa là
+ * popup không hỏi được nó: nói thẳng "chưa kết nối", không hiện chữ "Hub" trơn trông như đã kết nối.
+ */
+export function hubLabel(snap) {
+  if (!snap?.origin) return "chưa kết nối";
+  return HUB_LABELS[snap.origin] ?? snap.origin;
+}
+
+/**
+ * Bản cài giải nén: chạy lệnh cài là chép bản mới lên đĩa, nhưng Chrome vẫn chạy bản đã nạp cho tới khi
+ * nạp lại. Popup đọc tệp từ đĩa mỗi lần mở (`VERSION` của config.js là bản trên đĩa), còn
+ * `chrome.runtime.getManifest()` là bản đang chạy. Trên đĩa mới hơn ⇒ popup nạp lại ngay.
+ */
+export function needsReload(diskVersion, runningVersion) {
+  return isNewer(diskVersion, runningVersion);
+}
 
 /**
  * YC-156 L7 — dòng đầu popup: tài khoản nào đang đăng nhập Hub nào. Tên lấy từ route thông báo của Hub
  * (`snap.notifications.me`); popup hỏi lại route ấy mỗi lần mở nên tên có ngay cả khi chưa mở PMS.
  */
 export function whoText(snap) {
-  const session = snap?.session ?? "out";
-  const hub = HUB_LABELS[snap?.origin] ?? snap?.origin ?? "Hub";
+  if (!snap) return NO_WORKER_TEXT;
+  const session = snap.session ?? "out";
+  const hub = hubLabel(snap);
   if (session === "out") return `Chưa đăng nhập ${hub}`;
   if (session === "expired") return `Phiên ${hub} đã hết`;
   if (snap?.net) return `Không gọi được ${hub}, đang hiện lượt trước`;

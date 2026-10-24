@@ -97,3 +97,30 @@ test("🔴 YC-156 L1 — lối đổi Hub thấy được: dòng Hub đang dùng
   assert.match(html, /id="hubLineOpen">Đổi Hub</);
   assert.match(html, /id="hubSwitch"/);
 });
+
+test("🔴 YC-188 — popup không hỏi được phần chạy nền thì nói thẳng, không hiện chữ 'Hub' trơn", async () => {
+  const { hubLabel, whoText, NO_WORKER_TEXT } = await import("../extension/popup-model.js");
+  assert.equal(hubLabel(null), "chưa kết nối");
+  assert.equal(hubLabel({ session: "ok" }), "chưa kết nối");
+  assert.equal(hubLabel({ origin: "https://urbanb.xyz" }), "urbanb.xyz (bãi thử)");
+  assert.equal(hubLabel({ origin: "https://hub.urbanb.vn" }), "hub.urbanb.vn");
+  assert.equal(whoText(null), NO_WORKER_TEXT);
+  assert.match(NO_WORKER_TEXT, /chrome:\/\/extensions/);
+  const js = readFileSync(new URL("../extension/popup.js", import.meta.url), "utf8");
+  assert.doesNotMatch(js, /\?\? "Hub"/, "popup không được rơi về chữ 'Hub' trơn");
+  assert.match(js, /\$\("hubLineNow"\)\.textContent = hub;/);
+  assert.match(js, /\$\("outBox"\)\.hidden = !snap \|\| session !== "out";/);
+});
+
+test("🔴 YC-188 — mở popup mà bản trên đĩa mới hơn bản đang chạy thì nạp lại ngay; popup ghi bản đang chạy", async () => {
+  const { needsReload } = await import("../extension/popup-model.js");
+  assert.equal(needsReload("1.4.4", "1.4.3"), true);
+  assert.equal(needsReload("1.4.3", "1.4.3"), false);
+  assert.equal(needsReload("1.4.2", "1.4.3"), false, "bản trên đĩa cũ hơn thì không nạp");
+  const js = readFileSync(new URL("../extension/popup.js", import.meta.url), "utf8");
+  assert.match(js, /const RUNNING = chrome\.runtime\.getManifest\(\)\.version;/);
+  assert.match(js, /if \(needsReload\(VERSION, RUNNING\)\) \{[\s\S]*?chrome\.runtime\.reload\(\);\s*\} else \{/);
+  // Mọi chỗ popup báo "máy đang chạy bản …" đọc bản đang chạy, không đọc bản trên đĩa.
+  assert.doesNotMatch(js, /đang chạy bản \$\{VERSION\}|mới nhất \(\$\{VERSION\}\)|phiên bản \$\{VERSION\}|updateNotice\(update, VERSION\)/);
+  assert.match(js, /phiên bản \$\{RUNNING\}/);
+});

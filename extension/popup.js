@@ -1,12 +1,13 @@
 import { CHANNELS, CHANNEL_LABEL, VERSION, getDeviceId, loadLastError, loadStatus } from "./config.js";
 import { formatErrorReport } from "./report.js";
 import { UPDATE_COMMAND, updateNotice } from "./update.js";
-import { HUB_LABELS } from "./env.js";
 import { branchPicker, popupPmsRow } from "./quay/hub-quay.js";
-import { hubSwitchTargets, noChannelText, reviewRow, reviewSourceLines, whoText } from "./popup-model.js";
+import { hubLabel, hubSwitchTargets, needsReload, noChannelText, reviewRow, reviewSourceLines, whoText } from "./popup-model.js";
 import { loadEffectiveConfig, loadHubCollect, reviewMissingText, scheduleText, setupPagePath } from "./hub-config.js";
 
 const $ = (id) => document.getElementById(id);
+/** Bản Chrome đang chạy. `VERSION` (config.js) là bản trên đĩa, có thể mới hơn khi vừa chạy lệnh cài. */
+const RUNNING = chrome.runtime.getManifest().version;
 const STATE_TEXT = { ok: "ổn", error: "lỗi", login: "cần đăng nhập lại" };
 
 /** Dòng chữ dưới nút Quét review ngay; `where` = "settingsNote" cho dòng trong khối Cài đặt. */
@@ -51,10 +52,11 @@ async function renderQuay() {
     snap = null;
   }
   const session = snap?.session ?? "out";
-  const hubLabel = HUB_LABELS[snap?.origin] ?? snap?.origin ?? "Hub";
+  const hub = hubLabel(snap);
   $("who").textContent = whoText(snap);
   refreshAccountName(session);
-  $("outBox").hidden = session !== "out";
+  // Không hỏi được phần chạy nền thì chưa biết phiên Hub: không hiện hộp "chưa đăng nhập".
+  $("outBox").hidden = !snap || session !== "out";
   $("expired").hidden = session !== "expired";
   $("tm").hidden = !snap?.tampermonkey;
   $("openHub").hidden = session === "out";
@@ -72,8 +74,8 @@ async function renderQuay() {
     m.textContent = x.at ? shortTime(x.at) : "";
     subs.append(d, t, m);
   }
-  $("hubNow").textContent = hubLabel;
-  $("hubLineNow").textContent = hubLabel;
+  $("hubNow").textContent = hub;
+  $("hubLineNow").textContent = hub;
   renderHubSwitch(snap?.origin);
 }
 
@@ -139,7 +141,7 @@ async function fill() {
 /** Chép đoạn báo lỗi đầy đủ (mã, khách sạn, máy, phiên bản, lỗi) để dán gửi người quản lý. */
 async function copyReport(entry, button) {
   const cfg = await loadEffectiveConfig();
-  const text = formatErrorReport(entry, { hotel: cfg.hotel, deviceId: await getDeviceId(), version: VERSION });
+  const text = formatErrorReport(entry, { hotel: cfg.hotel, deviceId: await getDeviceId(), version: RUNNING });
   try {
     await navigator.clipboard.writeText(text);
     button.textContent = "Đã chép";
@@ -248,14 +250,14 @@ async function copyCommand(button) {
 /** Dải "Có bản mới" và dòng phiên bản trong Cài đặt, theo kết quả kiểm GitHub đã lưu. */
 async function renderUpdate() {
   const { update } = await chrome.storage.local.get("update");
-  const notice = updateNotice(update, VERSION);
+  const notice = updateNotice(update, RUNNING);
   $("update").hidden = !notice;
   if (notice) $("updTitle").textContent = `Có bản mới ${notice.latest} (máy đang chạy ${notice.current})`;
   $("updState").textContent = !update?.latest
-    ? `Máy đang chạy bản ${VERSION}. Chưa kiểm được bản mới nhất trên GitHub.`
+    ? `Máy đang chạy bản ${RUNNING}. Chưa kiểm được bản mới nhất trên GitHub.`
     : notice
-      ? `Máy đang chạy bản ${VERSION}; bản mới nhất ${update.latest}.`
-      : `Máy đang chạy bản mới nhất (${VERSION}).`;
+      ? `Máy đang chạy bản ${RUNNING}; bản mới nhất ${update.latest}.`
+      : `Máy đang chạy bản mới nhất (${RUNNING}).`;
 }
 
 /** Một dòng kết quả Thử Sheet (kèm Hub nếu máy gửi Hub). */
@@ -331,16 +333,23 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.quaySnap) renderQuay();
 });
 
-$("updateCmd").value = UPDATE_COMMAND;
-fill();
-// Cấu hình chung và danh sách cơ sở trên Hub có thể vừa đổi: hỏi lại (lượt chỉ đọc scope=mine);
-// cấu hình đổi thì popup tự vẽ lại (onChanged hubCollect).
-renderBranches();
-renderQuay();
-renderStatus();
-renderUpdate();
-showSetupFromFile();
-chrome.runtime.sendMessage({ type: "checkUpdate" }).catch(() => {});
-getDeviceId().then((id) => {
-  $("device").textContent = `Mã máy ${id.slice(0, 8)}, phiên bản ${VERSION}`;
-});
+// YC-188: vừa chạy lệnh cài thì trên đĩa là bản mới mà Chrome vẫn chạy bản cũ. Nạp lại ngay (ô bật lên tự
+// đóng; mở lại là bản mới), không bắt người ở quầy vào chrome://extensions, không chờ báo thức 30 phút.
+if (needsReload(VERSION, RUNNING)) {
+  $("who").textContent = `Đang nạp bản ${VERSION} (máy đang chạy ${RUNNING}). Ô này sẽ tự đóng, mở lại sau vài giây.`;
+  chrome.runtime.reload();
+} else {
+  $("updateCmd").value = UPDATE_COMMAND;
+  fill();
+  // Cấu hình chung và danh sách cơ sở trên Hub có thể vừa đổi: hỏi lại (lượt chỉ đọc scope=mine);
+  // cấu hình đổi thì popup tự vẽ lại (onChanged hubCollect).
+  renderBranches();
+  renderQuay();
+  renderStatus();
+  renderUpdate();
+  showSetupFromFile();
+  chrome.runtime.sendMessage({ type: "checkUpdate" }).catch(() => {});
+  getDeviceId().then((id) => {
+    $("device").textContent = `Mã máy ${id.slice(0, 8)}, phiên bản ${RUNNING}`;
+  });
+}
