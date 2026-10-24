@@ -283,28 +283,64 @@ test("Go2Joy: không nhận xét, có phản hồi, loại đặt phòng lạ", 
 });
 
 // YC-188 (H-1815 a, H-1852 a, H-1853 a): tên khách đi Hub, không vào hash, không đi Sheet.
-test("Tên khách: kênh chưa đo đường tên thì bài không có khoá guestName", () => {
+// Đường tên đo trên extranet thật 24/10/2026 (H-1908 b). Đổi một đường là phải đo lại.
+const MEASURED_NAME_PATH = {
+  booking: "yourname",
+  agoda: "reviewInfo.reviewer",
+  trip: "userName",
+  traveloka: "reviewerName",
+  expedia: "traveler.name",
+  go2joy: "userNickName",
+};
+const FIXTURES = { booking, agoda, trip, traveloka, expedia, go2joy };
+
+function withNameAt(item, path, name) {
+  const copy = structuredClone(item);
+  const keys = path.split(".");
+  let node = copy;
+  for (const k of keys.slice(0, -1)) node = node[k] ??= {};
+  node[keys.at(-1)] = name;
+  return copy;
+}
+
+test("Tên khách: đường tên mỗi kênh đúng kết quả đo extranet", () => {
+  assert.deepEqual(GUEST_NAME_PATH, MEASURED_NAME_PATH);
+});
+
+test("Tên khách: mọi kênh đọc được tên ở đường đã đo, và JSON gốc không mang tên", () => {
   for (const [channel, path] of Object.entries(GUEST_NAME_PATH)) {
-    assert.equal(path, null, `${channel}: chưa có kết quả đo extranet thì không được điền đường tên`);
+    const item = withNameAt(FIXTURES[channel], path, "  Tên Khách Đo  ");
+    const r = normalizeBatch(channel, [item], ctx).reviews[0];
+    assert.equal(r.guestName, "Tên Khách Đo", `${channel}: phải đọc tên ở ${path}`);
+    assert.ok(!r.raw.includes("Tên Khách Đo"), `${channel}: tên khách phải bị gỡ khỏi JSON gốc`);
   }
-  const r = normalizeBatch("booking", [booking], ctx).reviews[0];
+});
+
+test("Tên khách: Booking không lấy tên khách sạn (`name`) làm tên khách", () => {
+  const r = normalizeBatch("booking", [{ ...booking, name: "KS Thử", yourname: "Khách A" }], ctx).reviews[0];
+  assert.equal(r.guestName, "Khách A");
+  const none = normalizeBatch("booking", [{ ...booking, name: "KS Thử", yourname: "" }], ctx).reviews[0];
+  assert.ok(!("guestName" in none), "không có tên khách thì không gửi khoá, kể cả khi có tên khách sạn");
+});
+
+test("Tên khách: kênh không có đường tên thì bài không có khoá guestName", () => {
+  const paths = { ...GUEST_NAME_PATH, booking: null };
+  const r = normalizeBatch("booking", [booking], ctx, paths).reviews[0];
   assert.ok(!("guestName" in r));
 });
 
 test("Tên khách: kênh có đường tên ⇒ đọc, cắt khoảng trắng; JSON gốc vẫn không mang tên", () => {
-  const paths = { ...GUEST_NAME_PATH, booking: "name" };
-  const r = normalizeBatch("booking", [{ ...booking, name: "  Khách A  " }], ctx, paths).reviews[0];
+  const r = normalizeBatch("booking", [{ ...booking, yourname: "  Khách A  " }], ctx).reviews[0];
   assert.equal(r.guestName, "Khách A");
   assert.ok(!r.raw.includes("Khách A"), "tên khách phải bị gỡ khỏi JSON gốc");
-  const blank = normalizeBatch("booking", [{ ...booking, name: "   " }], ctx, paths).reviews[0];
+  const blank = normalizeBatch("booking", [{ ...booking, yourname: "   " }], ctx).reviews[0];
   assert.ok(!("guestName" in blank), "tên rỗng thì không gửi khoá");
 });
 
 test("Tên khách: không làm đổi hash", () => {
-  const paths = { ...GUEST_NAME_PATH, booking: "name" };
-  const plain = normalizeBatch("booking", [booking], ctx).reviews[0];
-  const a = normalizeBatch("booking", [{ ...booking, name: "Khách A" }], ctx, paths).reviews[0];
-  const b = normalizeBatch("booking", [{ ...booking, name: "Khách B" }], ctx, paths).reviews[0];
+  const plain = normalizeBatch("booking", [booking], ctx, { ...GUEST_NAME_PATH, booking: null }).reviews[0];
+  const a = normalizeBatch("booking", [{ ...booking, yourname: "Khách A" }], ctx).reviews[0];
+  const b = normalizeBatch("booking", [{ ...booking, yourname: "Khách B" }], ctx).reviews[0];
   assert.equal(a.hash, plain.hash);
   assert.equal(b.hash, plain.hash);
 });
@@ -317,8 +353,7 @@ test("Tên khách: đọc theo đường chấm; sai kiểu hoặc thiếu nút 
 });
 
 test("Tên khách: bài gửi Sheet không mang guestName, các trường khác giữ nguyên", () => {
-  const paths = { ...GUEST_NAME_PATH, booking: "name" };
-  const r = normalizeBatch("booking", [{ ...booking, name: "Khách A" }], ctx, paths).reviews[0];
+  const r = normalizeBatch("booking", [{ ...booking, yourname: "Khách A" }], ctx).reviews[0];
   const [sheet] = sheetReviews([r]);
   assert.ok(!("guestName" in sheet));
   assert.ok(!JSON.stringify(sheet).includes("Khách A"));

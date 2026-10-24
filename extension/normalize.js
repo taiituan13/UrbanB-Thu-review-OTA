@@ -17,17 +17,22 @@ const STRIP_FIELDS = {
 
 /**
  * YC-188 (H-1815 a): khoá giữ TÊN HIỂN THỊ của khách trên một bài thô, theo kênh, dạng đường chấm
- * ("traveler.name"). `null` = chưa đo trên extranet thật (H-1853 a: người dùng tự đo trên máy mình)
- * ⇒ kênh ấy không gửi tên. Chỉ điền một kênh khi đã có kết quả đo; khoá ấy vẫn phải nằm trong
- * STRIP_FIELDS (hoặc bị gỡ riêng như Expedia) để JSON gốc không mang tên.
+ * ("traveler.name"). `null` = chưa đo trên extranet thật ⇒ kênh ấy không gửi tên. Mỗi khoá vẫn phải
+ * nằm trong STRIP_FIELDS (hoặc bị gỡ riêng như Expedia) để JSON gốc không mang tên.
+ *
+ * Đo trên extranet thật ngày 24/10/2026 (H-1908 b, giữ H-1853 a), chỉ đọc tên khoá:
+ * - booking: `name` là TÊN KHÁCH SẠN (mọi bài cùng một giá trị), tên khách là `yourname`.
+ * - agoda: `reviewInfo.reviewer` trùng `reviewInfo.memberFirstName` ở 50/50 bài.
+ * - traveloka: khoá duy nhất mang tên; trang không hiện chữ review nên chưa đối chiếu trên màn.
+ * - go2joy: biệt danh khách tự đặt trên app Go2Joy, không chắc là tên thật.
  */
 export const GUEST_NAME_PATH = {
-  booking: null,
-  agoda: null,
-  trip: null,
-  traveloka: null,
-  expedia: null,
-  go2joy: null,
+  booking: "yourname",
+  agoda: "reviewInfo.reviewer",
+  trip: "userName",
+  traveloka: "reviewerName",
+  expedia: "traveler.name",
+  go2joy: "userNickName",
 };
 
 /** Giới hạn một ô Google Sheet là 50.000 ký tự; chừa lề. */
