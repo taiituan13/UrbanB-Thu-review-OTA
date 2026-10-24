@@ -121,7 +121,7 @@ try {
     Write-Log "Đã cài bản $after vào $ExtDir."
   }
   Write-Host ""
-  # Cùng các bước của màn Cài extension trên Hub (repo UrbanB: extensionSetup.install.s5…s12).
+  # Cùng các bước của tài liệu SOP HUB-EXTENSION mà màn Cài extension trên Hub dẫn sang (repo UrbanB, YC-187).
   Write-Host "Đã tải xong. Các bước tiếp trong Chrome:" -ForegroundColor Green
   Write-Host "  1. Mở Chrome, gõ chrome://extensions vào thanh địa chỉ rồi nhấn Enter."
   Write-Host "  2. Bật 'Chế độ dành cho nhà phát triển' ở góc trên bên phải, và để bật luôn."

@@ -1,7 +1,7 @@
 # Cài extension cho khách sạn (Windows)
 
 Cách cài này không qua Chrome Web Store. Từ bản 0.9.0, người quản lý tạo sẵn **một lệnh riêng cho
-từng khách sạn** trong Sheet. Người ở khách sạn chỉ dán lệnh đó và bấm **bốn bước** trong Chrome;
+từng khách sạn** trong Sheet. Người ở khách sạn chỉ dán lệnh đó rồi làm theo **sáu bước** lệnh in ra;
 extension tự điền Cài đặt và tự thử Sheet. Muốn cập nhật thì chạy lệnh cài thường (không cần mã).
 
 **Từ bản 1.2.0** (`H-1527` a) Sheet thu review, tên khách sạn và mã chỗ nghỉ đặt trên Hub (màn Kết nối ›
@@ -51,7 +51,8 @@ irm https://raw.githubusercontent.com/taiituan13/UrbanB-Thu-review-OTA/main/wind
 
 Lệnh này tải extension vào `C:\UrbanB\extension`, ghi mã cài đặt (nếu lệnh có) vào
 `C:\UrbanB\extension\ma-cai-dat.txt`, in tên khách sạn trong mã, chép sẵn đường dẫn thư mục, rồi
-in ra bốn bước tiếp theo.
+in ra sáu bước tiếp theo: bốn bước nạp vào Chrome, ghim biểu tượng, rồi đăng nhập Hub (bước 2 và 3
+dưới đây).
 
 **Bước 2: nạp vào Chrome.**
 
@@ -60,9 +61,9 @@ in ra bốn bước tiếp theo.
    luôn extension.
 3. Bấm **Tải tiện ích đã giải nén**. Trong hộp chọn thư mục, dán đường dẫn `C:\UrbanB\extension`
    vào ô địa chỉ rồi bấm **Chọn thư mục**.
-4. Bấm biểu tượng mảnh ghép cạnh thanh địa chỉ, ghim **Thu review OTA**.
+4. Bấm biểu tượng mảnh ghép cạnh thanh địa chỉ, ghim **Urban B**.
 
-**Bước 3: kiểm cài đặt.** Bấm biểu tượng UrbanB, bấm **Đăng nhập Hub** và đăng nhập bằng tài khoản
+**Bước 3: kiểm cài đặt.** Bấm biểu tượng Urban B, bấm **Đăng nhập Hub** và đăng nhập bằng tài khoản
 lễ tân của cơ sở (hoặc mở màn **Cài extension** trên Hub). Tài khoản nhiều cơ sở thì chọn cơ sở của
 máy. Khối **Cài đặt**, mục **Thu review OTA**, cho biết Sheet, tên khách sạn, kênh và mã chỗ nghỉ lấy
 từ Hub hay từ cấu hình cũ. Bấm **Thử Sheet**: dòng chữ hiện "Sheet trả lời: …" là xong.
@@ -75,7 +76,7 @@ từ Hub hay từ cấu hình cũ. Bấm **Thử Sheet**: dòng chữ hiện "Sh
   quyền "Bất kỳ ai".
 
 Đủ cấu hình thì từ lần mở sau khối Cài đặt gập lại. Phần trên cùng chỉ hiện các kênh đang bật, nút **Quét
-ngay**, và mã lỗi kèm nút **Sao chép** khi có kênh hỏng.
+review ngay**, và mã lỗi kèm nút **Sao chép** khi có kênh hỏng.
 
 **Bước 4: quét lần đầu.** Đăng nhập sẵn các extranet trong **cùng Chrome đó**, rồi bấm
 **Quét review ngay**. Kênh nào báo cam thì đăng nhập lại kênh đó.
@@ -94,7 +95,7 @@ cũ hơn 0.8.1 thì không có dải này: chạy lệnh tay một lần.
 Chạy lại đúng lệnh ở bước 1 trên máy cần cập nhật. Lệnh chép bản mới nhất đè lên
 `C:\UrbanB\extension`; không phải làm lại bước 2 và 3. Extension tự kiểm thư mục mỗi 30 phút,
 thấy bản trên đĩa mới hơn thì tự nạp lại (trừ khi đang quét dở), giữ nguyên cài đặt và mã máy.
-Muốn chạy bản mới ngay: mở lại ô bật lên của Thu review OTA (từ 0.8.1, ô tự đóng một
+Muốn chạy bản mới ngay: mở lại ô bật lên của Urban B (từ 0.8.1, ô tự đóng một
 nhịp rồi bản mới chạy), hoặc vào `chrome://extensions` và bấm nút nạp lại.
 
 Cột *Phiên bản* của tab `Máy cài` cho biết máy nào đã lên bản mới.

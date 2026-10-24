@@ -92,7 +92,7 @@ Hub. Từ bản 1.2.0 máy dùng Hub của trang Cài extension mở gần nhấ
 
 | Loại | Nghĩa | Khách sạn tự làm | Người quản lý kiểm |
 |---|---|---|---|
-| `HUB-LOGIN` | Chưa đăng nhập Hub, hoặc phiên Hub đã hết (401 `NOT_SIGNED_IN`) | Bấm Đăng nhập Hub trong ô UrbanB, đăng nhập rồi bấm Quét review ngay | — |
+| `HUB-LOGIN` | Chưa đăng nhập Hub, hoặc phiên Hub đã hết (401 `NOT_SIGNED_IN`) | Bấm Đăng nhập Hub trong ô Urban B, đăng nhập rồi bấm Quét review ngay | — |
 | `HUB-SCOPE` | Tài khoản đang đăng nhập không có quyền thêm review ở cơ sở nào (403), hoặc Hub trả nhóm `rejected`: mã khách sạn của kênh đã ghép vào cơ sở mà tài khoản không được gán | Đăng nhập đúng tài khoản lễ tân của cơ sở | Cột *Chi tiết* có kênh và mã khách sạn bị từ chối. Mã ghép sai cơ sở ⇒ đổi ghép trên Hub; người dùng thiếu quyền ⇒ gán cơ sở ở màn Phân quyền |
 | `HUB-ORIGIN` | Hub chặn vì không nhận ra nguồn gửi (403 `FORBIDDEN_ORIGIN`) | Chạy lệnh cập nhật extension | Extension gửi từ service worker nên mang `Origin: chrome-extension://…`; lỗi này nghĩa là luật chặn gọi chéo nguồn của Hub đã đổi |
 | `HUB-OFF` | Hub chưa mở cửa nhận review (404 không phải JSON) | Gửi mã lỗi | Hub đang chạy bản chưa có route `/api/ingest/reviews` |

@@ -75,7 +75,7 @@ phần ghi Sheet; ô bật lên báo "Chưa ghi Sheet. Review vẫn gửi lên H
 1. Chép thư mục `extension/` sang máy.
 2. Mở `chrome://extensions`, bật **Chế độ dành cho nhà phát triển**, bấm
    **Tải tiện ích đã giải nén** rồi chọn thư mục `extension/`.
-3. Ghim biểu tượng UrbanB, bấm vào, bấm **Đăng nhập Hub** và đăng nhập bằng tài khoản lễ tân
+3. Ghim biểu tượng Urban B, bấm vào, bấm **Đăng nhập Hub** và đăng nhập bằng tài khoản lễ tân
    (hoặc mở màn **Cài extension** trên Hub). Khối Cài đặt, mục **Thu review OTA**, cho biết máy đã nhận gì.
 4. Bấm **Thử Sheet**. Đúng thì hiện tên Sheet; máy đã đăng nhập Hub thì dòng đó có thêm
    "Hub: ổn".
@@ -83,6 +83,13 @@ phần ghi Sheet; ô bật lên báo "Chưa ghi Sheet. Review vẫn gửi lên H
    tab, rồi gửi lên Sheet. Mỗi kênh mất khoảng nửa phút đến vài phút.
 
 Sau đó extension tự quét theo số giờ đã đặt (mặc định 6 giờ), miễn là Chrome đang mở.
+
+Máy mới cài hiện trên Hub sau lượt quét đầu: extension tự quét lần đầu khoảng 5 phút sau khi nạp.
+Muốn máy hiện sớm hơn thì bấm **Quét review ngay** trong ô bật lên.
+
+**Lên bản mới.** Máy đã cài **không** tự lên bản khi repo có bản mới: ô bật lên chỉ hiện dải vàng
+"Có bản mới …" kèm nút **Chép lệnh cập nhật**. Lễ tân (hoặc người quản lý vào máy từ xa) phải chạy
+lại lệnh cài, xem [cai-tu-xa.md](cai-tu-xa.md) mục Cập nhật.
 
 ## 3. Đọc trạng thái
 
@@ -175,7 +182,7 @@ thứ hai.
 hay Token Hub (quyết định `H-1233` a). Bài đứng tên người đang đăng nhập, Hub kiểm quyền
 *thêm review* theo cơ sở người ấy được gán.
 
-**Bật cho một máy:** bấm biểu tượng UrbanB, bấm **Đăng nhập Hub** và đăng nhập bằng tài khoản
+**Bật cho một máy:** bấm biểu tượng Urban B, bấm **Đăng nhập Hub** và đăng nhập bằng tài khoản
 lễ tân. Từ bản 1.2.0 máy dùng Hub nào là theo trang **Cài extension** (`/extension`) mở gần nhất
 trên `hub.urbanb.vn` hay `urbanb.xyz` (để thử); ô bật lên chỉ hiện "Hub đang dùng", không còn ô chọn. Bấm **Thử Sheet**: dòng kết quả có "Hub: ổn" là đường lên Hub thông (lệnh
 thử không ghi gì lên Hub). Chưa đăng nhập hay hết phiên thì Sheet vẫn nhận, ô bật lên báo
@@ -187,7 +194,8 @@ một cấu hình cho cả chuỗi:
 
 - **Kênh quét** và **chu kỳ tự quét**. Máy hỏi Hub trước mỗi lượt quét và mỗi 30 phút. Có cấu
   hình trên Hub thì dưới nút Quét có dòng "tự quét mỗi N giờ (theo cấu hình trên Hub)". Máy không
-  còn ô nhập chu kỳ hay ô Kênh quét.
+  còn ô nhập chu kỳ hay ô Kênh quét. Từ bản 1.5.1, đổi chu kỳ trên Hub không lùi lượt quét đã hẹn:
+  lượt kế tiếp chạy vào giờ sớm hơn giữa giờ đã hẹn và lúc nhận chu kỳ mới cộng chu kỳ mới.
 - **Sheet thu review** và **mã Booking/Agoda/Expedia của từng cơ sở** (`H-1527` a, xem mục 2).
 - **Thời gian tự ẩn thông báo nổi** trên PMS.
 - Hub chưa có cấu hình (hoặc máy chưa đăng nhập Hub lần nào): kênh theo cấu hình cũ của máy (mã
