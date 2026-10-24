@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { counterProblems, problemsSignature, withFault } from "../extension/quay/counter-problems.js";
+import { HUB_GAPS_MAX, counterProblems, dropSentGaps, problemsSignature, trackHubGap, withFault } from "../extension/quay/counter-problems.js";
 
 const AT = "2026-10-24T03:00:00.000Z";
 const codes = (list) => list.map((p) => p.code);
@@ -89,9 +89,79 @@ test("🔴 nguồn sw.js: mọi lượt báo sống mang problems; ba lỗi lúc
   assert.deepEqual(heartbeatBody({ deviceId: "d", version: "1", problems: [] }).problems, []);
   assert.equal("problems" in heartbeatBody({ deviceId: "d", version: "1" }), false);
   const src = readFileSync(new URL("../extension/quay/sw.js", import.meta.url), "utf8");
-  assert.match(src, /problems: await problemsNow\(version\)/);
+  assert.match(src, /const problems = await problemsNow\(version\)/);
+  assert.match(src, /^    problems,$/m);
   for (const kind of ["board", "lock", "indicators"]) {
     assert.match(src, new RegExp(`noteFault\\("${kind}", null\\)|noteFault\\("${kind}", outcome\\.ok \\? null`));
     assert.match(src, new RegExp(`noteFault\\("${kind}", \\{ at: now\\(\\)`));
+  }
+});
+
+// ── YC-193 H-a b — lần mất kết nối Hub ───────────────────────────────────────────────────────────
+
+const T0 = Date.parse("2026-10-24T01:00:00.000Z");
+const T1 = Date.parse("2026-10-24T01:30:00.000Z");
+const T2 = Date.parse("2026-10-24T02:00:00.000Z");
+const isoOf = (t) => new Date(t).toISOString();
+
+test("🔴 trackHubGap: hết phiên mở một lần; Hub trả lời lại ⇒ đóng, xếp hàng, báo `closed`", () => {
+  const opened = trackHubGap(null, [], "expired", T0);
+  assert.deepEqual(opened, { open: { code: "HUB_SESSION_EXPIRED", from: isoOf(T0) }, queue: [], closed: false });
+  const still = trackHubGap(opened.open, opened.queue, "expired", T1);
+  assert.deepEqual(still.open, opened.open, "cùng kiểu mất kết nối thì giữ lúc bắt đầu cũ");
+  const back = trackHubGap(still.open, still.queue, "ok", T2);
+  assert.deepEqual(back, {
+    open: null,
+    queue: [{ code: "HUB_SESSION_EXPIRED", from: isoOf(T0), to: isoOf(T2) }],
+    closed: true,
+  });
+  assert.deepEqual(trackHubGap(null, [], "ok", T2), { open: null, queue: [], closed: false });
+  assert.equal(trackHubGap(null, [], "nobranch", T2).closed, false);
+});
+
+test("🔴 trackHubGap: đổi kiểu mất kết nối ⇒ đóng lần cũ, mở lần mới; trạng thái lạ không đổi gì", () => {
+  const net = trackHubGap(null, [], "net", T0);
+  assert.equal(net.open.code, "HUB_UNREACHABLE");
+  const out = trackHubGap(net.open, net.queue, "out", T1);
+  assert.deepEqual(out.open, { code: "HUB_SIGNED_OUT", from: isoOf(T1) });
+  assert.deepEqual(out.queue, [{ code: "HUB_UNREACHABLE", from: isoOf(T0), to: isoOf(T1) }]);
+  assert.deepEqual(trackHubGap(out.open, out.queue, "missing", T2), { open: out.open, queue: out.queue, closed: false });
+});
+
+test("🔴 trackHubGap: hàng đợi giữ HUB_GAPS_MAX lần mới nhất", () => {
+  let st = { open: null, queue: [] };
+  for (let i = 0; i < HUB_GAPS_MAX + 2; i++) {
+    st = trackHubGap(st.open, st.queue, "net", T0 + i * 60_000);
+    st = trackHubGap(st.open, st.queue, "ok", T0 + i * 60_000 + 1000);
+  }
+  assert.equal(st.queue.length, HUB_GAPS_MAX);
+  assert.equal(st.queue.at(-1).from, isoOf(T0 + (HUB_GAPS_MAX + 1) * 60_000));
+});
+
+test("🔴 dropSentGaps: bỏ đúng các lần Hub đã nhận, giữ lần xếp vào trong lúc gửi", () => {
+  const a = { code: "HUB_UNREACHABLE", from: isoOf(T0), to: isoOf(T1) };
+  const b = { code: "HUB_SIGNED_OUT", from: isoOf(T1), to: isoOf(T2) };
+  assert.deepEqual(dropSentGaps([a, b], [a]), [b]);
+  assert.deepEqual(dropSentGaps([a], []), [a]);
+});
+
+test("🔴 heartbeatBody mang hubGaps khi có; rỗng ⇒ vắng trường (lượt báo kiểu cũ)", async () => {
+  const { heartbeatBody } = await import("../extension/quay/counter-heartbeat.js");
+  const gap = { code: "HUB_UNREACHABLE", from: isoOf(T0), to: isoOf(T1) };
+  assert.deepEqual(heartbeatBody({ deviceId: "d", version: "1.5.0", hubGaps: [gap] }).hubGaps, [gap]);
+  assert.equal("hubGaps" in heartbeatBody({ deviceId: "d", version: "1.5.0" }), false);
+});
+
+test("🔴 nguồn sw.js: phiên đổi ⇒ ghi lần mất kết nối; tập lỗi đổi ⇒ báo Hub; chữ ký ghi trước khi gửi", () => {
+  const src = readFileSync(new URL("../extension/quay/sw.js", import.meta.url), "utf8");
+  assert.match(src, /async function noteSession\(cls\) \{\n  const gapState = [^\n]+\n  const gapClosed = await noteHubGap\(gapState\);/);
+  assert.match(src, /hubGaps,\n  \}\);/);
+  assert.match(src, /P\.dropSentGaps\(/);
+  const sig = src.indexOf("await set(PROBLEMS_SIG_KEY");
+  const send = src.indexOf("const reply = await hubFetch(url, init);");
+  assert.ok(sig > 0 && send > sig, "chữ ký phải ghi trước lượt gửi");
+  for (const fn of ["async function noteFault", "async function patchSnap"]) {
+    const body = src.slice(src.indexOf(fn), src.indexOf("\n}\n", src.indexOf(fn)));
+    assert.match(body, /void maybeReportProblems\(\)/, fn);
   }
 });

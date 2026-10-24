@@ -104,3 +104,43 @@ export function problemsSignature(problems) {
     .sort()
     .join("|");
 }
+
+// ── Lần mất kết nối Hub (YC-193 · H-a b) ──────────────────────────────────────────────────────────
+//
+// Lúc máy hết phiên, chưa đăng nhập hay mất mạng thì lượt báo sống không tới Hub (route đòi phiên). Máy ghi lần
+// mất kết nối đang mở (`quayHubGap`), đóng nó khi Hub trả lời lại, xếp vào hàng đợi (`quayHubGaps`) và gửi bù
+// trong trường `hubGaps` của lượt báo kế tiếp ⇒ Hub hiện "mất phiên từ HH:MM tới HH:MM".
+// Hợp đồng (repo UrbanB, chỉ đọc: counter-problems.rules.ts § parseCounterHubGaps): `[{ code, from, to }]`.
+
+export const HUB_GAP_KEY = "quayHubGap";
+export const HUB_GAPS_KEY = "quayHubGaps";
+/** Trùng `COUNTER_HUB_GAPS_MAX` phía Hub: Hub chỉ giữ chừng này lần, gửi thêm cũng bỏ. */
+export const HUB_GAPS_MAX = 10;
+
+/**
+ * Cập nhật lần mất kết nối theo trạng thái lượt gọi Hub vừa xong. `state`: `ok`/`nobranch` (Hub trả lời) hoặc
+ * `out`/`expired`/`net`/`server`/`forbidden`. Trạng thái khác (vd. `missing`) ⇒ không đổi gì.
+ * Trả `{ open, queue, closed }`: `closed` = vừa đóng một lần (nên báo Hub ngay). Không sửa bản vào.
+ */
+export function trackHubGap(open, queue, state, at) {
+  const q = Array.isArray(queue) ? queue.filter((g) => g && g.code && g.from && g.to) : [];
+  const cur = open && open.code && iso(open.from) ? { code: open.code, from: iso(open.from) } : null;
+  const when = iso(at);
+  if (!when) return { open: cur, queue: q, closed: false };
+  const close = (g) => [...q, { code: g.code, from: g.from, to: when }].slice(-HUB_GAPS_MAX);
+  if (state === "ok" || state === "nobranch") {
+    return cur ? { open: null, queue: close(cur), closed: true } : { open: null, queue: q, closed: false };
+  }
+  const code = SESSION_CODE[state];
+  if (!code) return { open: cur, queue: q, closed: false };
+  if (cur?.code === code) return { open: cur, queue: q, closed: false };
+  // Đổi kiểu mất kết nối (vd. mất mạng rồi hết phiên): đóng lần cũ, mở lần mới cùng lúc.
+  return { open: { code, from: when }, queue: cur ? close(cur) : q, closed: false };
+}
+
+/** Bỏ khỏi hàng đợi các lần Hub đã nhận (cùng mã + lúc bắt đầu); lần mới xếp vào trong lúc gửi vẫn giữ. */
+export function dropSentGaps(queue, sent) {
+  const key = (g) => `${g?.code}|${g?.from}`;
+  const done = new Set((Array.isArray(sent) ? sent : []).map(key));
+  return (Array.isArray(queue) ? queue : []).filter((g) => !done.has(key(g)));
+}

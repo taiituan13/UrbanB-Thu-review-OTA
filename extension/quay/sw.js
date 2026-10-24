@@ -44,6 +44,43 @@ const now = () => Date.now();
 /** YC-193 — ghi (hoặc xoá, khi `fault` null) một lỗi SW biết lúc gọi, để lượt báo sống mang lên Hub. */
 async function noteFault(kind, fault) {
   await set(K.faults, P.withFault(await get(K.faults), kind, fault));
+  void maybeReportProblems();
+}
+
+/**
+ * YC-193 H-a b — ghi lần mất kết nối Hub theo lượt gọi vừa xong (counter-problems.js trackHubGap). Chỉ ghi khi
+ * có đổi. Trả `true` khi vừa đóng một lần (Hub trả lời lại) ⇒ nên báo Hub ngay để gửi bù.
+ */
+async function noteHubGap(state) {
+  const got = await chrome.storage.local.get([P.HUB_GAP_KEY, P.HUB_GAPS_KEY]);
+  const open = got[P.HUB_GAP_KEY] ?? null;
+  const queue = got[P.HUB_GAPS_KEY] ?? [];
+  const next = P.trackHubGap(open, queue, state, now());
+  if (JSON.stringify([next.open, next.queue]) !== JSON.stringify([open, queue])) {
+    await chrome.storage.local.set({ [P.HUB_GAP_KEY]: next.open, [P.HUB_GAPS_KEY]: next.queue });
+  }
+  return next.closed;
+}
+
+const PROBLEMS_SIG_KEY = "quayProblemsSig";
+let reportingProblems = false;
+
+/**
+ * YC-193 H-b b — tập lỗi đang hiện khác lần báo gần nhất ⇒ báo Hub thêm một lượt, không chờ lượt quét. Đang mất
+ * kết nối Hub thì thôi (gửi cũng hỏng); lúc có lại phiên, `force` gửi bù ngay. Một lượt một lúc. Không ném.
+ */
+async function maybeReportProblems({ force = false } = {}) {
+  if (reportingProblems) return;
+  reportingProblems = true;
+  try {
+    if (!force && (await get(P.HUB_GAP_KEY))) return;
+    const sig = P.problemsSignature(await problemsNow(chrome.runtime.getManifest().version));
+    if (force || sig !== (await get(PROBLEMS_SIG_KEY))) await sendHeartbeat();
+  } catch {
+    // Lượt báo hỏng thì lượt quét kế tiếp vẫn mang ảnh lỗi.
+  } finally {
+    reportingProblems = false;
+  }
 }
 
 /** Giữ service worker sống trong lượt gọi dài (Chrome dừng worker sau ~30 giây không có sự kiện). */
@@ -81,6 +118,9 @@ export async function hubFetch(url, init = {}) {
 
 /** Ghi trạng thái phiên Hub của lượt gọi vừa xong. */
 async function noteSession(cls) {
+  const gapState = cls.state === "out" ? H.sessionState("out", Boolean(await get(K.ever))) : cls.state;
+  const gapClosed = await noteHubGap(gapState);
+  if (gapClosed) void maybeReportProblems({ force: true });
   if (cls.state === "ok" || cls.state === "nobranch") {
     await chrome.storage.local.set({ [K.ever]: true, [K.last]: "ok" });
   } else if (cls.state === "out") {
@@ -107,6 +147,7 @@ async function patchSnap(patch) {
   const snap = (await get(K.snap)) ?? {};
   const next = { ...snap, ...patch, updatedAt: now() };
   await set(K.snap, next);
+  void maybeReportProblems();
   return next;
 }
 
@@ -604,6 +645,10 @@ export async function sendHeartbeat({ scan = false, tokenPush = null, g2jLock = 
     failures = C.mergeFailures(failures, C.failuresOf(model));
   }
   const version = chrome.runtime.getManifest().version;
+  const problems = await problemsNow(version);
+  const hubGaps = (await get(P.HUB_GAPS_KEY)) ?? [];
+  // Ghi chữ ký TRƯỚC khi gửi: lượt hỏng (401) không làm maybeReportProblems gửi lại mãi cùng một ảnh.
+  await set(PROBLEMS_SIG_KEY, P.problemsSignature(problems));
   const body = C.heartbeatBody({
     deviceId: await getDeviceId(),
     version,
@@ -612,13 +657,17 @@ export async function sendHeartbeat({ scan = false, tokenPush = null, g2jLock = 
     failures,
     tokenPush,
     g2jLock,
-    problems: await problemsNow(version),
+    problems,
+    hubGaps,
   });
   const { url, init } = C.heartbeatRequest(await hubOriginNow(), body);
   const reply = await hubFetch(url, init);
   const ok = reply.status === 200 && reply.json?.ok === true;
   if (reply.status === 401) await noteSession({ state: "out" });
   await set(C.HEARTBEAT_QUEUE_KEY, ok ? [] : failures);
+  if (ok && hubGaps.length) await set(P.HUB_GAPS_KEY, P.dropSentGaps((await get(P.HUB_GAPS_KEY)) ?? [], hubGaps));
+  // Hub vừa nhận lượt báo ⇒ phiên có lại: đóng lần mất kết nối đang mở và gửi bù ngay.
+  if (ok && (await noteHubGap("ok"))) void maybeReportProblems({ force: true });
   return { ok };
 }
 
