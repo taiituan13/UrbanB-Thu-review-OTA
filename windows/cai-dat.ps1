@@ -22,6 +22,12 @@
 # Không dùng "exit": chạy qua iex thì exit đóng luôn cửa sổ PowerShell của người cài.
 
 $ErrorActionPreference = "Stop"
+# PowerShell 5.1 in ra cửa sổ theo bảng mã cũ của Windows: chữ có dấu thành ký tự rác. Đặt UTF-8
+# trước dòng chữ đầu tiên. Cửa sổ không cho đổi (chạy ẩn, chuyển hướng) thì bỏ qua, vẫn cài tiếp.
+# UTF-8 không BOM: [Text.Encoding]::UTF8 có BOM, chèn ký tự lạ vào chữ đưa sang lệnh ngoài.
+$Utf8 = New-Object System.Text.UTF8Encoding $false
+try { [Console]::OutputEncoding = $Utf8 } catch {}
+$OutputEncoding = $Utf8
 $ProgressPreference = "SilentlyContinue" # thanh tiến độ làm Invoke-WebRequest chậm hàng chục lần
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
@@ -29,6 +35,9 @@ $Repo = "taiituan13/UrbanB-Thu-review-OTA"
 $Root = "C:\UrbanB"
 $ExtDir = Join-Path $Root "extension"
 $Log = Join-Path $Root "cai-dat.log"
+# Thư mục tạm riêng dưới $Root, không dùng $env:TEMP: tên người dùng có dấu làm TEMP thành tên ngắn
+# 8.3 (C:\Users\ANHRUA~1\…) và Expand-Archive báo "An object at the specified path … does not exist".
+$TmpRoot = Join-Path $Root "tmp"
 $SetupFile = Join-Path $ExtDir "ma-cai-dat.txt"
 $OldTask = "UrbanB - cap nhat Thu review OTA"
 
@@ -44,8 +53,12 @@ function Get-LocalVersion {
 }
 
 function Install-Latest {
-  $tmp = Join-Path $env:TEMP ("urbanb-" + [guid]::NewGuid().ToString("N"))
-  New-Item -ItemType Directory -Path $tmp | Out-Null
+  # Dọn thư mục tạm lượt trước bỏ lại (cửa sổ bị đóng giữa chừng). Chỉ lệnh này dùng $TmpRoot.
+  if (Test-Path $TmpRoot) {
+    Get-ChildItem -Path $TmpRoot -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  $tmp = Join-Path $TmpRoot ([guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $tmp -Force | Out-Null
   try {
     $zip = Join-Path $tmp "main.zip"
     Invoke-WebRequest -Uri "https://github.com/$Repo/archive/refs/heads/main.zip" -OutFile $zip -UseBasicParsing
@@ -63,7 +76,11 @@ function Install-Latest {
     if ($LASTEXITCODE -ge 8) { throw "Chép tệp hỏng (robocopy mã $LASTEXITCODE)." }
     Copy-Item -Path (Join-Path $src "manifest.json") -Destination $ExtDir -Force
   } finally {
+    # Dọn cả khi lỗi. Còn sót gì thì lượt cài sau dọn ở đầu hàm này.
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+    if (-not (Get-ChildItem -Path $TmpRoot -Force -ErrorAction SilentlyContinue)) {
+      Remove-Item -Force $TmpRoot -ErrorAction SilentlyContinue
+    }
   }
 }
 

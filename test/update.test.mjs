@@ -27,6 +27,29 @@ test("cai-dat.ps1 trong repo không có BOM và không gọi exit", () => {
   assert.equal(code.filter((l) => /\bexit\b/i.test(l)).length, 0, "exit qua iex đóng cửa sổ của người cài");
 });
 
+test("cai-dat.ps1 giải nén vào thư mục tạm dưới C:\\UrbanB, không qua TEMP, dọn cả khi lỗi (YC-223)", () => {
+  const ps1 = readFileSync(new URL("../windows/cai-dat.ps1", import.meta.url), "utf8");
+  const code = ps1.split("\n").filter((l) => !l.trimStart().startsWith("#")).join("\n");
+  // TEMP của người dùng tên có dấu là tên ngắn 8.3 (C:\Users\ANHRUA~1) ⇒ Expand-Archive chết.
+  assert.doesNotMatch(code, /\$env:(TEMP|TMP)\b|GetTempPath/i, "không được dùng thư mục tạm của Windows");
+  assert.match(code, /\$TmpRoot = Join-Path \$Root "tmp"/);
+  assert.match(code, /\$tmp = Join-Path \$TmpRoot /);
+  assert.match(code, /Expand-Archive -Path \$zip -DestinationPath \$tmp /);
+  const fin = code.slice(code.indexOf("} finally {"));
+  assert.match(fin.slice(0, fin.indexOf("\n}\n")), /Remove-Item -Recurse -Force \$tmp /, "dọn thư mục tạm trong finally");
+});
+
+test("cai-dat.ps1 bật UTF-8 cho cửa sổ trước dòng chữ đầu tiên (YC-223)", () => {
+  const ps1 = readFileSync(new URL("../windows/cai-dat.ps1", import.meta.url), "utf8");
+  const code = ps1.split("\n").filter((l) => !l.trimStart().startsWith("#")).join("\n");
+  const utf8 = code.search(/\[Console\]::OutputEncoding = \$Utf8/);
+  assert.ok(utf8 > 0, "đặt [Console]::OutputEncoding");
+  assert.match(code, /\$Utf8 = New-Object System\.Text\.UTF8Encoding \$false/);
+  assert.match(code, /^\$OutputEncoding = \$Utf8$/m);
+  const firstOutput = code.search(/Write-Host|Write-Log /);
+  assert.ok(utf8 < firstOutput, "UTF-8 phải đặt trước khi in chữ có dấu");
+});
+
 test("Lệnh cập nhật trong ô bật lên trùng nguyên văn lệnh trong cai-dat.ps1 và tài liệu cài", () => {
   const ps1 = readFileSync(new URL("../windows/cai-dat.ps1", import.meta.url), "utf8");
   const doc = readFileSync(new URL("../docs/cai-tu-xa.md", import.meta.url), "utf8");
