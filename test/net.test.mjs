@@ -27,7 +27,7 @@ test("🔴 mỗi fetch trong bộ quét kênh có hạn giờ riêng", () => {
   assert.equal(s.match(/signal: AbortSignal\.timeout\(/g)?.length ?? 0, calls);
 });
 
-test("🔴 lượt gọi ra ngoài của service worker có hạn giờ: Sheet, GitHub, Hub, lượt chạy trong trang", () => {
+test("🔴 lượt gọi ra ngoài của service worker có hạn giờ: GitHub, Hub, lượt chạy trong trang", () => {
   const bg = src("background.js");
   for (const line of bg.split("\n").filter((l) => /[^.\w]fetch\(/.test(l) && !/getURL\(/.test(l))) {
     assert.match(line, /signal: AbortSignal\.timeout\(/, line.trim());
