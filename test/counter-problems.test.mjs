@@ -48,13 +48,11 @@ test("🔴 token bị từ chối, Go2Joy chờ chọn chi nhánh, thông báo k
   assert.deepEqual(counterProblems({ snap: { notifications: { state: "unavailable" } } }), []);
 });
 
-test("🔴 quét review: chưa cấu hình, lượt quét vỡ, lỗi gửi Sheet; lỗi giai đoạn khác thì không", () => {
+test("🔴 quét review: chưa cấu hình, lượt quét vỡ; lỗi gần nhất (kể cả dấu gửi Sheet của bản cũ) thì không", () => {
   const r = counterProblems({ reviewMissing: true, scanCrash: { at: AT, code: "SHEET-REJECT" }, lastError: { stage: "gửi Sheet", code: "SHEET-NET", at: AT } });
-  assert.deepEqual(r, [
-    { code: "REVIEW_NOT_CONFIGURED" },
-    { code: "REVIEW_SCAN_CRASH", since: AT },
-    { code: "REVIEW_SHEET_FAILED", detail: "SHEET-NET", since: AT },
-  ]);
+  assert.deepEqual(r, [{ code: "REVIEW_NOT_CONFIGURED" }, { code: "REVIEW_SCAN_CRASH", since: AT }]);
+  // YC-228: 1.5.2 không ghi Sheet ⇒ máy còn mang dấu lỗi Sheet của 1.5.1 cũng không báo REVIEW_SHEET_FAILED.
+  assert.deepEqual(counterProblems({ lastError: { stage: "gửi Sheet", code: "SHEET-URL", at: AT } }), []);
   assert.deepEqual(counterProblems({ lastError: { stage: "quét", code: "BKG-HTTP" } }), []);
 });
 

@@ -5,6 +5,34 @@ quản lý thấy gì khác. Máy đã cài không tự lên bản: khi có bả
 "Có bản mới …" và phải có người chạy lại lệnh cài (xem [docs/cai-tu-xa.md](docs/cai-tu-xa.md) mục
 Cập nhật).
 
+## 1.5.2
+
+**Review chỉ lên Hub, không ghi Google Sheet review nữa** (YC-228). Tới 1.5.1, Sheet hỏng (sai URL,
+sai mã bí mật, Google trả trang lỗi) làm kênh quét được vẫn báo đỏ, huy hiệu hiện "!" mãi và Hub đếm
+lỗi `REVIEW_SHEET_FAILED`, dù review đã lên Hub đủ.
+
+- Máy không gửi gì lên Sheet review: không review, điểm tổng hợp, lượt quét, nhật ký lỗi hay tình trạng
+  máy. Kênh quét được là xanh; kênh chỉ đỏ hay cam vì chính lượt quét, dòng Hub dưới kênh báo việc gửi Hub.
+- Lên bản, máy tự xoá URL Sheet, mã bí mật, hàng đợi nhật ký lỗi chờ gửi Sheet và dấu lỗi gửi Sheet
+  khỏi bộ nhớ. Huy hiệu hết "!" vì Sheet; Hub không còn nhận `REVIEW_SHEET_FAILED` từ máy này.
+- Sheet thu review mà Hub còn gửi (khối Sheet review, giữ cho máy bản cũ) bị bỏ qua. Tên khách sạn và
+  mã chỗ nghỉ theo chi nhánh trên Hub, kể cả máy còn Sheet cũ.
+- Nút **Thử Sheet** đổi thành **Thử Hub**. Khung "Lỗi gửi Sheet" và các dòng "Chưa ghi Sheet" bỏ.
+- Mã cài đặt `URB1.` cũ (có URL Web App và mã bí mật) vẫn áp được; phần Sheet bỏ qua.
+- Máy chưa đăng nhập Hub lần nào thì chưa quét (tới 1.5.1 máy có Sheet cũ vẫn quét và chỉ ghi Sheet).
+- Lượt báo Hub (`ext:status`): `review.fromHub` nay nghĩa là tên khách sạn lấy từ Hub (tới 1.5.1:
+  Sheet lấy từ Hub).
+- `apps-script/Code.gs` giữ nguyên, không còn dùng cho review của bản này. Sheet cũ giữ dữ liệu cũ,
+  vẫn nhận từ máy chưa lên bản, và menu Tạo lệnh cài vẫn dùng được.
+
+**Lệnh cài Windows** (YC-223), có hiệu lực ngay cả với máy đang chạy bản cũ vì lệnh tải từ `main`:
+
+- Giải nén vào thư mục tạm dưới `C:\UrbanB\tmp`, không qua `TEMP` của Windows (PowerShell 5.1 hỏng
+  với đường dẫn ngắn kiểu `ANHRUA~1` khi tên người dùng có dấu). Thư mục tạm được dọn cả khi lỗi.
+- Bật UTF-8 cho cửa sổ PowerShell trước dòng chữ đầu tiên, để chữ tiếng Việt không vỡ.
+
+Mọi máy phải chạy lại lệnh cài để lên 1.5.2 (xem [docs/cai-tu-xa.md](docs/cai-tu-xa.md) mục Cập nhật).
+
 ## 1.5.1
 
 Sửa lỗi máy mới cài vắng mặt trên Hub hơn 3 giờ (YC-213). Máy vừa cài hẹn lượt quét đầu sau

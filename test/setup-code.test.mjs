@@ -36,6 +36,27 @@ test("🔴 Mã v1 do Sheet cũ tạo còn mang hubUrl/hubToken: vẫn đọc đ�
   assert.ok(!JSON.stringify(next).includes("tok-cu"), "token cũ còn nằm trong cấu hình");
 });
 
+test("🔴 YC-228 — mã URB1 v1 cũ mang URL Sheet + mã bí mật: vẫn áp được, phần Sheet bỏ qua", () => {
+  const setup = decodeSetupCode(encodeSetupCode({ ...base, bookingHotelId: "111" }));
+  assert.equal(setup.hotel, base.hotel);
+  assert.equal(setup.bookingHotelId, "111");
+  assert.ok(!("sheetUrl" in setup) && !("secret" in setup));
+  const old = { ...DEFAULT_CONFIG, sheetUrl: "https://script.google.com/macros/s/Cu/exec", secret: "bi-mat-cu" };
+  const next = applySetup(old, setup);
+  assert.ok(!("sheetUrl" in next) && !("secret" in next), "Sheet cũ còn nằm trong cấu hình");
+  assert.ok(!JSON.stringify(next).includes(SHEET) && !JSON.stringify(next).includes("s3cr3t"));
+  assert.deepEqual(next.enabled, { booking: true, agoda: false, trip: false, expedia: false, traveloka: false, go2joy: true });
+  // Mã thiếu hẳn phần Sheet (hoặc Sheet sai dạng) cũng nhận, không báo lỗi.
+  assert.equal(decodeSetupCode(encodeSetupCode({ hotel: "UB1", channels: ["trip"] })).hotel, "UB1");
+  assert.equal(decodeSetupCode(encodeSetupCode({ ...base, sheetUrl: "https://example.com/exec", secret: "" })).hotel, base.hotel);
+});
+
+test("Cấu hình bản 1.5.1 còn sheetUrl/secret trong bộ nhớ ⇒ đọc ra là bỏ", () => {
+  const cfg = withDefaults({ hotel: "UB1", sheetUrl: SHEET, secret: "s3cr3t" });
+  assert.ok(!("sheetUrl" in cfg) && !("secret" in cfg));
+  assert.ok(!("sheetUrl" in DEFAULT_CONFIG) && !("secret" in DEFAULT_CONFIG));
+});
+
 test("Cấu hình bản 1.0.0 còn hubUrl/hubToken trong bộ nhớ ⇒ đọc ra là bỏ", () => {
   const cfg = withDefaults({ hotel: "UB1", hubUrl: "https://hub.urbanb.vn", hubToken: "tok-cu", enabled: { go2joy: true } });
   assert.equal(cfg.hotel, "UB1");
@@ -54,8 +75,6 @@ test("Mã sai báo câu dễ hiểu", () => {
   assert.throws(() => decodeSetupCode("abc"), /bắt đầu bằng URB1\./);
   assert.throws(() => decodeSetupCode(encodeSetupCode(base).slice(0, 30)), /bị cắt hoặc chép sai/);
   assert.throws(() => decodeSetupCode(encodeSetupCode({ ...base, hotel: " " })), /thiếu tên khách sạn/);
-  assert.throws(() => decodeSetupCode(encodeSetupCode({ ...base, sheetUrl: "https://example.com/exec" })), /URL Sheet/);
-  assert.throws(() => decodeSetupCode(encodeSetupCode({ ...base, secret: "" })), /mã bí mật/);
   assert.throws(() => decodeSetupCode(encodeSetupCode({ ...base, channels: ["facebook"] })), /chưa chọn kênh/);
   assert.throws(() => decodeSetupCode("URB1." + Buffer.from('{"v":2}').toString("base64url")), /bản extension khác/);
 });
@@ -69,13 +88,13 @@ test("Áp mã: mọi ô theo mã, kênh ngoài mã tắt, chu kỳ quét giữ n
   assert.deepEqual(next.enabled, { booking: true, agoda: false, trip: false, expedia: false, traveloka: false, go2joy: true });
 });
 
-test("Sheet tạo mã mà extension đọc được", () => {
+test("Sheet tạo mã mà extension đọc được (phần Sheet bỏ qua từ 1.5.2)", () => {
   const payload = gs.setupPayload({ ...base, hotel: "  Mường Thanh  ", channels: ["agoda", "lạ"] }, "s3cr3t");
   const code = gs.encodeSetupCode(payload);
   assert.doesNotMatch(code, /=/, "bỏ dấu = cho lệnh gọn");
   const setup = decodeSetupCode(code);
   assert.equal(setup.hotel, "Mường Thanh");
-  assert.equal(setup.secret, "s3cr3t");
+  assert.ok(!("secret" in setup) && !("sheetUrl" in setup));
   assert.deepEqual(setup.channels, ["agoda"]);
 });
 

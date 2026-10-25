@@ -1,4 +1,4 @@
-import { CHANNELS, CHANNEL_LABEL, VERSION, getDeviceId, loadLastError, loadStatus } from "./config.js";
+import { CHANNELS, CHANNEL_LABEL, VERSION, getDeviceId, loadStatus } from "./config.js";
 import { formatErrorReport } from "./report.js";
 import { UPDATE_COMMAND, updateNotice } from "./update.js";
 import { branchPicker, popupPmsRow } from "./quay/hub-quay.js";
@@ -17,7 +17,7 @@ function note(text, where = "note") {
 }
 
 /**
- * Dòng "Tự quét mỗi N giờ" và khối "Thu review OTA" trong Cài đặt: Sheet, tên khách sạn, kênh, mã chỗ nghỉ
+ * Dòng "Tự quét mỗi N giờ" và khối "Thu review OTA" trong Cài đặt: tên khách sạn, kênh, mã chỗ nghỉ
  * và nguồn của từng thứ (H-1527 a: theo Hub; Hub chưa có thì cấu hình cũ của máy). Chỉ để xem.
  */
 async function renderCollect() {
@@ -218,7 +218,6 @@ async function renderStatus() {
   const [cfg, status] = await Promise.all([loadEffectiveConfig(), loadStatus()]);
   const box = $("status");
   box.textContent = "";
-  const shown = new Set();
   const enabled = CHANNELS.filter((ch) => cfg.enabled[ch]);
   if (!enabled.length) {
     const empty = document.createElement("div");
@@ -231,16 +230,13 @@ async function renderStatus() {
     const div = document.createElement("div");
     div.className = "ch " + (s?.state ?? "");
     const when = s?.at ? shortTime(s.at) : "chưa quét";
-    const detail = s ? `${STATE_TEXT[s.state] ?? s.state}, ${s.count} bài. ${s.message}` : "";
+    const detail = s ? `${STATE_TEXT[s.state] ?? s.state}, ${s.count} bài.${s.message ? " " + s.message : ""}` : "";
     div.innerHTML = `<span class="dot"></span><div class="body"><div class="line"><span class="name"></span><span class="when"></span></div><div class="detail"></div></div>`;
     div.querySelector(".name").textContent = CHANNEL_LABEL[ch];
     div.querySelector(".when").textContent = when;
     div.querySelector(".detail").textContent = detail;
     if (s?.state === "login") div.querySelector(".body").appendChild(loginActions(ch));
-    if (s?.error?.ref) {
-      div.querySelector(".body").appendChild(errorBox(s.error));
-      shown.add(s.error.ref);
-    }
+    if (s?.error?.ref) div.querySelector(".body").appendChild(errorBox(s.error));
     // Kết quả gửi Hub (theo phiên đăng nhập) của lượt đó.
     if (s?.hub) {
       const hub = document.createElement("div");
@@ -251,18 +247,6 @@ async function renderStatus() {
       if (s.hub.error?.ref && !s.hub.ok) div.querySelector(".body").appendChild(errorBox(s.hub.error));
     }
     box.appendChild(div);
-  }
-  // Lỗi gửi Sheet không thuộc kênh nào (Thử Sheet, báo sống) chỉ hiện ở đây; gửi được lại thì tự mất.
-  const last = await loadLastError();
-  const lastBox = $("last");
-  lastBox.textContent = "";
-  if (last?.ref && last.stage === "gửi Sheet" && !shown.has(last.ref)) {
-    const h = document.createElement("h2");
-    h.textContent = `Lỗi gửi Sheet lúc ${shortTime(last.at)}`;
-    const msg = document.createElement("div");
-    msg.className = "detail";
-    msg.textContent = `${CHANNEL_LABEL[last.channel] ?? "Sheet"}, bước ${last.stage}: ${last.message}`;
-    lastBox.append(h, msg, errorBox(last));
   }
 }
 
@@ -291,11 +275,9 @@ async function renderUpdate() {
       : `Máy đang chạy bản mới nhất (${RUNNING}).`;
 }
 
-/** Một dòng kết quả Thử Sheet (kèm Hub nếu máy gửi Hub). */
+/** Một dòng kết quả Thử Hub (background.js pingHub). */
 function pingText(r) {
-  const sheet = r?.ok ? `Sheet trả lời: ${r.sheet ?? "ok"}` : `Lỗi Sheet${r?.ref ? " " + r.ref : ""}: ${r?.error ?? "không rõ"}`;
-  const hub = !r?.hub ? "" : r.hub.ok ? ". Hub: ổn" : `. Lỗi Hub ${r.hub.ref ?? ""}: ${r.hub.error ?? "không rõ"}`;
-  return sheet + hub;
+  return r?.ok ? "Hub: ổn." : `Lỗi Hub${r?.ref ? " " + r.ref : ""}: ${r?.error ?? "không rõ"}`;
 }
 
 /** Kết quả áp mã cài đặt (background.js applySetupText). */
@@ -306,7 +288,7 @@ function setupText(r) {
 
 async function ping() {
   note("Đang thử…", "settingsNote");
-  const r = await chrome.runtime.sendMessage({ type: "pingSheet" });
+  const r = await chrome.runtime.sendMessage({ type: "pingHub" });
   note(pingText(r), "settingsNote");
   await renderStatus();
 }

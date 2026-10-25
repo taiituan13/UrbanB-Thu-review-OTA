@@ -1,4 +1,4 @@
-// Chuẩn hoá review thô của từng kênh thành dòng cho Google Sheet.
+// Chuẩn hoá review thô của từng kênh về một dạng chung để gửi Hub (tới 1.5.1 còn ghi Google Sheet).
 //
 // Hàm thuần: không gọi mạng, không đọc chrome.*. Dùng chung cho extension và test.
 // Dạng trường lấy từ phép đo extranet ngày 07/10/2026 (Secret Garden Bình Thạnh).
@@ -368,15 +368,6 @@ export function guestNameAt(item, path) {
   let v = item;
   for (const k of path.split(".")) v = v && typeof v === "object" ? v[k] : undefined;
   return typeof v === "string" ? v.trim() : "";
-}
-
-/**
- * Bài gửi Google Sheet: bỏ `guestName` (H-1852 a: tên chỉ đi Hub, Sheet giữ nguyên như cũ).
- * Sheet ghi theo danh sách cột nên đằng nào cũng không có cột tên; gỡ ở đây để tên không rời máy
- * theo đường Sheet.
- */
-export function sheetReviews(reviews) {
-  return reviews.map(({ guestName: _name, ...rest }) => rest);
 }
 
 function scoreRow(review, code, name, score, scale) {

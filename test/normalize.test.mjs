@@ -8,7 +8,6 @@ import {
   guestNameAt,
   normalizeBatch,
   parseMsDate,
-  sheetReviews,
   stripPersonal,
 } from "../extension/normalize.js";
 
@@ -352,19 +351,7 @@ test("Tên khách: đọc theo đường chấm; sai kiểu hoặc thiếu nút 
   assert.equal(guestNameAt({ name: "Khách A" }, null), "");
 });
 
-test("Tên khách: bài gửi Sheet không mang guestName, các trường khác giữ nguyên", () => {
-  const r = normalizeBatch("booking", [{ ...booking, yourname: "Khách A" }], ctx).reviews[0];
-  const [sheet] = sheetReviews([r]);
-  assert.ok(!("guestName" in sheet));
-  assert.ok(!JSON.stringify(sheet).includes("Khách A"));
-  const { guestName: _n, ...rest } = r;
-  assert.deepEqual(sheet, rest);
-  assert.equal(r.guestName, "Khách A", "không sửa bài gốc (vẫn gửi Hub)");
-});
-
-test("Tên khách: background.js gửi Sheet qua sheetReviews, gửi Hub bằng bài đủ", () => {
+test("Tên khách: background.js gửi Hub bằng bài đủ (H-1852 a: tên chỉ đi Hub)", () => {
   const bg = readFileSync(new URL("../extension/background.js", import.meta.url), "utf8");
-  assert.match(bg, /reviews: sheetReviews\(batch\.reviews\)/);
-  assert.doesNotMatch(bg, /reviews: batch\.reviews,/, "lượt gửi Sheet không được mang bài chưa gỡ tên");
   assert.match(bg, /sendHub\(channel, batch\.reviews,/);
 });

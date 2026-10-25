@@ -1,10 +1,20 @@
-# Cài đặt: extension thu review → Google Sheet
+# Cài đặt: extension thu review → Hub UrbanB
 
 Mỗi khách sạn cài một bản extension trên máy đang đăng nhập sẵn các extranet
-(Booking, Agoda, Trip, Expedia, Traveloka, Go2Joy). Mọi bản cài cùng ghi vào **một** Google Sheet chung.
+(Booking, Agoda, Trip, Expedia, Traveloka, Go2Joy). Review gửi lên Hub UrbanB theo phiên đăng nhập Hub
+của người dùng máy (mục 6).
 Extension chỉ đọc: nó không trả lời review, không đổi cài đặt nào trên extranet.
 
-## 1. Tạo Google Sheet và điểm nhận (làm một lần, ở máy quản lý)
+**Từ bản 1.5.2 (YC-228) extension không ghi Google Sheet review nữa**: không gửi review, điểm tổng hợp,
+lượt quét, nhật ký lỗi hay tình trạng máy lên Sheet chung. Máy lên bản tự xoá URL Sheet và mã bí mật cũ
+khỏi bộ nhớ. Máy chưa chạy lại lệnh cài vẫn chạy bản cũ và vẫn ghi Sheet tới khi lên bản.
+
+## 1. Google Sheet review cũ (tới bản 1.5.1)
+
+Chuỗi mới không cần tạo Sheet. Sheet đã có thì giữ nguyên, đừng xoá: Sheet giữ review do bản tới 1.5.1
+ghi, máy chưa lên bản vẫn ghi vào, và menu **Review OTA › Tạo lệnh cài cho khách sạn** vẫn tạo lệnh cài
+có mã ([cai-tu-xa.md](cai-tu-xa.md)). `apps-script/Code.gs` giữ nguyên, không còn dùng cho review của
+bản 1.5.2. Các bước dưới đây là cách đã dùng để tạo Sheet, giữ lại để tra.
 
 1. Tạo một Google Sheet mới, ví dụ đặt tên "Review OTA — chuỗi".
 2. Mở **Tiện ích mở rộng › Apps Script**. Xoá nội dung có sẵn, dán toàn bộ
@@ -33,7 +43,8 @@ Không làm bước này thì URL vẫn chạy mã cũ.
    **Phiên bản mới**, bấm **Triển khai**. URL giữ nguyên.
 3. **Không chạy lại `setup`.** Lần ghi đầu tiên của bản mới tự tạo tab còn thiếu và tự
    xếp lại cột. Mã bí mật giữ nguyên, không phải dán lại vào extension.
-4. Trên một máy, bấm **Thử Sheet** để bản mới ghi lần đầu.
+4. Trên một máy còn chạy bản tới 1.5.1, bấm **Thử Sheet** để bản mới ghi lần đầu. Máy 1.5.2 không ghi
+   Sheet nên không thử được.
 
 Vì sao không chạy `setup` khi nâng cấp: `setup` chạy mã mới ngay trong trình soạn, trong
 khi URL `/exec` vẫn phục vụ mã cũ cho tới lúc triển khai Phiên bản mới. Nếu `setup` xếp
@@ -53,34 +64,32 @@ cũng không cần làm gì: dấu đã nhớ hỏng thì lượt ghi kế tiế
 
 Máy Windows: dùng cách ở [cai-tu-xa.md](cai-tu-xa.md). Cách tay dưới đây dùng khi thử trên máy khác.
 
-**Từ bản 1.2.0 máy không còn ô nhập tay** (`H-1527` a): không còn ô Mã cài đặt, tên khách sạn, URL
-Web App, mã bí mật, kênh quét hay mã Booking/Agoda/Expedia trong ô bật lên. Máy tự nhận từ Hub sau
-khi lễ tân đăng nhập Hub (mục 6):
+**Từ bản 1.2.0 máy không còn ô nhập tay** (`H-1527` a): không còn ô Mã cài đặt, tên khách sạn, kênh
+quét hay mã Booking/Agoda/Expedia trong ô bật lên. Máy tự nhận từ Hub sau khi lễ tân đăng nhập Hub
+(mục 6):
 
-- **Sheet thu review** (URL Web App và mã bí mật): Quản trị hệ thống điền một lần cho cả chuỗi ở
-  màn Kết nối › tab Mã kết nối Booking OTA › khối Sheet review trên Hub.
 - **Tên khách sạn** = tên cơ sở đang dùng trên Hub (tài khoản nhiều cơ sở thì chọn cơ sở trong ô
-  bật lên). Tên này ghi vào cột "Khách sạn" và là tên của máy trong tab `Máy cài`.
+  bật lên). Tên này đi kèm từng bài gửi lên Hub.
 - **Mã Booking / Agoda / Expedia** của từng cơ sở: điền trên Hub khi cần. Để trống thì extension
   tự dò. Booking cần mã khi tài khoản thấy nhiều chỗ nghỉ; Expedia cần mã khi tài khoản quản nhiều
   khách sạn (số `htid` trên thanh địa chỉ), và điền sẵn là cách chắc nhất vì có tài khoản bị
   Expedia đá sang hộp thư (`/supply/inbox`) thay vì trang review.
 - **Kênh quét** và chu kỳ: đặt trên Hub (mục 6).
 
-Hub có Sheet thu review thì Hub thắng cấu hình cũ trong máy. Hub chưa có thì máy chạy tiếp bằng
-cấu hình cũ (từ mã cài đặt hay ô nhập của bản trước), và ô bật lên báo "Hub chưa có cấu hình thu
-review". Từ bản 1.4.2 (`H-1903` b), máy không có Sheet nào vẫn quét và gửi review lên Hub, chỉ bỏ
-phần ghi Sheet; ô bật lên báo "Chưa ghi Sheet. Review vẫn gửi lên Hub". Ô bật lên chỉ cho biết từng mục lấy từ đâu, không hiện URL Sheet hay mã bí mật.
+Hub đã biết chi nhánh của máy thì tên và mã chỗ nghỉ theo Hub, thắng cấu hình cũ trong máy (từ 1.5.2
+kể cả khi máy còn Sheet cũ; Sheet thu review mà Hub còn gửi cho bản cũ thì máy bỏ qua). Hub chưa biết
+chi nhánh (tài khoản nhiều cơ sở chưa chọn cơ sở) thì máy chạy tiếp bằng cấu hình cũ (từ mã cài đặt hay
+ô nhập của bản trước). Máy chưa đăng nhập Hub lần nào thì chưa quét, ô bật lên nhắc đăng nhập Hub. Ô bật
+lên chỉ cho biết từng mục lấy từ đâu.
 
 1. Chép thư mục `extension/` sang máy.
 2. Mở `chrome://extensions`, bật **Chế độ dành cho nhà phát triển**, bấm
    **Tải tiện ích đã giải nén** rồi chọn thư mục `extension/`.
 3. Ghim biểu tượng Urban B, bấm vào, bấm **Đăng nhập Hub** và đăng nhập bằng tài khoản lễ tân
    (hoặc mở màn **Cài extension** trên Hub). Khối Cài đặt, mục **Thu review OTA**, cho biết máy đã nhận gì.
-4. Bấm **Thử Sheet**. Đúng thì hiện tên Sheet; máy đã đăng nhập Hub thì dòng đó có thêm
-   "Hub: ổn".
+4. Bấm **Thử Hub** (tới bản 1.5.1 nút này là **Thử Sheet**). Đường lên Hub thông thì hiện "Hub: ổn".
 5. Bấm **Quét review ngay**. Extension mở từng extranet trong một tab nền, đọc review, đóng
-   tab, rồi gửi lên Sheet. Mỗi kênh mất khoảng nửa phút đến vài phút.
+   tab, rồi gửi lên Hub. Mỗi kênh mất khoảng nửa phút đến vài phút.
 
 Sau đó extension tự quét theo số giờ đã đặt (mặc định 6 giờ), miễn là Chrome đang mở.
 
@@ -103,13 +112,14 @@ lại lệnh cài, xem [cai-tu-xa.md](cai-tu-xa.md) mục Cập nhật.
 
 Mỗi lỗi có một **mã lỗi** dạng `E-7K3QX2` trong khung đỏ dưới tên kênh. Nút **Sao chép**
 chép mã kèm tên khách sạn, mã máy, phiên bản và thông điệp lỗi; dán đoạn đó gửi người
-quản lý thay cho ảnh chụp. Người quản lý tìm mã bằng Ctrl+F trong tab `Nhật ký lỗi`.
-Danh mục loại lỗi và cách xử lý: [ma-loi.md](ma-loi.md).
+quản lý thay cho ảnh chụp. Từ bản 1.5.2 lỗi không lên tab `Nhật ký lỗi` của Sheet nữa, nên đoạn
+chép này là chỗ đọc chi tiết lỗi. Danh mục loại lỗi và cách xử lý: [ma-loi.md](ma-loi.md).
 
-Biểu tượng có dấu `!` đỏ khi có ít nhất một kênh không xanh. Dưới cùng ô bật lên là
-**mã máy** (8 ký tự) và phiên bản, để đối chiếu với tab `Máy cài`.
+Biểu tượng có dấu `!` đỏ khi có ít nhất một kênh đang bật không xanh hoặc gửi Hub hỏng. Dưới cùng
+ô bật lên là **mã máy** (8 ký tự) và phiên bản.
 
-Người quản lý không cần tới tận máy:
+Người quản lý không cần tới tận máy: từ bản 1.5.0 mỗi lượt báo Hub mang theo các lỗi máy đang hiện
+(xem [CHANGELOG.md](../CHANGELOG.md)). Các tab dưới đây của Sheet chỉ còn nhận từ máy chạy bản tới 1.5.1:
 
 - **Máy cài**: mỗi tên khách sạn một dòng — trạng thái từng kênh, lần cuối liên lạc,
   lỗi gần nhất, phiên bản, kênh đang bật. Cột **Mất liên lạc** tự hiện khi máy im quá
@@ -123,7 +133,9 @@ Người quản lý không cần tới tận máy:
   *Khách sạn* để xem riêng một máy. Giữ 5.000 dòng mới nhất.
 - **Lượt quét**: mọi lượt của mọi khách sạn, kể cả lượt lỗi.
 
-## 4. Dữ liệu trong Sheet
+## 4. Dữ liệu trong Sheet (tới bản 1.5.1)
+
+Từ bản 1.5.2 các tab dưới đây không nhận thêm dữ liệu từ máy đã lên bản.
 
 - **Thống kê** (tab đầu): tự tính lại sau mỗi lượt quét; bấm tay qua menu
   **Review OTA › Cập nhật thống kê**. Gồm ba bảng: theo khách sạn (có dòng toàn
@@ -153,10 +165,6 @@ tự quy mọi điểm về thang 10.
 
 ## 5. Giới hạn đã biết
 
-- Google đôi khi trả trang lỗi 404 khi Sheet trả lời (đo ngày 08/10/2026: khoảng 1/10
-  lượt), dù dữ liệu đã ghi xong. Extension tự gửi lại tối đa 3 lần; Sheet nhận ra lượt
-  gửi lại và không ghi lần hai. Cả 3 lần đều hỏng thì lỗi nằm chờ trong máy (tối đa 50
-  dòng) và được gửi kèm lượt sau.
 - Phiên Booking hết hạn sau khoảng 2 giờ không dùng. Nếu máy chỉ mở Chrome mà không
   ai đụng tới extranet, kênh Booking sẽ thường xuyên báo cam.
 - Trip mới đọc nguồn Trip.com (`channelSource = 1`); bài từ Qunar/Ly.com chưa thu.
@@ -175,8 +183,7 @@ tự quy mọi điểm về thang 10.
 
 ## 6. Gửi lên Hub UrbanB
 
-Extension gửi review lên Hub UrbanB song song với Sheet. Sheet vẫn nhận đủ như cũ; Hub là đích
-thứ hai.
+Từ bản 1.5.2 Hub là đích duy nhất của review (tới 1.5.1 review lên Hub song song với Sheet).
 
 **Từ bản 1.1.0 review lên Hub theo phiên đăng nhập Hub của người dùng máy**, không còn URL Hub
 hay Token Hub (quyết định `H-1233` a). Bài đứng tên người đang đăng nhập, Hub kiểm quyền
@@ -184,9 +191,9 @@ hay Token Hub (quyết định `H-1233` a). Bài đứng tên người đang đ�
 
 **Bật cho một máy:** bấm biểu tượng Urban B, bấm **Đăng nhập Hub** và đăng nhập bằng tài khoản
 lễ tân. Từ bản 1.2.0 máy dùng Hub nào là theo trang **Cài extension** (`/extension`) mở gần nhất
-trên `hub.urbanb.vn` hay `urbanb.xyz` (để thử); ô bật lên chỉ hiện "Hub đang dùng", không còn ô chọn. Bấm **Thử Sheet**: dòng kết quả có "Hub: ổn" là đường lên Hub thông (lệnh
-thử không ghi gì lên Hub). Chưa đăng nhập hay hết phiên thì Sheet vẫn nhận, ô bật lên báo
-"Review chưa lên Hub · cần đăng nhập Hub".
+trên `hub.urbanb.vn` hay `urbanb.xyz` (để thử); ô bật lên chỉ hiện "Hub đang dùng", không còn ô chọn. Bấm **Thử Hub**: dòng kết quả "Hub: ổn" là đường lên Hub thông (lệnh
+thử không ghi gì lên Hub). Chưa đăng nhập hay hết phiên thì review chưa lên đâu cả, ô bật lên báo
+"Review chưa lên Hub · cần đăng nhập Hub"; lượt quét sau khi đăng nhập gửi lại toàn bộ bài.
 
 **Cấu hình đặt trên Hub** (`H-1348` a): Quản trị hệ thống đặt ở màn Kết nối › tab Mã kết nối Booking OTA ›
 khối Extension máy quầy,
@@ -196,7 +203,8 @@ một cấu hình cho cả chuỗi:
   hình trên Hub thì dưới nút Quét có dòng "tự quét mỗi N giờ (theo cấu hình trên Hub)". Máy không
   còn ô nhập chu kỳ hay ô Kênh quét. Từ bản 1.5.1, đổi chu kỳ trên Hub không lùi lượt quét đã hẹn:
   lượt kế tiếp chạy vào giờ sớm hơn giữa giờ đã hẹn và lúc nhận chu kỳ mới cộng chu kỳ mới.
-- **Sheet thu review** và **mã Booking/Agoda/Expedia của từng cơ sở** (`H-1527` a, xem mục 2).
+- **Mã Booking/Agoda/Expedia của từng cơ sở** (`H-1527` a, xem mục 2). Khối Sheet review trên Hub
+  chỉ còn dùng cho máy chạy bản tới 1.5.1.
 - **Thời gian tự ẩn thông báo nổi** trên PMS.
 - Hub chưa có cấu hình (hoặc máy chưa đăng nhập Hub lần nào): kênh theo cấu hình cũ của máy (mã
   cài đặt hay ô Kênh quét của bản trước), chu kỳ 6 giờ.
@@ -212,7 +220,7 @@ nhắc chọn. Tài khoản một cơ sở thì không phải chọn.
   dùng cột "Mã nội dung" để biết bài đổi, nên gửi lại bài cũ không tạo bài mới.
 - Chỉ các trường: kênh, mã review, mã khách sạn trên kênh, tên khách sạn, mã đặt phòng,
   ngày review, điểm và thang, tiêu đề, điểm khen, điểm chê, nhận xét, phản hồi, ngày phản
-  hồi, mã nội dung. Không gửi JSON gốc, không gửi mã bí mật của Sheet. Tên khách đã bị gỡ
+  hồi, mã nội dung. Không gửi JSON gốc. Tên khách đã bị gỡ
   từ trước.
 - Không có header `Authorization`: request mang cookie phiên Hub của trình duyệt. Hub nhận
   biết đường phiên chính bằng việc vắng header này.
@@ -224,6 +232,6 @@ chưa ghép với cơ sở: bài nằm ở bảng chờ của Hub và tự vào 
 tài khoản đang đăng nhập không được gán: Hub không nhận bài của mã đó (lỗi `HUB-SCOPE`), các mã
 khác vẫn nhận.
 
-**Khi Hub hỏng:** lượt gửi Sheet vẫn chạy. Lỗi Hub có loại `HUB-…`
+**Khi Hub hỏng:** kênh vẫn xanh vì quét được, nhưng review chưa lên Hub. Lỗi Hub có loại `HUB-…`
 (xem [ma-loi.md](ma-loi.md)), hiện khung đỏ dưới kênh và bật dấu `!` trên biểu tượng.
 Extension không xếp hàng gửi lại lên Hub: lượt quét sau gửi lại toàn bộ bài.

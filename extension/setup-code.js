@@ -7,11 +7,14 @@
 //     ma-cai-dat.txt trong thư mục extension, extension tự đọc lúc nạp, mỗi 30 phút và khi mở ô;
 //   - dán vào ô "Mã cài đặt" trong khối Cài đặt.
 //
-// Dạng mã: "URB1." + base64url(JSON UTF-8). Mã chứa mã bí mật Sheet, nên gửi riêng như gửi mã bí
-// mật trước đây. Mã mang đủ cài đặt: ô nào mã để trống thì áp vào cũng thành trống.
+// Dạng mã: "URB1." + base64url(JSON UTF-8). Mã do Sheet tạo có chứa mã bí mật Sheet, nên vẫn gửi riêng
+// như gửi mã bí mật trước đây. Mã mang đủ cài đặt: ô nào mã để trống thì áp vào cũng thành trống.
 //
 // Từ 1.1.0 mã do Sheet cũ tạo vẫn có `hubUrl`, `hubToken`: extension đọc được nhưng bỏ qua. Review lên
 // Hub theo phiên đăng nhập của người dùng máy (H-1233 a), không còn token máy.
+//
+// Từ 1.5.2 (YC-228) review không ghi Sheet nữa: `sheetUrl`, `secret` trong mã đọc được nhưng bỏ qua, mã
+// thiếu hai ô ấy cũng nhận. Lệnh cài đã gửi cho khách sạn vẫn chạy, nên dạng mã giữ nguyên `v: 1`.
 
 import { CHANNELS, DROPPED_KEYS } from "./config.js";
 
@@ -20,7 +23,7 @@ export const SETUP_PREFIX = "URB1.";
 /** Tệp cai-dat.ps1 ghi mã vào, nằm trong thư mục extension (robocopy /MIR chừa tệp này ra). */
 export const SETUP_FILE = "ma-cai-dat.txt";
 
-const TEXT_FIELDS = ["hotel", "sheetUrl", "secret", "bookingHotelId", "agodaPropertyId", "expediaPropertyId"];
+const TEXT_FIELDS = ["hotel", "bookingHotelId", "agodaPropertyId", "expediaPropertyId"];
 
 function toBase64Url(text) {
   const bytes = new TextEncoder().encode(text);
@@ -57,15 +60,16 @@ export function decodeSetupCode(text) {
   const setup = {};
   for (const f of TEXT_FIELDS) setup[f] = typeof data[f] === "string" ? data[f].trim() : "";
   if (!setup.hotel) throw new Error("Mã cài đặt thiếu tên khách sạn.");
-  if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(setup.sheetUrl)) throw new Error("Mã cài đặt có URL Sheet không đúng dạng …/exec.");
-  if (!setup.secret) throw new Error("Mã cài đặt thiếu mã bí mật.");
   const channels = Array.isArray(data.channels) ? data.channels.filter((ch) => CHANNELS.includes(ch)) : [];
   if (!channels.length) throw new Error("Mã cài đặt chưa chọn kênh nào.");
   setup.channels = channels;
   return setup;
 }
 
-/** Cấu hình mới sau khi áp mã: mọi ô theo mã, kênh không có trong mã thì tắt; chu kỳ quét giữ nguyên. */
+/**
+ * Cấu hình mới sau khi áp mã: mọi ô theo mã, kênh không có trong mã thì tắt; chu kỳ quét giữ nguyên.
+ * Ô đã bỏ (`DROPPED_KEYS`, gồm URL Sheet và mã bí mật của bản cũ) không ở lại cấu hình.
+ */
 export function applySetup(cfg, setup) {
   const next = { ...cfg, enabled: {} };
   for (const k of DROPPED_KEYS) delete next[k];

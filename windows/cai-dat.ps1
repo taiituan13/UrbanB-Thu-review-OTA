@@ -9,8 +9,8 @@
 #
 # Cài kèm mã cài đặt (từ 0.9.0): người quản lý tạo lệnh trong Sheet (Review OTA › Tạo lệnh cài cho
 # khách sạn), dạng  $UrbanBMa='URB1…'; irm …/cai-dat.ps1 | iex . Lệnh này ghi mã vào
-# ma-cai-dat.txt trong thư mục extension; extension tự đọc tệp, tự điền Cài đặt và tự thử Sheet
-# (extension/setup-code.js). Mã có mã bí mật Sheet, nằm trên máy như cài đặt đã lưu trong Chrome.
+# ma-cai-dat.txt trong thư mục extension; extension tự đọc tệp, tự điền Cài đặt và tự thử Hub
+# (extension/setup-code.js). Mã do Sheet tạo có mã bí mật Sheet; từ 1.5.2 extension bỏ qua phần ấy.
 #
 # Cập nhật: chạy lại đúng lệnh trên. Nó chép đè cùng thư mục; extension tự kiểm thư mục mỗi 30
 # phút và tự nạp lại khi thấy bản trên đĩa mới hơn (extension/update.js), nên không phải làm lại

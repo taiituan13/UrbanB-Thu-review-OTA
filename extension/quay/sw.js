@@ -593,7 +593,9 @@ export async function extStatus(pageOrigin, path) {
     chosenId: chosenId ?? "",
     pms,
     snap,
-    review: { configured: !reviewMissingText(cfg.review), fromHub: cfg.review.fromHub.sheet, model: reviewModelOf(cfg, status) },
+    // `fromHub` (hợp đồng màn Cài extension): tới 1.5.1 là "Sheet theo Hub"; từ 1.5.2 không còn Sheet nên là
+    // "chi nhánh của máy theo Hub". false ⇒ màn ấy ghi máy đang chạy bằng cấu hình cũ trong bộ nhớ.
+    review: { configured: !reviewMissingText(cfg.review), fromHub: cfg.review.fromHub.hotel, model: reviewModelOf(cfg, status) },
   });
   return { ok: true, status: view };
 }

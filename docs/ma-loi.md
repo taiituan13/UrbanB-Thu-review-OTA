@@ -25,22 +25,27 @@ bước có số. Chữ nằm ở `SHEET_KINDS`, `HUB_KINDS`, `CHANNEL_KINDS` tr
 1. Làm theo các bước trong khung đỏ, rồi bấm **Quét review ngay** (trên khung PMS hoặc trong ô bật lên).
 2. Vẫn lỗi thì bấm **Sao chép** cạnh mã lỗi rồi dán vào tin nhắn gửi người quản lý. Ở ô bật lên, đoạn
    chép gồm mã lỗi, loại lỗi, tên khách sạn, mã máy, phiên bản, giờ lỗi và thông điệp lỗi. Đoạn này
-   không chứa mật khẩu, mã phiên hay mã bí mật của Sheet.
+   không chứa mật khẩu hay mã phiên.
 
-Lỗi gửi Sheet (sai mã bí mật, sai URL…) không thuộc kênh nào, nên hiện riêng trong khung
-**Lỗi gửi Sheet** ở cuối ô bật lên. Khung này tự mất khi Sheet nhận được lại.
+Tới bản 1.5.1, lỗi gửi Sheet (sai mã bí mật, sai URL…) hiện riêng trong khung **Lỗi gửi Sheet** ở cuối
+ô bật lên. Từ bản 1.5.2 máy không ghi Sheet nên khung này bỏ; dấu lỗi Sheet cũ tự xoá khi lên bản.
 
 Huy hiệu trên biểu tượng Chrome: số thông báo chưa đọc, kèm dấu `!` khi máy có việc cần xem (vd. `3!`).
 Từ bản 1.4.0 số không còn che dấu `!`.
 
 ### Hạn giờ (từ 1.4.0)
 
-Mọi lượt gọi ra ngoài đều có hạn giờ, nên không còn lượt quét im hẳn: gửi Sheet 90 giây, gửi Hub 30
-giây, lượt gọi API review của kênh 30 giây, lượt chạy trong trang 120 giây, kiểm bản mới 15 giây
-(`extension/quay/net.js`). Hết giờ thì báo `SHEET-NET`, `HUB-NET` hoặc `<kênh>-TIMEOUT`. Lượt quét hẹn
+Mọi lượt gọi ra ngoài đều có hạn giờ, nên không còn lượt quét im hẳn: gửi Hub 30 giây, lượt gọi API
+review của kênh 30 giây, lượt chạy trong trang 120 giây, kiểm bản mới 15 giây
+(`extension/quay/net.js`). Hết giờ thì báo `HUB-NET` hoặc `<kênh>-TIMEOUT` (tới 1.5.1 còn gửi Sheet
+90 giây, hết giờ báo `SHEET-NET`). Lượt quét hẹn
 giờ ném lỗi ra ngoài thì ghi nhật ký ở giai đoạn `lượt quét` và giữ dấu `!` tới lượt quét chạy xong kế tiếp.
 
 ## Phía người quản lý: tra mã
+
+Từ bản 1.5.2 máy không gửi nhật ký lỗi lên Sheet: chi tiết lỗi nằm trong đoạn chữ khách sạn bấm
+**Sao chép** gửi cho bạn, và các lỗi máy đang hiện lên Hub theo lượt báo (từ 1.5.0). Các bước dưới đây
+chỉ còn tìm được mã của máy chạy bản tới 1.5.1.
 
 1. Mở tab **Nhật ký lỗi**, bấm Ctrl+F (Cmd+F trên Mac), dán mã `E-…`.
    Dòng tìm được có đủ thông tin: trang lúc lỗi (đã bỏ phần sau dấu `?`), giai đoạn,
@@ -54,7 +59,7 @@ giờ ném lỗi ra ngoài thì ghi nhật ký ở giai đoạn `lượt quét` 
 ## Danh mục loại lỗi
 
 Tiền tố kênh: `BKG` Booking · `AGD` Agoda · `TRP` Trip · `EXP` Expedia · `TVL` Traveloka · `G2J` Go2Joy.
-Các loại không có tiền tố kênh bắt đầu bằng `SHEET` (gửi Sheet) hoặc `HUB` (gửi Hub UrbanB).
+Các loại không có tiền tố kênh bắt đầu bằng `SHEET` (gửi Sheet, tới bản 1.5.1) hoặc `HUB` (gửi Hub UrbanB).
 
 ### Lỗi theo kênh (`<kênh>-…`)
 
@@ -75,6 +80,10 @@ Các loại không có tiền tố kênh bắt đầu bằng `SHEET` (gửi Shee
 
 ### Lỗi gửi Sheet (`SHEET-…`)
 
+Từ bản 1.5.2 máy không gửi Sheet nên không còn lỗi gửi Sheet. Riêng lỗi không thuộc kênh nào (lượt quét
+hỏng giữa chừng, giai đoạn `lượt quét`) vẫn được xếp vào nhóm này, thường là `SHEET-REJECT`, và lời
+hướng dẫn còn nói về bảng tính: chữ cũ, chưa sửa.
+
 | Loại | Nghĩa | Khách sạn tự làm | Người quản lý kiểm |
 |---|---|---|---|
 | `SHEET-CONFIG` | Máy chưa có đủ Sheet thu review, mã bí mật, tên khách sạn (Hub chưa có cấu hình thu review, hoặc máy chưa đăng nhập Hub) | Đăng nhập Hub, chọn chi nhánh nếu được hỏi, bấm Thử Sheet | Điền Sheet thu review ở màn Kết nối › Extension máy quầy trên Hub |
@@ -88,7 +97,7 @@ Các loại không có tiền tố kênh bắt đầu bằng `SHEET` (gửi Shee
 ### Lỗi gửi Hub (`HUB-…`)
 
 Từ bản 1.1.0 review lên Hub theo phiên đăng nhập Hub của người dùng máy, không còn URL Hub hay Token
-Hub. Từ bản 1.2.0 máy dùng Hub của trang Cài extension mở gần nhất (ô bật lên ghi "Hub đang dùng"). Lỗi Hub không làm hỏng lượt gửi Sheet.
+Hub. Từ bản 1.2.0 máy dùng Hub của trang Cài extension mở gần nhất (ô bật lên ghi "Hub đang dùng"). Lỗi Hub không làm kênh đỏ: kênh vẫn xanh vì quét được, dòng Hub dưới kênh báo lỗi.
 
 | Loại | Nghĩa | Khách sạn tự làm | Người quản lý kiểm |
 |---|---|---|---|

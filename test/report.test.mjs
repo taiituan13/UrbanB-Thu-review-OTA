@@ -1,14 +1,13 @@
-// Gửi lại khi Google trả lỗi chập chờn, và nhật ký lỗi không làm lộ phiên đăng nhập.
+// Gửi lại khi mạng chập chờn, và nhật ký lỗi không làm lộ phiên đăng nhập.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  SheetError,
+  RetryableError,
   classifyError,
   errorHelpCatalog,
   formatErrorReport,
   makeErrorRef,
   makeLogEntry,
-  parseSheetReply,
   pushLimited,
   stripUrl,
   withRetry,
@@ -16,31 +15,24 @@ import {
 
 const noSleep = async () => {};
 
-test("Trang lỗi HTML của Google (404) ⇒ lỗi gửi lại được; Sheet từ chối mã ⇒ không gửi lại", () => {
-  assert.throws(() => parseSheetReply(404, "<!DOCTYPE html><title>Không tìm thấy trang</title>"), (e) => e.retryable === true);
-  assert.throws(() => parseSheetReply(200, '{"ok":false,"error":"Sai mã bí mật"}'), (e) => e.retryable === false);
-  assert.throws(() => parseSheetReply(200, '{"ok":false,"error":"Sheet đang bận, thử lại sau"}'), (e) => e.retryable === true);
-  assert.deepEqual(parseSheetReply(200, '{"ok":true,"inserted":2}'), { ok: true, inserted: 2 });
-});
-
 test("Gửi lại tới khi được, tối đa 3 lần", async () => {
   let calls = 0;
   const r = await withRetry(async () => {
     calls++;
-    if (calls < 3) throw new SheetError("404", true);
+    if (calls < 3) throw new RetryableError("404", true);
     return "ok";
   }, { sleep: noSleep });
   assert.equal(r, "ok");
   assert.equal(calls, 3);
 
   calls = 0;
-  await assert.rejects(withRetry(async () => { calls++; throw new SheetError("404", true); }, { sleep: noSleep }));
+  await assert.rejects(withRetry(async () => { calls++; throw new RetryableError("404", true); }, { sleep: noSleep }));
   assert.equal(calls, 3, "không gửi quá 3 lần");
 });
 
 test("Lỗi không gửi lại được thì dừng ngay", async () => {
   let calls = 0;
-  await assert.rejects(withRetry(async () => { calls++; throw new SheetError("Sai mã bí mật", false); }, { sleep: noSleep }));
+  await assert.rejects(withRetry(async () => { calls++; throw new RetryableError("Không có quyền", false); }, { sleep: noSleep }));
   assert.equal(calls, 1);
 });
 

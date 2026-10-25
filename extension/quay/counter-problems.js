@@ -39,7 +39,8 @@ const NOBRANCH_CODE = { unmapped: "PMS_HOTEL_NOT_LINKED", scope: "PMS_OUT_OF_SCO
 /**
  * Ảnh lỗi gửi Hub. Mọi trường vào đều đọc phòng thủ (bộ nhớ có thể là bản của phiên bản cũ).
  * - `snap`: `quaySnap` · `faults`: `quayFaults` · `tokenAt`: `{ ezcloud, go2joy }` từ `quayTokenAt:*`
- * - `scanCrash`, `lastError`: khoá cùng tên · `update`: khoá `update` · `version`: bản đang chạy
+ * - `scanCrash`, `lastError`: khoá cùng tên (`lastError` không còn sinh mã nào từ 1.5.2) · `update`: khoá
+ *   `update` · `version`: bản đang chạy
  * - `reviewMissing`: máy chưa cấu hình xong thu review · `g2jAsk`: máy nhiều chi nhánh chưa chọn chi nhánh
  */
 export function counterProblems({
@@ -87,7 +88,7 @@ export function counterProblems({
   // Quét review (ngoài lỗi từng kênh)
   if (reviewMissing) add("REVIEW_NOT_CONFIGURED");
   if (scanCrash) add("REVIEW_SCAN_CRASH", null, scanCrash.at);
-  if (lastError?.stage === "gửi Sheet") add("REVIEW_SHEET_FAILED", lastError.code, lastError.at);
+  // REVIEW_SHEET_FAILED không còn sinh từ 1.5.2 (không ghi Sheet, YC-228); Hub vẫn giữ mã cho bản cũ.
 
   // Bản extension
   const notice = updateNotice(update, version);

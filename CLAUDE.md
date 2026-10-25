@@ -2,7 +2,8 @@
 
 Chrome extension (Manifest V3, JS thuần, không build) đọc review khách sạn từ extranet Booking,
 Agoda, Trip, Expedia, Traveloka, Go2Joy bằng phiên đăng nhập sẵn có trên máy KS. Review được gửi
-lên một Google Sheet chung (`apps-script/Code.gs`) và tuỳ chọn lên UrbanB Hub. Mỗi KS cài một bản.
+lên UrbanB Hub. Từ 1.5.2 (YC-228) không ghi Google Sheet review nữa; `apps-script/Code.gs` giữ cho máy
+chưa lên bản và menu Tạo lệnh cài. Mỗi KS cài một bản.
 Người dùng đọc tiếng Việt: trả lời, giao diện, thông báo và tài liệu đều viết tiếng Việt.
 
 Tài liệu cho người: `README.md`, `docs/`. Các công cụ UrbanB khác: `../UrbanB-tools.md`.
@@ -129,14 +130,14 @@ Kết luận bằng một mức: **gọn** (một lượt, ít rủi ro), **vừ
 
 | Đường dẫn | Nội dung |
 |---|---|
-| `extension/background.js` | Lịch quét, điều phối, gửi Sheet / Hub |
+| `extension/background.js` | Lịch quét, điều phối, gửi Hub |
 | `extension/scanners.js` | Gọi API nội bộ của từng extranet. Kênh đổi giao diện thì sửa ở đây |
 | `extension/normalize.js` | Chuẩn hoá review về một dạng, gỡ tên khách |
 | `extension/config.js` | `VERSION`, `CHANNELS`, `DEFAULT_CONFIG` (lưu trong `chrome.storage.local`) |
 | `extension/update.js` | Kiểm bản mới trên GitHub, `UPDATE_COMMAND` |
 | `extension/setup-code.js` | Mã cài đặt `URB1.…` (Sheet tạo, `cai-dat.ps1` ghi ra `ma-cai-dat.txt`, extension tự áp) |
 | `extension/hub.js`, `report.js`, `capture.js`, `nav.js` | Gửi Hub, mã lỗi, chụp request, mở tab |
-| `apps-script/Code.gs` | Web App nhận dữ liệu: ghi không trùng, tab Thống kê, Máy cài, Nhật ký lỗi |
+| `apps-script/Code.gs` | Web App nhận dữ liệu của bản tới 1.5.1: ghi không trùng, tab Thống kê, Máy cài, Nhật ký lỗi |
 | `windows/cai-dat.ps1` | Lệnh cài / cập nhật trên Windows (`irm … \| iex`) |
 | `docs/` | Cài đặt, cài từ xa, mã lỗi, sơ đồ kiến trúc |
 | `test/*.test.mjs` | `node --test`. `apps-script.test.mjs` nạp `Code.gs` trong `vm` |

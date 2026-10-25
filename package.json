@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Chrome extension thu review khách sạn từ extranet OTA về Google Sheet và UrbanB Hub.",
+  "description": "Chrome extension thu review khách sạn từ extranet OTA lên UrbanB Hub.",
   "license": "UNLICENSED",
   "scripts": {
     "probe": "tsx src/scripts/probe.ts",

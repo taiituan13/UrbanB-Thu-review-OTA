@@ -1,9 +1,7 @@
 // YC-158 (H-1539 lối 2) — hạn giờ cho MỌI lượt gọi mạng của extension. Trước đây chỉ lượt chờ tải trang
-// có hạn 45 giây; một lượt gọi Sheet, Hub hay một fetch trong trang kênh bị treo thì cờ `running` kẹt
+// có hạn 45 giây; một lượt gọi Hub hay một fetch trong trang kênh bị treo thì cờ `running` kẹt
 // mãi và mọi lượt quét hẹn giờ sau im lặng bỏ qua. Số dưới đây là hằng kỹ thuật, không phải số nghiệp vụ.
 
-/** Gửi một lô về bảng tính (Apps Script có thể chậm vài chục giây khi Sheet lớn). */
-export const SHEET_TIMEOUT_MS = 90_000;
 /** Một lượt gọi Hub. */
 export const HUB_TIMEOUT_MS = 30_000;
 /** Đọc số phiên bản mới trên GitHub. */

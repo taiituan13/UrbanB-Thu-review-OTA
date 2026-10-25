@@ -1,4 +1,4 @@
-// Gửi review lên Hub UrbanB, song song với Google Sheet. Phần thuần, test được ngoài Chrome.
+// Gửi review lên Hub UrbanB (từ 1.5.2 là đường duy nhất, không còn Google Sheet). Phần thuần, test được ngoài Chrome.
 //
 // Từ 1.1.0 (YC-152 · H-1233 a): đẩy theo PHIÊN Hub của người đăng nhập trên máy quầy, không còn token
 // máy. POST <hub>/api/ingest/reviews KHÔNG kèm header Authorization, gửi cookie phiên như các route
@@ -11,7 +11,7 @@
 // Hub chống trùng theo channel + reviewId và dùng `hash` để biết bài đổi, nên mỗi lượt quét gửi
 // lại toàn bộ bài là an toàn: bài không đổi được đếm vào `unchanged`.
 
-import { SheetError } from "./report.js";
+import { RetryableError } from "./report.js";
 
 export const HUB_PATH = "/api/ingest/reviews";
 export const LOGIN_PATH = "/login";
@@ -43,8 +43,8 @@ export const HUB_FIELDS = [
   "guestName",
 ];
 
-/** Lỗi khi gửi Hub; cùng dạng SheetError để dùng chung withRetry. */
-export class HubError extends SheetError {}
+/** Lỗi khi gửi Hub; cùng dạng RetryableError để dùng chung withRetry. */
+export class HubError extends RetryableError {}
 
 /** Địa chỉ nhận review trên Hub đang dùng (gốc đã qua danh sách cho phép ở quay/hub-quay.js hubOrigin). */
 export function ingestUrl(origin) {
@@ -88,7 +88,8 @@ export function hubRunMeta({ deviceId, trigger, runId } = {}) {
 
 /**
  * YC-152 (H-1489 a): điểm tổng của kênh mà bộ quét đọc trên extranet (snapshot `categoryCode: "overall"`),
- * gửi Hub kèm mã khách sạn trên kênh. Điểm hạng mục chỉ đi Sheet. Không có điểm hợp lệ ⇒ mảng rỗng.
+ * gửi Hub kèm mã khách sạn trên kênh. Điểm hạng mục không gửi đi đâu (tới 1.5.1 chỉ đi Sheet). Không có
+ * điểm hợp lệ ⇒ mảng rỗng.
  */
 export function hubSnapshots(snapshots, channel, channelHotelId) {
   if (!channelHotelId) return [];

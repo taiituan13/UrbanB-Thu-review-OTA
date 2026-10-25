@@ -1,30 +1,11 @@
-// Phần thuần của việc gửi về Sheet và ghi nhật ký lỗi — tách ra để test được ngoài Chrome.
+// Phần thuần của việc gửi lên Hub và ghi lỗi — tách ra để test được ngoài Chrome.
 
-/** Lỗi khi gửi Sheet; `retryable` = gửi lại có thể thành công. */
-export class SheetError extends Error {
+/** Lỗi khi gửi đi; `retryable` = gửi lại có thể thành công (withRetry đọc cờ này). */
+export class RetryableError extends Error {
   constructor(message, retryable) {
     super(message);
     this.retryable = retryable;
   }
-}
-
-/**
- * Đọc câu trả lời của Web App.
- * Google đôi khi trả trang lỗi HTML 404 ở chặng chuyển hướng (đo 08/10/2026: 7/60 lượt) ⇒ gửi lại được,
- * vì Apps Script nhận ra requestId đã thấy và trả lại câu trả lời cũ.
- */
-export function parseSheetReply(status, body) {
-  let j;
-  try {
-    j = JSON.parse(body);
-  } catch {
-    throw new SheetError(`Sheet trả về không phải JSON (HTTP ${status})`, true);
-  }
-  if (!j.ok) {
-    const error = String(j.error ?? "không rõ");
-    throw new SheetError(`Sheet từ chối: ${error}`, /bận/i.test(error));
-  }
-  return j;
 }
 
 /** Chạy fn; lỗi `retryable` thì chờ rồi thử lại, mỗi lần chờ lâu hơn. Mặc định tối đa 3 lần. */
@@ -125,7 +106,7 @@ const SHEET_KINDS = [
   }],
 ];
 
-// Gửi Hub (hub.js) hỏng không làm hỏng lượt gửi Sheet; lỗi vẫn vào nhật ký như mọi lỗi khác.
+// Gửi Hub (hub.js) hỏng không làm kênh đỏ; lỗi vẫn có mã như mọi lỗi khác.
 const HUB_KINDS = [
   ["HUB-ORIGIN", /FORBIDDEN_ORIGIN/, {
     what: "Hub không nhận review từ extension trên máy này.",

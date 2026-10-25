@@ -147,7 +147,7 @@ test("🔴 Popup không còn ô nhập chu kỳ quét tại máy", () => {
 test("Lịch quét và lượt quét đọc cấu hình đã áp Hub, không đọc thẳng cấu hình máy", () => {
   const bg = readFileSync(new URL("../extension/background.js", import.meta.url), "utf8");
   const body = (name) => bg.slice(bg.indexOf(`async function ${name}(`), bg.indexOf("\n}\n", bg.indexOf(`async function ${name}(`)));
-  for (const fn of ["schedule", "runScan", "refreshBadge", "pingSheet"]) {
+  for (const fn of ["schedule", "runScan", "refreshBadge"]) {
     assert.match(body(fn), /loadEffectiveConfig\(\)/, `${fn} phải dùng loadEffectiveConfig`);
     assert.doesNotMatch(body(fn), /loadConfig\(\)/, `${fn} còn dùng loadConfig`);
   }
@@ -156,16 +156,16 @@ test("Lịch quét và lượt quét đọc cấu hình đã áp Hub, không đ�
 
 test("🔴 YC-156 L4 — dòng 'tự quét mỗi N giờ' ẩn khi thu review không tự chạy được", () => {
   const eff = effectiveCollect(DEFAULT_CONFIG, { intervalHours: 6, enabled: { booking: true } });
-  const ready = { sheetUrl: "https://s", secret: "x", hotel: "UB1", hubSeen: true };
+  const ready = { hotel: "UB1", hubSeen: true };
   assert.match(scheduleText(eff, ready), /mỗi 6 giờ/);
-  // Bị chặn: Chrome chưa đăng nhập Hub lần nào và máy không có Sheet.
-  assert.equal(scheduleText(eff, { sheetUrl: "", secret: "", hotel: "", hubSeen: false }), null);
+  // Bị chặn: Chrome chưa đăng nhập Hub lần nào.
+  assert.equal(scheduleText(eff, { hotel: "", hubSeen: false }), null);
   // Bị chặn: chưa biết chi nhánh.
   assert.equal(scheduleText(eff, { ...ready, hotel: "" }), null);
   // Không bật kênh nào.
   assert.equal(scheduleText(effectiveCollect(DEFAULT_CONFIG, { intervalHours: 6, enabled: {} }), ready), null);
-  // H-1903 b: chưa có Sheet nhưng vẫn gửi Hub ⇒ vẫn tự quét ⇒ dòng còn.
-  assert.match(scheduleText(eff, { sheetUrl: "", secret: "", hotel: "UB1", hubSeen: true }), /mỗi 6 giờ/);
+  // 1.5.2: máy còn Sheet cũ trong bộ nhớ mà chưa đăng nhập Hub lần nào ⇒ vẫn bị chặn (không ghi Sheet nữa).
+  assert.equal(scheduleText(eff, { sheetUrl: "https://script.google.com/macros/s/X/exec", secret: "x", hotel: "UB1", hubSeen: false }), null);
   // popup.js truyền cấu hình thu review vào và ẩn dòng khi null.
   const js = readFileSync(new URL("../extension/popup.js", import.meta.url), "utf8");
   assert.match(js, /scheduleText\(cfg\.collect, cfg\.review\)/);

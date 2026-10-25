@@ -1,31 +1,19 @@
-// Tiến trình nền: hẹn giờ, mở tab extranet trong nền, quét, chuẩn hoá, gửi về Google Sheet và Hub.
+// Tiến trình nền: hẹn giờ, mở tab extranet trong nền, quét, chuẩn hoá, gửi lên Hub. Từ 1.5.2 không ghi
+// Google Sheet nữa (YC-228, H-1924 a).
 // Phần "UrbanB tại quầy" (khung trên PMS) nằm ở quay/sw.js.
 
-import {
-  CHANNELS,
-  CHANNEL_LABEL,
-  VERSION,
-  clearSheetError,
-  dropLogs,
-  getDeviceId,
-  loadConfig,
-  loadPendingLogs,
-  loadStatus,
-  queueLog,
-  saveChannelStatus,
-  saveConfig,
-} from "./config.js";
-import { SheetError, makeLogEntry, parseSheetReply, withRetry } from "./report.js";
-import { normalizeBatch, sheetReviews } from "./normalize.js";
+import { CHANNELS, CHANNEL_LABEL, forgetSheet, getDeviceId, loadConfig, loadStatus, queueLog, saveChannelStatus, saveConfig } from "./config.js";
+import { makeLogEntry, withRetry } from "./report.js";
+import { normalizeBatch } from "./normalize.js";
 import { hubBatches, hubRunMeta, hubSnapshots, hubSummaryText, ingestRequest, parseIngestReply, rejectedText, sumHubReplies } from "./hub.js";
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
 import { hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
-import { alarmMinutes, loadEffectiveConfig, reviewMissingText, reviewSendsSheet, scanAlarmFor, sheetSkipText } from "./hub-config.js";
+import { alarmMinutes, loadEffectiveConfig, reviewMissingText, scanAlarmFor } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
 import { autoRescanChannel } from "./login-watch.js";
-import { PAGE_RUN_TIMEOUT_MS, REMOTE_TIMEOUT_MS, SHEET_TIMEOUT_MS, isTimeout, withTimeout } from "./quay/net.js";
+import { PAGE_RUN_TIMEOUT_MS, REMOTE_TIMEOUT_MS, isTimeout, withTimeout } from "./quay/net.js";
 import {
   bookingSessionInPage,
   scanAgodaInPage,
@@ -71,8 +59,10 @@ async function syncHubSettings() {
   await followHubInterval().catch(() => {});
 }
 
-chrome.runtime.onInstalled.addListener(() => schedule().then(importSetupFile));
-chrome.runtime.onStartup.addListener(() => schedule().then(importSetupFile));
+// Lên bản (chạy lại lệnh cài ⇒ extension tự nạp lại ⇒ onInstalled): dọn Sheet cũ trong bộ nhớ trước mọi việc.
+const boot = () => forgetSheet().catch(() => {}).then(schedule).then(importSetupFile);
+chrome.runtime.onInstalled.addListener(boot);
+chrome.runtime.onStartup.addListener(boot);
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM) runScan("hẹn giờ").catch(scanCrashed);
   if (alarm.name === UPDATE_ALARM) {
@@ -111,8 +101,8 @@ function importSetupFile() {
 }
 
 /**
- * Áp mã vào cấu hình, rồi thử Sheet ngay để máy hiện trong tab "Máy cài" mà không ai phải bấm gì.
- * Kết quả lưu ở `setupResult` để ô bật lên báo lại.
+ * Áp mã vào cấu hình (phần Sheet trong mã cũ bỏ qua, setup-code.js), rồi thử Hub ngay để người cài biết
+ * máy đã đăng nhập Hub chưa. Kết quả lưu ở `setupResult` để ô bật lên báo lại.
  */
 async function applySetupText(text, from) {
   let result;
@@ -121,7 +111,7 @@ async function applySetupText(text, from) {
     const cfg = applySetup(await loadConfig(), setup);
     await saveConfig(cfg);
     await Promise.all([schedule(), refreshBadge()]);
-    const ping = await pingSheet();
+    const ping = await pingHub();
     result = { ok: true, hotel: cfg.hotel, ping };
   } catch (e) {
     result = { ok: false, error: String(e?.message ?? e) };
@@ -185,8 +175,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     );
     return true;
   }
-  if (msg?.type === "pingSheet") {
-    pingSheet().then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
+  if (msg?.type === "pingHub") {
+    pingHub().then(reply, (e) => reply({ ok: false, error: String(e?.message ?? e) }));
     return true;
   }
   if (msg?.type === "checkUpdate") {
@@ -414,79 +404,11 @@ const SCANNERS = {
   go2joy: scanGo2joy,
 };
 
-// ---------- Gửi về Google Sheet ----------
-
-/** Thông tin máy gửi kèm mọi lượt, để Sheet cập nhật tab "Máy cài". */
-async function deviceInfo(cfg) {
-  return {
-    deviceId: await getDeviceId(),
-    hotel: cfg.hotel,
-    version: VERSION,
-    channels: CHANNELS.filter((ch) => cfg.enabled[ch]).join(", "),
-    intervalHours: cfg.intervalHours,
-    status: await loadStatus(),
-  };
-}
-
-/**
- * Gửi một lượt về Sheet, kèm thông tin máy và các lỗi đang chờ.
- * Cùng một requestId cho mọi lần gửi lại ⇒ Apps Script không ghi hai lần.
- */
-async function postSheet(cfg, payload) {
-  const logs = await loadPendingLogs();
-  const body = JSON.stringify({
-    ...payload,
-    requestId: crypto.randomUUID(),
-    device: await deviceInfo(cfg),
-    logs,
-    secret: cfg.secret,
-  });
-  try {
-    const reply = await withRetry(
-      async () => {
-        let res;
-        try {
-          res = await fetch(cfg.sheetUrl, { method: "POST", body, signal: AbortSignal.timeout(SHEET_TIMEOUT_MS) });
-        } catch (e) {
-          throw new SheetError(isTimeout(e) ? "Hết giờ chờ Sheet trả lời" : `Không gọi được Sheet: ${e?.message ?? e}`, true);
-        }
-        return parseSheetReply(res.status, await res.text());
-      },
-      { sleep },
-    );
-    if (logs.length) await dropLogs(logs.map((l) => l.id));
-    await clearSheetError();
-    return reply;
-  } catch (e) {
-    // Lỗi gửi Sheet thì chưa ghi được vào Sheet ⇒ xếp hàng, gửi kèm lượt sau.
-    const entry = makeLogEntry({ channel: payload.run?.channel ?? "", stage: "gửi Sheet", error: e });
-    await queueLog(entry);
-    e.logEntry = entry;
-    throw e;
-  }
-}
-
-async function pingSheet() {
-  const cfg = await loadEffectiveConfig();
-  const hub = await pingHub();
-  if (!reviewSendsSheet(cfg.review)) {
-    const why = reviewMissingText(cfg.review) ?? sheetSkipText(cfg.review) ?? "Máy chưa có Sheet review.";
-    const entry = makeLogEntry({ stage: "gửi Sheet", error: why });
-    await queueLog(entry);
-    return { ok: false, error: entry.message, ref: entry.ref, code: entry.code, hub };
-  }
-  try {
-    return { ...(await postSheet(cfg, { action: "ping" })), hub };
-  } catch (e) {
-    return { ok: false, error: String(e?.message ?? e), ref: e.logEntry?.ref, code: e.logEntry?.code, hub };
-  }
-}
-
 // ---------- Gửi lên Hub ----------
 
 /**
  * Một request tới Hub theo phiên đăng nhập (H-1233 a): cookie phiên, không token. Hub là gốc đang chọn
- * trong ô "Hub để đăng nhập" (cùng Hub của khung trên PMS). Lỗi mạng và 5xx thì thử lại như gửi Sheet.
+ * trong ô "Hub để đăng nhập" (cùng Hub của khung trên PMS). Lỗi mạng và 5xx thì thử lại.
  */
 async function postHub(body) {
   const { url, init } = ingestRequest(await hubOriginNow(), body);
@@ -499,14 +421,14 @@ async function postHub(body) {
   }
 }
 
-/** Lỗi Hub thành dòng nhật ký (lên tab "Nhật ký lỗi" của Sheet như mọi lỗi khác). */
+/** Lỗi Hub thành "lỗi gần nhất" có mã để lễ tân sao chép, như mọi lỗi khác. */
 async function hubFailure(channel, error, detail) {
   const entry = makeLogEntry({ channel, stage: "gửi Hub", error, detail });
   await queueLog(entry);
   return entry;
 }
 
-/** Thử đường lên Hub bằng action "ping" (Hub không ghi gì; kiểm phiên và quyền thêm review). */
+/** Nút Thử Hub: thử đường lên Hub bằng action "ping" (Hub không ghi gì; kiểm phiên và quyền thêm review). */
 async function pingHub() {
   try {
     await postHub({ action: "ping" });
@@ -519,7 +441,7 @@ async function pingHub() {
 
 /**
  * Gửi các bài của một kênh lên Hub, chia lô. Không bao giờ ném: kết quả (hoặc lỗi) nằm trong
- * trạng thái kênh, còn lượt gửi Sheet đi tiếp như cũ. Một lô hỏng thì dừng, các lô đã gửi vẫn giữ.
+ * trạng thái kênh. Một lô hỏng thì dừng, các lô đã gửi vẫn giữ.
  */
 async function sendHub(channel, reviews, at, run, snapshots = []) {
   const replies = [];
@@ -576,23 +498,15 @@ async function runScan(trigger, only = null) {
     // Kênh và chu kỳ theo cấu hình đặt trên Hub (H-1348 a); hỏi lại trước mỗi lượt.
     await syncHubSettings();
     const cfg = await loadEffectiveConfig();
-    // Sheet, tên khách sạn, mã chỗ nghỉ theo Hub (H-1527 a); Hub chưa có thì theo cấu hình cũ của máy.
+    // Tên khách sạn, mã chỗ nghỉ theo Hub (H-1527 a); chưa biết chi nhánh thì theo cấu hình cũ của máy.
     const missing = reviewMissingText(cfg.review);
     if (missing) return missing;
-    // YC-156 L5 · H-1903 b: chưa có Sheet review thì vẫn quét và gửi Hub, chỉ bỏ phần ghi Sheet.
-    const toSheet = reviewSendsSheet(cfg.review);
     // Một mã cho cả lượt (mọi kênh): Hub gom các lô của cùng một lần quét (YC-157).
     const runId = crypto.randomUUID();
     for (const channel of CHANNELS) {
       if (!cfg.enabled[channel]) continue;
       if (only && !only.includes(channel)) continue;
-      await scanOne(channel, cfg, trigger, runId, toSheet);
-    }
-    // Báo sống kèm trạng thái cuối của mọi kênh; chạy cả khi không bật kênh nào.
-    if (toSheet) {
-      try {
-        await postSheet(cfg, { action: "heartbeat" });
-      } catch {}
+      await scanOne(channel, cfg, trigger, runId);
     }
     await chrome.storage.local.remove("scanCrash");
   } finally {
@@ -625,9 +539,13 @@ chrome.tabs.onUpdated.addListener((_tabId, info, tab) => {
   })().catch(scanCrashed);
 });
 
-async function scanOne(channel, cfg, trigger, runId, toSheet = true) {
+/**
+ * Quét một kênh rồi gửi Hub. Kênh `ok` khi quét và chuẩn hoá xong (gửi Hub hỏng thì ghi ở `hub`, kênh vẫn
+ * ổn nhưng giữ giờ ổn cũ); `error`/`login` chỉ khi chính lượt quét hỏng. Không còn bước ghi Sheet nào
+ * làm kênh đỏ (YC-228).
+ */
+async function scanOne(channel, cfg, trigger, runId) {
   const startedAt = new Date().toISOString();
-  const run = { at: startedAt, hotel: cfg.hotel, channel, trigger, version: VERSION, status: "", count: 0, note: "" };
   let tab = null;
   let hub = null;
   let stage = "mở tab";
@@ -642,10 +560,6 @@ async function scanOne(channel, cfg, trigger, runId, toSheet = true) {
     stage = "chuẩn hoá";
     const ctx = { hotel: cfg.hotel, channelHotelId: result.channelHotelId };
     const batch = normalizeBatch(channel, result.reviews, ctx);
-    const snapshots = (result.snapshots ?? []).map((s) => ({ ...s, at: startedAt, hotel: cfg.hotel, channel }));
-    run.status = batch.errors.length ? "một phần" : "ok";
-    run.count = batch.reviews.length;
-    run.note = `kênh báo ${result.total ?? "?"} bài` + (batch.errors.length ? ` · ${batch.errors.length} bài lỗi chuẩn hoá` : "");
     let partial = null;
     if (batch.errors.length) {
       partial = makeLogEntry({
@@ -655,49 +569,28 @@ async function scanOne(channel, cfg, trigger, runId, toSheet = true) {
         detail: batch.errors.slice(0, 5).join("\n"),
       });
       await queueLog(partial);
-      run.note += ` · ${partial.ref}`;
     }
 
-    // Hub trước Sheet: sendHub không ném, nên lỗi Hub không chặn Sheet và ngược lại.
+    // sendHub không ném: lỗi Hub nằm trong `hub`, không làm kênh đỏ.
     hub = await sendHub(channel, batch.reviews, startedAt, { trigger, id: runId }, hubSnapshots(result.snapshots, channel, result.channelHotelId));
-
-    stage = "gửi Sheet";
-
-    const sent = toSheet
-      ? await postSheet(cfg, {
-          action: "ingest",
-          run,
-          reviews: sheetReviews(batch.reviews),
-          scores: batch.scores,
-          snapshots,
-        })
-      : null;
     await saveChannelStatus(channel, {
       at: startedAt,
       // Giờ quét ỔN gần nhất (YC-158): gửi Hub hỏng thì review chưa lên Hub ⇒ giữ giờ ổn cũ.
       okAt: hub?.ok === false ? await lastOkAt(channel) : startedAt,
       state: "ok",
       count: batch.reviews.length,
-      message: sent ? `${sent.inserted} bài mới, ${sent.updated} bài cập nhật.` : "Chưa ghi Sheet vì máy chưa có Sheet review.",
+      message: "",
       error: partial && errorBrief(partial),
       hub,
     });
   } catch (e) {
     const login = e instanceof LoginRequired;
-    run.status = login ? "cần đăng nhập" : "lỗi";
-    run.note = String(e?.message ?? e);
-    // Lỗi lúc gửi Sheet thì postSheet đã tự xếp hàng; các giai đoạn khác ghi ở đây.
-    let entry = e?.logEntry ?? null;
-    if (!entry) {
-      let url = "";
-      try {
-        if (tab?.id != null) url = (await chrome.tabs.get(tab.id)).url ?? "";
-      } catch {}
-      entry = makeLogEntry({ channel, stage: login ? "đăng nhập" : stage, error: e, url });
-      await queueLog(entry);
-    }
-    // Mã tham chiếu nằm cả ở tab "Lượt quét" ⇒ Ctrl+F trong Sheet thấy cả hai nơi.
-    run.note = `${entry.ref} · ${entry.code} · ${run.note}`;
+    let url = "";
+    try {
+      if (tab?.id != null) url = (await chrome.tabs.get(tab.id)).url ?? "";
+    } catch {}
+    const entry = makeLogEntry({ channel, stage: login ? "đăng nhập" : stage, error: e, url });
+    await queueLog(entry);
     await saveChannelStatus(channel, {
       at: startedAt,
       okAt: await lastOkAt(channel),
@@ -707,12 +600,6 @@ async function scanOne(channel, cfg, trigger, runId, toSheet = true) {
       error: errorBrief(entry),
       hub,
     });
-    // Ghi lượt lỗi (kèm nhật ký lỗi) vào Sheet; gửi hỏng thì lỗi nằm lại hàng đợi cho lượt sau.
-    if (toSheet) {
-      try {
-        await postSheet(cfg, { action: "ingest", run, reviews: [], scores: [], snapshots: [] });
-      } catch {}
-    }
   } finally {
     if (tab?.id != null) {
       try {
@@ -739,14 +626,14 @@ async function setBadge(text) {
 
 /**
  * Số thông báo chưa đọc trên Hub (H-1264 a) kèm "!" (YC-158: số không còn che dấu) khi thu review chưa đủ
- * cấu hình, một kênh ĐANG BẬT không ổn hay gửi Hub hỏng (kênh đã tắt không tính), lượt báo sống không gửi
- * được Sheet, lượt quét hỏng giữa chừng, hoặc chưa đăng nhập / hết phiên Hub.
+ * cấu hình, một kênh ĐANG BẬT không ổn hay gửi Hub hỏng (kênh đã tắt không tính), lượt quét hỏng giữa
+ * chừng, hoặc chưa đăng nhập / hết phiên Hub. Lỗi ghi Sheet không còn (1.5.2).
  */
 async function refreshBadge() {
-  const [cfg, status, { quaySnap, lastError, scanCrash }] = await Promise.all([
+  const [cfg, status, { quaySnap, scanCrash }] = await Promise.all([
     loadEffectiveConfig(),
     loadStatus(),
-    chrome.storage.local.get(["quaySnap", "lastError", "scanCrash"]),
+    chrome.storage.local.get(["quaySnap", "scanCrash"]),
   ]);
   const missing = Boolean(reviewMissingText(cfg.review));
   const bad = CHANNELS.some((ch) => {
@@ -756,6 +643,5 @@ async function refreshBadge() {
   const session = quaySnap?.session;
   const hubProblem = session === "out" || session === "expired";
   const unread = session !== "expired" && quaySnap?.notifications?.state === "ok" ? quaySnap.notifications.unread : 0;
-  const sheetDown = lastError?.stage === "gửi Sheet";
-  await setBadge(badgeText({ unread, problem: missing || bad || hubProblem || sheetDown || Boolean(scanCrash) }));
+  await setBadge(badgeText({ unread, problem: missing || bad || hubProblem || Boolean(scanCrash) }));
 }
