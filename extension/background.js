@@ -14,7 +14,18 @@ import { alarmMinutes, loadEffectiveConfig, reviewMissingText, scanAlarmFor } fr
 import { badgeText } from "./quay/notifications.js";
 import { autoRescanChannel } from "./login-watch.js";
 import { PAGE_RUN_TIMEOUT_MS, REMOTE_TIMEOUT_MS, isTimeout, withTimeout } from "./quay/net.js";
-import { BANNER_TEXT, BANNER_TIMEOUT_MS, SCAN_GROUP, pickScanGroup, showScanBanner } from "./tab-scan.js";
+import {
+  BANNER_TEXT,
+  BANNER_TIMEOUT_MS,
+  SCAN_GROUP,
+  TAB_RETRY_BUSY_MINUTES,
+  channelOfRetryAlarm,
+  closedOutcome,
+  pickScanGroup,
+  retryAlarmName,
+  showScanBanner,
+} from "./tab-scan.js";
+import { TAB_RETRY_KEY } from "./quay/review-status.js";
 import {
   bookingSessionInPage,
   scanAgodaInPage,
@@ -61,11 +72,13 @@ async function syncHubSettings() {
 }
 
 // Lên bản (chạy lại lệnh cài ⇒ extension tự nạp lại ⇒ onInstalled): dọn Sheet cũ trong bộ nhớ trước mọi việc.
-const boot = () => forgetSheet().catch(() => {}).then(schedule).then(importSetupFile);
+const boot = () => forgetSheet().catch(() => {}).then(schedule).then(rearmTabRetries).then(importSetupFile);
 chrome.runtime.onInstalled.addListener(boot);
 chrome.runtime.onStartup.addListener(boot);
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM) runScan("hẹn giờ").catch(scanCrashed);
+  const retry = channelOfRetryAlarm(alarm.name);
+  if (retry) retryClosedTab(retry).catch(scanCrashed);
   if (alarm.name === UPDATE_ALARM) {
     syncHubSettings().then(refreshBadge);
     reloadIfDiskNewer();
@@ -530,8 +543,10 @@ let running = false;
  * Trả chuỗi mô tả nếu lượt quét không chạy được; undefined nếu đã chạy xong. `only` = danh sách kênh cần quét
  * (YC-199: quét lại một kênh); bỏ trống ⇒ mọi kênh đang bật.
  */
+const BUSY_TEXT = "Đang có một lượt quét chạy, đợi nó xong.";
+
 async function runScan(trigger, only = null) {
-  if (running) return "Đang có một lượt quét chạy, đợi nó xong.";
+  if (running) return BUSY_TEXT;
   running = true;
   // Tab của kênh vừa đọc: đóng sau khi tab kênh kế tiếp đã vào nhóm, để nhóm tab không mất rồi hiện lại giữa hai kênh.
   let leftover = null;
@@ -589,9 +604,17 @@ chrome.tabs.onUpdated.addListener((_tabId, info, tab) => {
  */
 async function scanOne(channel, cfg, trigger, runId, leftover = null) {
   const startedAt = new Date().toISOString();
+  // Kênh đang chờ đọc lại (tab lượt trước bị đóng) ⇒ lượt này là lần đọc lại, bị đóng nữa thì báo lỗi.
+  const pending = (await loadTabRetries())[channel] ?? null;
   let tab = null;
   let hub = null;
   let stage = "mở tab";
+  // Tab quét bị ai đó đóng (người gọi chỉ đóng tab sau khi scanOne xong, nên không lẫn với lượt máy tự đóng).
+  let closed = false;
+  const onRemoved = (id) => {
+    if (id === tab?.id) closed = true;
+  };
+  chrome.tabs.onRemoved.addListener(onRemoved);
   try {
     tab = await chrome.tabs.create({ url: "about:blank", active: false });
     await joinScanGroup(tab);
@@ -635,7 +658,17 @@ async function scanOne(channel, cfg, trigger, runId, leftover = null) {
     try {
       if (tab?.id != null) url = (await chrome.tabs.get(tab.id)).url ?? "";
     } catch {}
-    const entry = makeLogEntry({ channel, stage: login ? "đăng nhập" : stage, error: e, url });
+    let entry = makeLogEntry({ channel, stage: login ? "đăng nhập" : stage, error: e, url });
+    // Tab bị đóng mà câu lỗi lại là câu khác (vd. bộ quét hỏng vì trang mất) ⇒ vẫn là lỗi TAB.
+    if (!login && closed && !isTabCode(entry.code)) {
+      entry = makeLogEntry({ channel, stage, error: TAB_CLOSED_MESSAGE, url, detail: entry.message });
+    }
+    // H-1973 a: lần đầu bị đóng thì chưa đỏ, hẹn đọc lại kênh ấy một lần.
+    const { retry } = closedOutcome({ closed: !login && isTabCode(entry.code), pending, now: Date.now() });
+    if (retry) {
+      await scheduleTabRetry(channel, retry);
+      return null;
+    }
     await queueLog(entry);
     await saveChannelStatus(channel, {
       at: startedAt,
@@ -647,9 +680,64 @@ async function scanOne(channel, cfg, trigger, runId, leftover = null) {
       hub,
     });
   } finally {
+    chrome.tabs.onRemoved.removeListener(onRemoved);
     await closeTab(leftover);
+    // Lần đọc lại đã chạy (đạt hay hỏng): không đọc lại nữa.
+    if (pending) await clearTabRetry(channel);
   }
   return tab?.id ?? null;
+}
+
+const isTabCode = (code) => /-TAB$/.test(String(code ?? ""));
+
+// ---------- YC-238: đọc lại kênh có tab quét bị đóng giữa chừng ----------
+
+async function loadTabRetries() {
+  return (await chrome.storage.local.get(TAB_RETRY_KEY))[TAB_RETRY_KEY] ?? {};
+}
+
+/** Ghi kênh chờ đọc lại (khung quầy đọc để báo một dòng) và hẹn báo thức tới giờ đọc lại. */
+async function scheduleTabRetry(channel, retry) {
+  await chrome.storage.local.set({ [TAB_RETRY_KEY]: { ...(await loadTabRetries()), [channel]: retry } });
+  await chrome.alarms.create(retryAlarmName(channel), { when: Date.parse(retry.retryAt) });
+}
+
+async function clearTabRetry(channel) {
+  const all = await loadTabRetries();
+  if (channel in all) {
+    delete all[channel];
+    await chrome.storage.local.set({ [TAB_RETRY_KEY]: all });
+  }
+  await chrome.alarms.clear(retryAlarmName(channel));
+}
+
+/**
+ * Tới giờ đọc lại một kênh. Lượt quét khác đã đọc kênh ấy trong lúc chờ thì thôi. Đang có lượt khác chạy
+ * thì lùi một chút. Kênh không được quét (đã tắt, thiếu cấu hình) thì bỏ hẹn, để khung quầy khỏi báo mãi.
+ */
+async function retryClosedTab(channel) {
+  const pending = (await loadTabRetries())[channel];
+  if (!pending) return;
+  const problem = await runScan("đọc lại sau khi tab bị đóng", [channel]);
+  if (problem === BUSY_TEXT) {
+    const retryAt = new Date(Date.now() + TAB_RETRY_BUSY_MINUTES * 60000).toISOString();
+    await scheduleTabRetry(channel, { ...pending, retryAt });
+    return;
+  }
+  if ((await loadTabRetries())[channel]) await clearTabRetry(channel);
+}
+
+/**
+ * Chrome bỏ báo thức khi extension nạp lại (lên bản) và có khi cả lúc mở lại Chrome. Kênh còn chờ đọc lại
+ * thì hẹn lại; giờ đọc lại đã qua thì đọc sau một phút.
+ */
+async function rearmTabRetries() {
+  const now = Date.now();
+  for (const [channel, pending] of Object.entries(await loadTabRetries())) {
+    if (await chrome.alarms.get(retryAlarmName(channel))) continue;
+    const when = Math.max(Date.parse(pending.retryAt) || 0, now + TAB_RETRY_BUSY_MINUTES * 60000);
+    await scheduleTabRetry(channel, { ...pending, retryAt: new Date(when).toISOString() });
+  }
 }
 
 /** Giờ quét ổn gần nhất đã lưu của kênh; bản cũ chưa ghi `okAt` thì lượt cuối ổn là giờ ổn. */

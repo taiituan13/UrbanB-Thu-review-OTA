@@ -13,6 +13,12 @@ export const BANNER_TEXT = "Urban B đang đọc review trên trang này. Tab s�
 /** H-1973 a: tab quét bị đóng giữa chừng ⇒ đọc lại kênh ấy một lần, sau ngần này phút. */
 export const TAB_RETRY_MINUTES = 2;
 
+/**
+ * Tới giờ đọc lại mà đang có lượt quét khác chạy ⇒ lùi ngần này phút. Hằng kỹ thuật: lượt đang chạy có
+ * thể chính là lượt đọc được kênh ấy, khi đó lần lùi tới nơi thì không còn gì để đọc lại.
+ */
+export const TAB_RETRY_BUSY_MINUTES = 1;
+
 const RETRY_ALARM_PREFIX = "tabRetry:";
 
 /** Tên báo thức đọc lại của một kênh (chrome.alarms: service worker có thể ngủ, không dùng setTimeout). */

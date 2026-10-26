@@ -15,7 +15,7 @@ const MINE = {
 
 const machine = () => ({ config: { hotel: "Tên máy", enabled: { trip: true, go2joy: true } }, hubCollect: { at: 1 }, deviceId: "dev-test" });
 
-const state = { store: {}, fetched: [], scripts: [], created: [], groups: [], closeOn: [], groupApi: "ok", bannerApi: "ok" };
+const state = { store: {}, fetched: [], scripts: [], created: [], groups: [], closeOn: [], groupApi: "ok", bannerApi: "ok", tripResult: null };
 
 function event() {
   const fns = [];
@@ -123,6 +123,7 @@ globalThis.chrome = {
         return [{ result: true }];
       }
       if (!tabs.has(target.tabId)) throw new Error(`No tab with id: ${target.tabId}.`);
+      if (func.name === "scanTripInPage" && state.tripResult) return [{ result: state.tripResult }];
       return [{ result: { ok: true, reviews: [], total: 0, channelHotelId: "555", snapshots: [] } }];
     },
   },
@@ -153,7 +154,7 @@ function message(msg) {
 }
 
 function fresh(extra = {}) {
-  Object.assign(state, { store: machine(), fetched: [], scripts: [], created: [], groups: [], closeOn: [], groupApi: "ok", bannerApi: "ok", ...extra });
+  Object.assign(state, { store: machine(), fetched: [], scripts: [], created: [], groups: [], closeOn: [], groupApi: "ok", bannerApi: "ok", tripResult: null, ...extra });
   tabs.clear();
   alarms.clear();
 }
@@ -245,4 +246,150 @@ test("closedOutcome: lần đóng đầu hẹn đọc lại sau 2 phút; đã l�
   });
   assert.deepEqual(closedOutcome({ closed: true, pending: { retryAt: "x" }, now }), { retry: null });
   assert.deepEqual(closedOutcome({ closed: false, pending: null, now }), { retry: null });
+});
+
+// ---------- ② Bị đóng giữa chừng ⇒ đọc lại một lần sau 2 phút ----------
+
+const OLD_OK = { at: "2026-10-26T01:00:00.000Z", okAt: "2026-10-26T01:00:00.000Z", state: "ok", count: 3, message: "", error: null, hub: { ok: true } };
+
+/** Chờ việc chạy nền (báo thức không trả lời hứa) xong. */
+async function until(pred, what) {
+  for (let i = 0; i < 200; i++) {
+    if (pred()) return;
+    await new Promise((r) => realSetTimeout(r, 5));
+  }
+  assert.fail(`không xảy ra: ${what}`);
+}
+
+/** Báo thức đọc lại kêu; chờ lượt đọc lại xong (kênh hết chờ hoặc được hẹn lại). */
+async function fireRetry(channel) {
+  const before = JSON.stringify(state.store.tabRetry ?? {});
+  onAlarm.fire({ name: retryAlarmName(channel) });
+  await until(() => JSON.stringify(state.store.tabRetry ?? {}) !== before, "lượt đọc lại xong");
+  await until(() => !state.fetched.length || state.fetched.at(-1).url.includes("/api/extension/connection"), "báo sống sau lượt");
+}
+
+const tabsOf = (host) => state.scripts.filter((s) => String(s.url).includes(host)).map((s) => s.tabId);
+
+test("🔴 (a) tab bị đóng lần đầu ⇒ kênh không đỏ, ghi chờ đọc lại và hẹn báo thức sau đúng 2 phút", async () => {
+  fresh({ closeOn: ["ebooking.trip.com"] });
+  state.store.status = { trip: OLD_OK };
+  const t0 = Date.now();
+  assert.deepEqual(await message({ type: "scanNow" }), { ok: true });
+  assert.deepEqual(state.store.status.trip, OLD_OK, "kênh giữ nguyên kết quả cũ, chưa đỏ");
+  assert.equal(state.store.status.go2joy.state, "ok", "kênh khác vẫn đọc tiếp");
+  assert.equal("lastError" in state.store, false, "chưa thành lỗi gần nhất");
+  const pending = state.store.tabRetry.trip;
+  assert.equal(Date.parse(pending.retryAt) - Date.parse(pending.closedAt), 2 * 60000);
+  assert.ok(Date.parse(pending.closedAt) >= t0 - 5);
+  const alarm = alarms.get(retryAlarmName("trip"));
+  assert.equal(alarm.when, Date.parse(pending.retryAt));
+  assert.equal(alarm.periodInMinutes, undefined, "báo thức một lần, không lặp");
+});
+
+test("🔴 (b)(d) lần đọc lại cũng bị đóng ⇒ đỏ TAB như cũ, không hẹn đọc lại lần nữa", async () => {
+  fresh({ closeOn: ["ebooking.trip.com"] });
+  state.store.status = { trip: OLD_OK };
+  await message({ type: "scanChannel", channel: "trip" });
+  assert.ok(state.store.tabRetry.trip);
+  state.closeOn = ["ebooking.trip.com"];
+  state.created = [];
+  await fireRetry("trip");
+  assert.equal(state.created.length, 1, "lần đọc lại chỉ mở một tab, cho riêng kênh ấy");
+  assert.equal(tabsOf("go2joy").length, 0, "lần đọc lại chỉ quét kênh ấy");
+  const trip = state.store.status.trip;
+  assert.equal(trip.state, "error");
+  assert.equal(trip.error.code, "TRP-TAB");
+  assert.equal(trip.okAt, OLD_OK.okAt, "giữ giờ quét ổn cũ");
+  assert.equal(state.store.lastError.code, "TRP-TAB");
+  assert.deepEqual(state.store.tabRetry, {}, "hết chờ đọc lại");
+  assert.equal(alarms.has(retryAlarmName("trip")), false, "không còn báo thức đọc lại: chỉ đọc lại một lần");
+});
+
+// Bài Trip giả (dạng trường như test/normalize.test.mjs), không phải review thật.
+const TRIP_REVIEW = { commentId: 3001, userName: "C", addtime: "/Date(1791227994000+0800)/", content: "Nice", score: { avgScore: 9, maxScore: 10, subScores: [] } };
+
+test("🔴 (c) đọc lại đạt ⇒ kênh ok, hết chờ đọc lại", async () => {
+  fresh({ closeOn: ["ebooking.trip.com"], tripResult: { ok: true, reviews: [TRIP_REVIEW], total: 1, channelHotelId: "555", snapshots: [] } });
+  await message({ type: "scanChannel", channel: "trip" });
+  assert.equal(state.store.status?.trip, undefined);
+  await fireRetry("trip");
+  assert.equal(state.store.status.trip.state, "ok");
+  assert.equal(state.store.status.trip.count, 1);
+  assert.deepEqual(state.store.tabRetry, {});
+  assert.equal(alarms.has(retryAlarmName("trip")), false);
+  // Hợp đồng Hub không đổi: lượt đọc lại gửi như lượt hẹn giờ, không mang trường mới.
+  const ingest = state.fetched.filter((f) => f.url.endsWith("/api/ingest/reviews") && f.body.includes('"ingest"'));
+  assert.ok(ingest.length >= 1);
+  assert.match(ingest.at(-1).body, /"trigger":"schedule"/);
+  assert.ok(!state.fetched.some((f) => /tabRetry|retryAt|closedAt/.test(f.body)), "không gửi trạng thái chờ đọc lại lên Hub");
+});
+
+test("🔴 (d) lượt quét thường đọc được kênh trước giờ hẹn ⇒ báo thức tới nơi không đọc lại nữa", async () => {
+  fresh({ closeOn: ["ebooking.trip.com"] });
+  await message({ type: "scanChannel", channel: "trip" });
+  // Lượt bấm tay trước giờ hẹn: chính là lần đọc lại.
+  await message({ type: "scanChannel", channel: "trip" });
+  assert.equal(state.store.status.trip.state, "ok");
+  assert.deepEqual(state.store.tabRetry, {});
+  assert.equal(alarms.has(retryAlarmName("trip")), false);
+  state.created = [];
+  onAlarm.fire({ name: retryAlarmName("trip") });
+  await new Promise((r) => realSetTimeout(r, 30));
+  assert.equal(state.created.length, 0, "báo thức cũ (nếu còn) không mở tab");
+});
+
+test("🔴 (d) lượt quét thường bị đóng tab lần nữa trong lúc chờ ⇒ đó là lần thứ hai, đỏ TAB", async () => {
+  fresh({ closeOn: ["ebooking.trip.com", "ebooking.trip.com"] });
+  await message({ type: "scanChannel", channel: "trip" });
+  await message({ type: "scanChannel", channel: "trip" });
+  assert.equal(state.store.status.trip.error.code, "TRP-TAB");
+  assert.deepEqual(state.store.tabRetry, {});
+  assert.equal(alarms.has(retryAlarmName("trip")), false);
+});
+
+test("🔴 (f) lỗi không phải TAB ⇒ đỏ ngay, không hẹn đọc lại", async () => {
+  fresh({ tripResult: { ok: false, error: "Trip báo lỗi HTTP 500" } });
+  await message({ type: "scanChannel", channel: "trip" });
+  assert.equal(state.store.status.trip.state, "error");
+  assert.notEqual(state.store.status.trip.error.code, "TRP-TAB");
+  assert.equal(state.store.tabRetry, undefined);
+  assert.equal(alarms.has(retryAlarmName("trip")), false);
+});
+
+test("🔴 (f) cần đăng nhập lại ⇒ không hẹn đọc lại", async () => {
+  fresh();
+  const realUpdate = chrome.tabs.update;
+  chrome.tabs.update = async (id, { url }) => realUpdate(id, { url: url.includes("trip.com") ? "https://ebooking.trip.com/login/index" : url });
+  try {
+    await message({ type: "scanChannel", channel: "trip" });
+  } finally {
+    chrome.tabs.update = realUpdate;
+  }
+  assert.equal(state.store.status.trip.state, "login");
+  assert.equal(state.store.tabRetry, undefined);
+});
+
+test("tới giờ đọc lại mà đang có lượt quét khác chạy ⇒ lùi một phút, vẫn còn chờ đọc lại", async () => {
+  fresh({ closeOn: ["ebooking.trip.com"] });
+  await message({ type: "scanChannel", channel: "trip" });
+  const first = state.store.tabRetry.trip;
+  const busy = message({ type: "scanChannel", channel: "go2joy" });
+  onAlarm.fire({ name: retryAlarmName("trip") });
+  await until(() => state.store.tabRetry?.trip?.retryAt !== first.retryAt, "hẹn lại");
+  await busy;
+  const again = state.store.tabRetry.trip;
+  assert.equal(again.closedAt, first.closedAt);
+  assert.ok(Date.parse(again.retryAt) - Date.now() <= 60000 && Date.parse(again.retryAt) - Date.now() > 50000);
+  assert.equal(alarms.get(retryAlarmName("trip")).when, Date.parse(again.retryAt));
+});
+
+test("nạp lại extension (báo thức mất) ⇒ kênh còn chờ được hẹn lại", async () => {
+  fresh();
+  state.store.tabRetry = { trip: { closedAt: "2026-10-26T03:17:00.000Z", retryAt: "2026-10-26T03:19:00.000Z" } };
+  await Promise.all(chrome.runtime.onInstalled.fire({ reason: "update" }));
+  const alarm = alarms.get(retryAlarmName("trip"));
+  assert.ok(alarm, "có báo thức đọc lại");
+  assert.ok(alarm.when > Date.now(), "giờ hẹn đã qua ⇒ đọc lại sớm, không hẹn vào quá khứ");
+  assert.equal(state.store.tabRetry.trip.retryAt, new Date(alarm.when).toISOString());
 });

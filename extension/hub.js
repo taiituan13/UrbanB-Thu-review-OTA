@@ -70,7 +70,13 @@ export const NOT_SIGNED_IN_TEXT = "Chưa đăng nhập Hub, hoặc phiên Hub đ
  * biết; kiểu lạ thì không gửi.
  */
 // YC-199: lượt tự quét lại sau khi lễ tân đăng nhập kênh là lượt máy tự chạy, không phải người bấm ⇒ "schedule".
-export const HUB_TRIGGER = { "hẹn giờ": "schedule", "bấm tay": "manual", "tự quét sau đăng nhập": "schedule" };
+// YC-238: lượt đọc lại sau khi tab quét bị đóng cũng là lượt máy tự chạy ⇒ "schedule" (Hub đã biết mã này).
+export const HUB_TRIGGER = {
+  "hẹn giờ": "schedule",
+  "bấm tay": "manual",
+  "tự quét sau đăng nhập": "schedule",
+  "đọc lại sau khi tab bị đóng": "schedule",
+};
 
 /**
  * Thông tin lượt gửi kèm mỗi lô (hợp đồng `device.deviceId` · `run.trigger` · `run.id`, Hub đọc ở

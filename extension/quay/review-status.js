@@ -6,6 +6,12 @@
 // Tệp nằm trong quay/ để khung (content script) nhập được nếu cần; không nhập tệp ngoài quay/.
 
 /**
+ * YC-238 (H-1973 a): kênh đang chờ đọc lại vì tab quét bị đóng giữa chừng, `{ [kênh]: { closedAt, retryAt } }`
+ * trong chrome.storage.local. Service worker ghi; khung quầy đọc để báo một dòng.
+ */
+export const TAB_RETRY_KEY = "tabRetry";
+
+/**
  * @param {object} input
  * @param {Record<string, any>} input.status — `status` theo kênh (config.js loadStatus)
  * @param {string[]} input.order — thứ tự kênh (config.js CHANNELS)
