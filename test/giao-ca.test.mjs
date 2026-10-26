@@ -547,6 +547,15 @@ test("🔴 YC-246 PMS chưa đăng nhập, hoặc không có ca đang mở ⇒ k
   }
 });
 
+test("🔴 YC-246 hai tab PMS cùng một khách sạn ⇒ đọc cả hai nhưng chỉ gửi Hub một lượt", async () => {
+  fresh({ tripResult: TRIP_OK, pmsTabs: [PMS_TAB, { ...PMS_TAB, id: 901, url: "https://pms.ezcloudhotel.com/#/shift" }] });
+  const page = connect();
+  page.scan("K7M2PU");
+  await until(() => page.results().length, "kết quả");
+  assert.equal(state.pmsReads.length, 2);
+  assert.equal(readingPosts().length, 1);
+});
+
 test("🔴 YC-246 tab PMS không chạy được mã (trang lỗi) ⇒ không gửi gì, kết quả quét vẫn tới trang", async () => {
   fresh({ tripResult: TRIP_OK, pmsTabs: [{ ...PMS_TAB, url: "chrome-error://chromewebdata/" }] });
   const page = connect();
