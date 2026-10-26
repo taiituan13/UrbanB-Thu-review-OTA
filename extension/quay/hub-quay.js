@@ -417,16 +417,69 @@ export function hhmm(at) {
   return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
 }
 
+/** "09:35" nếu cùng ngày với `now`, khác ngày ⇒ "09:35 ngày 25/10" (lời báo token giữ qua nhiều ngày). */
+export function whenText(at, now) {
+  const t = hhmm(at);
+  if (!t) return "";
+  const d = new Date(at);
+  const n = new Date(now);
+  if (d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate()) return t;
+  return `${t} ngày ${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * Câu lỗi Apps Script trước khi hiện cho lễ tân: bỏ mọi thứ trông như token, khoá, URL hay email,
+ * cắt còn 200 ký tự. Apps Script không trả token trong câu lỗi; đây là chốt chặn thứ hai.
+ */
+export function scrubSecrets(text) {
+  return String(text ?? "")
+    .replace(/eyJ[\w-]+\.[\w-]+\.?[\w-]*/g, "…")
+    .replace(/https?:\/\/\S+/gi, "…")
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "…")
+    .replace(/[A-Za-z0-9_+/=-]{32,}/g, "…")
+    .trim()
+    .slice(0, 200);
+}
+
+const TOKEN_WHAT = { ezcloud: "phiên đăng nhập PMS", go2joy: "phiên đăng nhập Go2Joy" };
+const TOKEN_REOPEN = { ezcloud: "PMS", go2joy: "trang HA Go2Joy" };
+
+/**
+ * Lời báo bền về phiên đăng nhập (token) máy gửi Google Sheet của khách sạn (YC-240 ①, H-1980 a).
+ * `tokens` = { ezcloud, go2joy }, mỗi mục là lượt đẩy gần nhất `{ at, outcome, message, codeRejected }`
+ * (sw.js flushToken). Bị từ chối hoặc chờ xác nhận ⇒ một dòng, giữ tới lượt đẩy kế được lưu
+ * (saved / unchanged); không tự hết theo giờ. Trả [{ kind, tone, text, short, at }], lỗi đứng trước.
+ */
+export function tokenAlerts({ tokens, now = Date.now() } = {}) {
+  const out = [];
+  for (const kind of ["ezcloud", "go2joy"]) {
+    const t = tokens?.[kind];
+    if (!t?.at) continue;
+    const when = whenText(t.at, now);
+    const what = TOKEN_WHAT[kind];
+    const detail = scrubSecrets(t.message);
+    if (t.outcome === "rejected" && t.codeRejected)
+      out.push({ kind, tone: "err", at: t.at, short: "Mã kết nối bị từ chối", text: `Booking OTA: Google Sheet của khách sạn không nhận mã kết nối, nên ${what} máy gửi lúc ${when} chưa được lưu. Máy đã báo Hub, báo Quản trị hệ thống nhập lại mã.` });
+    else if (t.outcome === "rejected")
+      out.push({ kind, tone: "err", at: t.at, short: kind === "go2joy" ? "Phiên Go2Joy bị từ chối" : "Phiên PMS bị từ chối", text: `Booking OTA: Google Sheet của khách sạn không nhận ${what} máy gửi lúc ${when}. Mở lại hoặc đăng nhập lại ${TOKEN_REOPEN[kind]} để máy gửi phiên mới.${detail ? ` Chi tiết: ${detail}` : ""}` });
+    else if (t.outcome === "pending")
+      out.push({ kind, tone: "warn", at: t.at, short: kind === "go2joy" ? "Phiên Go2Joy chờ xác nhận" : "Phiên PMS chờ xác nhận", text: `Booking OTA: ${what[0].toUpperCase() + what.slice(1)} máy gửi lúc ${when} đang chờ Quản lý cơ sở xác nhận ở bước 2 trên Google Sheet của khách sạn.` });
+  }
+  return [...out.filter((x) => x.tone === "err"), ...out.filter((x) => x.tone !== "err")];
+}
+
 /**
  * Mô hình nút gập (H-1246 a: đổi màu, không tự mở).
  * `booking`: { issues, count } | null · `indicators`: { level, exceeded, at, stale } | null.
+ * `token`: lời báo phiên đăng nhập đứng đầu (tokenAlerts) | null: nút gập nói luôn, lễ tân khỏi mở khung mới thấy.
  * Trả `segs` theo thứ tự hiện: [{ text, bad?, dot? }].
  */
-export function dockModel({ session, booking, indicators }) {
+export function dockModel({ session, booking, indicators, token = null }) {
   if (session === "out") return { segs: [{ dot: "off", text: "chưa đăng nhập" }] };
   if (session === "nobranch") return { segs: [{ dot: "off", text: "chưa biết chi nhánh" }] };
   const segs = [];
   if (booking) segs.push({ text: booking.issues ? `Booking ${booking.issues} lỗi` : `Booking ${booking.count}`, bad: booking.issues > 0 });
+  if (token) segs.push({ text: token.short, bad: token.tone === "err" });
   if (session === "expired") segs.push({ dot: "off", text: "Chỉ báo dừng cập nhật" });
   else if (!indicators) segs.push({ dot: "off", text: "Chỉ báo …" });
   else if (indicators.stale) segs.push({ dot: "cy", text: `Chỉ báo số ${hhmm(indicators.at)}` });
@@ -441,7 +494,7 @@ export function dockModel({ session, booking, indicators }) {
  * Mô hình mục "Khung trên PMS" của popup. Mỗi phần một dòng con có chấm riêng, để khi hỏng lễ tân
  * đọc được phần nào hỏng. `snap` là ảnh trạng thái service worker giữ (background.js quayStatus).
  */
-export function popupPmsRow(snap) {
+export function popupPmsRow(snap, now = Date.now()) {
   const session = snap?.session ?? "out";
   if (session === "out")
     return {
@@ -463,6 +516,8 @@ export function popupPmsRow(snap) {
   else if (b?.error) subs.push({ tone: "err", text: `Booking OTA và Khoá G2J: ${b.error}`, at: b.at });
   else if (b) subs.push({ tone: b.issues ? "warn" : "ok", text: `Booking OTA và Khoá G2J: ${b.count} booking${b.issues ? `, ${b.issues} booking lỗi` : ""}${snap.tokenAt ? `. Đã gửi phiên đăng nhập PMS lúc ${hhmm(snap.tokenAt)}` : ""}`, at: b.at });
   else subs.push({ tone: "off", text: "Booking OTA và Khoá G2J: chưa mở PMS", at: null, pmsClosed: true });
+  // YC-240: phiên đăng nhập gửi Google Sheet bị từ chối / chờ xác nhận ⇒ dòng riêng, giữ tới khi lưu được.
+  if (session !== "nobranch") for (const a of tokenAlerts({ tokens: snap.tokens, now })) subs.push({ tone: a.tone, text: a.text, at: a.at });
 
   const ind = snap.indicators;
   if (session === "expired") subs.push({ tone: "warn", text: "Chỉ báo: dừng cập nhật tới khi đăng nhập lại", at: ind?.at });

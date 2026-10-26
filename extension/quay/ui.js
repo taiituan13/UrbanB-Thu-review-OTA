@@ -260,6 +260,17 @@ export function mount({ bridge, plugins = [] } = {}) {
   // đóng (hoặc đọc lại xong) ghi `tabRetry` (YC-238).
   chrome.storage?.onChanged?.addListener((changes, area) => {
     if (area === "local" && (changes.status || changes[TAB_RETRY_KEY])) loadReview();
+    // Lượt đẩy token xong (sw.js flushToken ghi quayTokenAt:<kind>) ⇒ dòng bền về phiên đăng nhập vẽ lại (YC-240).
+    if (area === "local" && S.view) {
+      let changed = false;
+      for (const kind of ["ezcloud", "go2joy"]) {
+        const c = changes[`quayTokenAt:${kind}`];
+        if (!c) continue;
+        S.view.tokens = { ...(S.view.tokens ?? {}), [kind]: c.newValue ?? null };
+        changed = true;
+      }
+      if (changed) render();
+    }
   });
 
   // Tin từ service worker: lời báo đẩy token (userscript: notify).
@@ -293,6 +304,17 @@ export function mount({ bridge, plugins = [] } = {}) {
       branchName: v.branch?.name,
       hasCache: Boolean(v.branch),
     });
+  }
+
+  /** Lời báo bền về phiên đăng nhập gửi Google Sheet (H.tokenAlerts), lỗi đứng trước. */
+  function tokenAlerts() {
+    return H.tokenAlerts({ tokens: S.view?.tokens });
+  }
+
+  function tokenAlertsHTML() {
+    return tokenAlerts()
+      .map((a) => `<div class="qban ${a.tone === "err" ? "bad" : "warn"}" role="status" data-token-alert="${esc(a.kind)}">${esc(a.text)}</div>`)
+      .join("");
   }
 
   function note(n) {
@@ -501,13 +523,13 @@ export function mount({ bridge, plugins = [] } = {}) {
       body = pluginBody;
       ft = plugins.map((p) => p.footer?.()).find(Boolean) ?? "";
     } else if (S.tab === "bookings") {
-      body = bookingsTab();
+      body = tokenAlertsHTML() + bookingsTab();
       ft = `<div class="qf-ft"><span class="sp">${esc(tokenLine())}</span><button class="lk" data-act="refresh">Làm mới</button></div>`;
     } else if (S.tab === "board") {
-      body = boardTab();
+      body = tokenAlertsHTML() + boardTab();
       ft = `<div class="qf-ft"><span class="sp">Bảng khoá Go2Joy ${B.BOARD_DAYS} ngày tới</span><button class="lk" data-act="refresh">Làm mới</button></div>`;
     } else {
-      body = todoTab();
+      body = tokenAlertsHTML() + todoTab();
       const m = indModel();
       const hub = v?.session !== "expired" && m ? `<a href="${esc(H.resultsUrl(S.ind?.origin || v?.origin || "", m.branchId))}" target="_blank" rel="noopener">Chỉ báo trên Hub ↗</a>` : "";
       const when = [S.recent?.at ? `Booking lượt ${H.hhmm(S.recent.at)}` : "", m && v?.session !== "expired" ? I.lastRunText(m.lastRunAt) : ""].filter(Boolean).join(" · ");
@@ -530,7 +552,8 @@ export function mount({ bridge, plugins = [] } = {}) {
       const booking = matches ? { issues: B.countIssues(matches), count: matches.length } : null;
       const m = indModel();
       const indicators = m ? { level: m.level, exceeded: m.exceeded.length, at: S.ind.at, stale: S.ind.state !== "ok" } : null;
-      segs = H.UNREACHABLE.has(session) && !v.branch ? [{ dot: "off", text: "không gọi được Hub" }] : H.dockModel({ session: H.UNREACHABLE.has(session) ? "ok" : session, booking, indicators }).segs;
+      const token = tokenAlerts()[0] ?? null;
+      segs = H.UNREACHABLE.has(session) && !v.branch ? [{ dot: "off", text: "không gọi được Hub" }] : H.dockModel({ session: H.UNREACHABLE.has(session) ? "ok" : session, booking, indicators, token }).segs;
     }
     const segHTML = segs.map((s) => `<span class="seg ${s.bad ? "bad" : ""}">${s.dot ? `<span class="dlv ${s.dot}"></span>` : ""}${esc(s.text)}</span>`).join("");
     const before = plugins.map((p) => p.dockBefore?.() ?? "").join("");

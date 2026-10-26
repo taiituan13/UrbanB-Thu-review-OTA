@@ -465,7 +465,8 @@ async function flushToken(kind) {
   if (reply.outcome === "bad-reply" || reply.outcome === "retry") return;
   const ok = reply.outcome !== "rejected";
   await set(K.memo, B.remember(memo, key, ok ? "ok" : "rejected", ok ? "" : reply.message, now()));
-  await set(K.tok(kind), { at: now(), outcome: reply.outcome, message: reply.message, hotel: reply.hotel });
+  // Lượt đẩy gần nhất: khung và popup giữ dòng "bị từ chối / chờ xác nhận" theo bản ghi này tới lượt lưu được (YC-240 ①).
+  await set(K.tok(kind), { at: now(), outcome: reply.outcome, message: reply.message, hotel: reply.hotel, codeRejected: Boolean(reply.codeRejected) });
   // YC-157 · H-1535 a: Hub hiện lần đẩy phiên PMS gần nhất của máy. Không chặn luồng chính.
   sendHeartbeat({ tokenPush: C.tokenPushOf(kind, reply.outcome, now()) }).catch(() => {});
   if (kind === "ezcloud" && ok) await patchSnap({ tokenAt: now() });
@@ -550,7 +551,8 @@ export async function statusForPopup() {
   // Dò phiên không kèm mã ⇒ MISSING_HOTEL ⇔ đã đăng nhập; trạng thái cơ sở lấy theo lượt khung gần nhất.
   if (session === "nobranch") session = snap.session === "nobranch" ? "nobranch" : "ok";
   if (cls.state === "net") session = snap.session ?? "out";
-  return { ...snap, session, origin, net: cls.state === "net" };
+  const tokens = { ezcloud: (await get(K.tok("ezcloud"))) ?? null, go2joy: (await get(K.tok("go2joy"))) ?? null };
+  return { ...snap, session, origin, net: cls.state === "net", tokens };
 }
 
 /**
