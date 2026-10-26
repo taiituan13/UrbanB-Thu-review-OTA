@@ -54,3 +54,16 @@ Người gửi là người đang đăng nhập Hub trên máy quầy (cookie ph
 
 Hub phải lên trước hoặc cùng lúc. Extension lên trước thì lượt Bàn giao nằm trong hàng chờ (tối đa 3 ngày) và
 được gửi khi Hub có route; khung quầy không báo lỗi.
+
+## Lượt 2 (27/10/2026): đọc số lúc Quét, dọn nhóm tab (YC-246 Q1 a · Q2 b, YC-249)
+
+Báo cáo đầy đủ nằm phía Hub: `UrbanB/_bmad-output/implementation-artifacts/BAO-CAO-LAN-yc246-doc-so-luc-quet.md`.
+
+- `6852012`, `02c026e`: YC-249. Lượt quét xong, hỏng hay bị cắt ngang thì dọn nhóm tab quét. Tab lạ chỉ được tháo
+  ra khỏi nhóm, không bị đóng.
+- `d65be7e`: lúc lễ tân bấm Quét, extension đọc ca ezCloud đang mở (`GetCurrentShift`) và gửi `kind: "reading"`
+  gắn mã lượt quét. Máy không có tab PMS thì extension tự mở một tab nền để đọc.
+- `0c387c5`: test chống gửi trùng khi hai tab PMS cùng một khách sạn.
+- `ffeba7f`: hợp đồng ghi chỗ đặt luật lượt đọc phía Hub.
+- Bản vẫn là 1.5.5. `npm test` 408/408 xanh. Đột biến 8/8 đỏ.
+- **Chưa đo trên PMS thật:** đọc bằng phiên của trang, và tab nền tự vào trang có phiên.
