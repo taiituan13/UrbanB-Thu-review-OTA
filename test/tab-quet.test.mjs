@@ -123,6 +123,13 @@ globalThis.chrome = {
         return [{ result: true }];
       }
       if (!tabs.has(target.tabId)) throw new Error(`No tab with id: ${target.tabId}.`);
+      if (func.name === state.closeDuringScan) {
+        // Tab bị đóng lúc bộ quét đang chạy trong trang: Chrome trả kết quả rỗng, không ném.
+        state.closeDuringScan = null;
+        tabs.delete(target.tabId);
+        tabRemoved.fire(target.tabId, {});
+        return [{ result: undefined }];
+      }
       if (func.name === "scanTripInPage" && state.tripResult) return [{ result: state.tripResult }];
       return [{ result: { ok: true, reviews: [], total: 0, channelHotelId: "555", snapshots: [] } }];
     },
@@ -154,7 +161,7 @@ function message(msg) {
 }
 
 function fresh(extra = {}) {
-  Object.assign(state, { store: machine(), fetched: [], scripts: [], created: [], groups: [], closeOn: [], groupApi: "ok", bannerApi: "ok", tripResult: null, ...extra });
+  Object.assign(state, { store: machine(), fetched: [], scripts: [], created: [], groups: [], closeOn: [], groupApi: "ok", bannerApi: "ok", tripResult: null, closeDuringScan: null, ...extra });
   tabs.clear();
   alarms.clear();
 }
@@ -346,6 +353,17 @@ test("🔴 (d) lượt quét thường bị đóng tab lần nữa trong lúc ch
   assert.equal(state.store.status.trip.error.code, "TRP-TAB");
   assert.deepEqual(state.store.tabRetry, {});
   assert.equal(alarms.has(retryAlarmName("trip")), false);
+});
+
+test("🔴 (a) tab bị đóng lúc bộ quét đang chạy (câu lỗi ra 'chuyển sang trang khác') ⇒ vẫn là tab bị đóng, hẹn đọc lại", async () => {
+  fresh({ closeDuringScan: "scanTripInPage" });
+  await message({ type: "scanChannel", channel: "trip" });
+  assert.equal(state.store.status?.trip, undefined, "chưa đỏ");
+  assert.ok(state.store.tabRetry.trip);
+  // Lần đọc lại cũng bị đóng như vậy ⇒ đỏ mã TAB, không phải PAGE.
+  state.closeDuringScan = "scanTripInPage";
+  await fireRetry("trip");
+  assert.equal(state.store.status.trip.error.code, "TRP-TAB");
 });
 
 test("🔴 (f) lỗi không phải TAB ⇒ đỏ ngay, không hẹn đọc lại", async () => {
