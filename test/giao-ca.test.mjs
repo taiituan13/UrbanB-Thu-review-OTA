@@ -465,6 +465,18 @@ test("🔴 (f) tin gửi trang không chứa token, mã bí mật, URL Sheet, em
   assert.deepEqual([...keys].filter((k) => !allowed.has(k)), []);
 });
 
+// ---------- ② manifest: lệnh quét chỉ nhận trên gốc Hub thật ----------
+
+test("🔴 ② hub-bridge.js chỉ nạp trên đúng các gốc Hub (env.js HUB_ORIGINS), không mở thêm gốc, không nhận tin từ extension khác", () => {
+  const manifest = JSON.parse(readFileSync(new URL("../extension/manifest.json", import.meta.url), "utf8"));
+  const entries = manifest.content_scripts.filter((c) => c.js.includes("hub-bridge.js"));
+  assert.equal(entries.length, 1);
+  assert.deepEqual([...entries[0].matches].sort(), HUB_ORIGINS.map((o) => `${o}/*`).sort());
+  assert.ok(!entries[0].all_frames, "chỉ khung chính");
+  assert.ok(!("externally_connectable" in manifest), "không mở cửa cho trang hay extension khác gọi thẳng");
+  for (const o of HUB_ORIGINS) assert.ok(manifest.host_permissions.includes(`${o}/*`));
+});
+
 // ---------- Phần thuần ----------
 
 test("parseRequestId: chỉ chuỗi ngắn [A-Za-z0-9_-]", () => {
