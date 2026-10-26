@@ -6,6 +6,7 @@ import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import * as H from "../extension/quay/hub-quay.js";
+import { counterProblems } from "../extension/quay/counter-problems.js";
 
 const AT = new Date(2026, 9, 26, 9, 5).getTime(); // 09:05 giờ máy
 const SEC = 1000;
@@ -105,6 +106,7 @@ const local = {
 const sent = []; // tin service worker gửi các tab PMS
 const posts = []; // thân POST tới Web App
 const replies = { push: [], get: null };
+const hubPosts = []; // thân POST tới Hub (lượt báo sống mang `problems`)
 
 globalThis.chrome = {
   storage: { local, session: { get: async () => ({}), set: async () => {} }, onChanged: event() },
@@ -132,6 +134,7 @@ globalThis.fetch = async (url, init = {}) => {
     return json(replies.get);
   }
   // Mọi route Hub: phiên còn, cơ sở UB1 có mã kết nối.
+  if (init.method === "POST" && typeof init.body === "string") hubPosts.push(JSON.parse(init.body));
   return json({ ok: true, branch: { id: "br_ub1", name: "UB1" }, otaSync: OTA, branches: [] });
 };
 
@@ -311,4 +314,50 @@ test("Khung trên PMS lấy sức khoẻ token từ lượt đọc gần nhất 
   assert.match(ui, /H\.latestHealth\(S\.recent\?\.ok !== false \? S\.recent\?\.tokenHealth : null, S\.board\?\.ok !== false \? S\.board\?\.tokenHealth : null\)/);
   assert.match(ui, /tokenHealth: c\.bookings\.tokenHealth \?\? null/);
   assert.match(ui, /tokenHealth: H\.readTokenHealth\(c\.board\.result, c\.board\.at\)/);
+});
+
+// ---------- ③ Báo Hub: dùng lại TOKEN_REJECTED (điều phối duyệt lối a) ----------
+
+const tokenProblem = (args) => counterProblems(args).find((p) => p.code === "TOKEN_REJECTED") ?? null;
+
+test("③ auth-failed ⇒ TOKEN_REJECTED, detail đọc được thành câu, since = lúc ezCloud từ chối", () => {
+  const h = H.readTokenHealth(health({ state: "auth-failed", authFailedAt: FAILED_AT, waitingRows: 7 }), AT);
+  assert.deepEqual(tokenProblem({ snap: { tokenHealth: h } }), { code: "TOKEN_REJECTED", detail: "ezcloud, đã lưu rồi bị ezCloud từ chối, 7 đơn chờ", since: FAILED_AT });
+  // Không có đơn chờ ⇒ không nói số.
+  const h0 = H.readTokenHealth(health({ state: "auth-failed", authFailedAt: FAILED_AT, waitingRows: 0 }), AT);
+  assert.equal(tokenProblem({ snap: { tokenHealth: h0 } }).detail, "ezcloud, đã lưu rồi bị ezCloud từ chối");
+  // Cùng lúc Go2Joy bị từ chối lúc đẩy ⇒ một mã, hai phần, since sớm nhất.
+  const both = tokenProblem({ snap: { tokenHealth: h }, tokenAt: { go2joy: { outcome: "rejected", at: AT } } });
+  assert.equal(both.detail, "go2joy; ezcloud, đã lưu rồi bị ezCloud từ chối, 7 đơn chờ");
+  assert.equal(both.since, FAILED_AT);
+  assert.equal(counterProblems({ snap: { tokenHealth: h }, tokenAt: { go2joy: { outcome: "rejected", at: AT } } }).filter((p) => p.code === "TOKEN_REJECTED").length, 1);
+});
+
+test("③ ok, pending, missing, không có trường, hay đã lưu token mới sau lượt đọc ⇒ không có TOKEN_REJECTED", () => {
+  for (const state of ["ok", "pending", "missing"]) {
+    assert.equal(tokenProblem({ snap: { tokenHealth: H.readTokenHealth(health({ state, waitingRows: 3 }), AT) } }), null, state);
+  }
+  assert.equal(tokenProblem({ snap: { tokenHealth: null } }), null);
+  assert.equal(tokenProblem({ snap: {} }), null);
+  assert.equal(tokenProblem({}), null);
+  const h = H.readTokenHealth(health({ state: "auth-failed", authFailedAt: FAILED_AT, waitingRows: 7 }), AT);
+  assert.equal(tokenProblem({ snap: { tokenHealth: h }, tokenAt: { ezcloud: { outcome: "saved", at: AT + SEC } } }), null);
+  // Lượt đẩy bị từ chối vẫn giữ dạng cũ (Hub đã đọc dạng này).
+  assert.deepEqual(tokenProblem({ tokenAt: { ezcloud: { outcome: "rejected", at: AT } } }), { code: "TOKEN_REJECTED", detail: "ezcloud", since: new Date(AT).toISOString() });
+});
+
+test("③ sw.js: Sheet báo auth-failed ⇒ lượt báo sống lên Hub mang TOKEN_REJECTED; lượt đọc kế ok ⇒ hết", async () => {
+  const lastProblems = () => [...hubPosts].reverse().find((b) => Array.isArray(b.problems))?.problems ?? null;
+  replies.get = { ok: true, result: health({ state: "auth-failed", savedAt: null, authFailedAt: FAILED_AT, waitingRows: 7, message: "x" }) };
+  await SW.bookings(HOTEL, "");
+  await settle();
+  const p = lastProblems()?.find((x) => x.code === "TOKEN_REJECTED");
+  assert.ok(p, "Hub nhận TOKEN_REJECTED");
+  assert.equal(p.detail, "ezcloud, đã lưu rồi bị ezCloud từ chối, 7 đơn chờ");
+  for (const b of hubPosts) assert.ok(!JSON.stringify(b).includes(OTA.pushKey) && !JSON.stringify(b).includes(WEB_APP), "không gửi khoá, URL Web App");
+
+  replies.get = { ok: true, result: health({ state: "ok", waitingRows: 0 }) };
+  await SW.bookings(HOTEL, "");
+  await settle();
+  assert.ok(!lastProblems().some((x) => x.code === "TOKEN_REJECTED"));
 });

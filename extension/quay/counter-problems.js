@@ -11,6 +11,7 @@
 // Nguồn từng mã: _bmad-output/implementation-artifacts/DO-yc193-loi-may-quay.md (repo UrbanB, làn yc192).
 
 import { updateNotice } from "../update.js";
+import { healthIsCurrent } from "./hub-quay.js";
 
 /** Khoá giữ lỗi mà service worker biết lúc gọi nhưng trước đây không lưu: `{ board?, lock?, indicators? }`. */
 export const FAULTS_KEY = "quayFaults";
@@ -77,8 +78,17 @@ export function counterProblems({
   if (faults?.board) add("LOCK_BOARD_FAILED", faults.board.message, faults.board.at);
   if (faults?.lock) add("G2J_LOCK_FAILED", faults.lock.message, faults.lock.at);
   if (faults?.indicators) add("INDICATORS_UNREACHABLE", null, faults.indicators.at);
+  // TOKEN_REJECTED: lượt đẩy bị Sheet từ chối, hoặc (YC-240 ③, điều phối duyệt lối a) Sheet báo token ezCloud đã
+  // lưu rồi bị ezCloud từ chối. Hub hiện "Loại phiên: {detail}" ⇒ detail viết thành câu đọc được.
   const rejected = ["ezcloud", "go2joy"].filter((k) => tokenAt?.[k]?.outcome === "rejected");
-  if (rejected.length) add("TOKEN_REJECTED", rejected.join(","), tokenAt[rejected[0]]?.at);
+  const health = snap?.tokenHealth;
+  const dead = health?.state === "auth-failed" && healthIsCurrent(health, tokenAt);
+  if (rejected.length || dead) {
+    const parts = rejected.length ? [rejected.join(",")] : [];
+    if (dead) parts.push(`ezcloud, đã lưu rồi bị ezCloud từ chối${health.waitingRows > 0 ? `, ${health.waitingRows} đơn chờ` : ""}`);
+    const since = [rejected.length ? iso(tokenAt[rejected[0]]?.at) : null, dead ? iso(health.authFailedAt) : null].filter(Boolean).sort()[0] ?? null;
+    add("TOKEN_REJECTED", parts.join("; "), since);
+  }
   if (g2jAsk) add("G2J_BRANCH_NOT_CHOSEN");
   if (snap?.notifications?.state === "net" || snap?.notifications?.state === "server") {
     add("NOTIFICATIONS_UNREACHABLE", null, snap.notifications.at);

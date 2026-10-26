@@ -466,6 +466,16 @@ export function latestHealth(...list) {
   return list.filter((h) => h && Number.isFinite(h.at)).sort((a, b) => b.at - a.at)[0] ?? null;
 }
 
+/**
+ * Bản đọc sức khoẻ còn đúng không: máy lưu được (`saved`) token ezCloud mới sau lượt đọc ⇒ bản đọc đã cũ,
+ * chờ lượt đọc kế. `unchanged` không tính: có thể chính token đã chết được gửi lại.
+ */
+export function healthIsCurrent(health, tokens) {
+  if (!health) return false;
+  const ez = tokens?.ezcloud;
+  return !(ez?.outcome === "saved" && ez.at > health.at);
+}
+
 /** Dòng cho sức khoẻ token ezCloud; `ok` ⇒ null. */
 function healthAlert(h, now) {
   const waiting = h.waitingRows ? `${h.waitingRows} booking đang chờ vào ezCloud` : "";
@@ -491,9 +501,7 @@ function healthAlert(h, now) {
  */
 export function tokenAlerts({ tokens, health = null, now = Date.now() } = {}) {
   const out = [];
-  const ez = tokens?.ezcloud;
-  const savedSince = health && ez?.outcome === "saved" && ez.at > health.at;
-  const fromHealth = health && !savedSince ? healthAlert(health, now) : null;
+  const fromHealth = healthIsCurrent(health, tokens) ? healthAlert(health, now) : null;
   if (fromHealth) out.push(fromHealth);
   for (const kind of ["ezcloud", "go2joy"]) {
     const t = tokens?.[kind];
