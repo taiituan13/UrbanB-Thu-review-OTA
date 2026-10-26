@@ -89,7 +89,9 @@ lên chỉ cho biết từng mục lấy từ đâu.
    (hoặc mở màn **Cài extension** trên Hub). Khối Cài đặt, mục **Thu review OTA**, cho biết máy đã nhận gì.
 4. Bấm **Thử Hub** (tới bản 1.5.1 nút này là **Thử Sheet**). Đường lên Hub thông thì hiện "Hub: ổn".
 5. Bấm **Quét review ngay**. Extension mở từng extranet trong một tab nền, đọc review, đóng
-   tab, rồi gửi lên Hub. Mỗi kênh mất khoảng nửa phút đến vài phút.
+   tab, rồi gửi lên Hub. Mỗi kênh mất khoảng nửa phút đến vài phút. Từ bản 1.5.3 tab ấy nằm trong
+   nhóm tab xanh **Urban B · đang đọc review** và đầu trang có dải chữ xanh dặn đừng đóng. Lỡ đóng
+   giữa chừng thì khung Urban B trên PMS báo một dòng và máy tự đọc lại kênh ấy một lần sau 2 phút.
 
 Sau đó extension tự quét theo số giờ đã đặt (mặc định 6 giờ), miễn là Chrome đang mở.
 

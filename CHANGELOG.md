@@ -5,6 +5,25 @@ quản lý thấy gì khác. Máy đã cài không tự lên bản: khi có bả
 "Có bản mới …" và phải có người chạy lại lệnh cài (xem [docs/cai-tu-xa.md](docs/cai-tu-xa.md) mục
 Cập nhật).
 
+## 1.5.3
+
+**Tab máy tự mở để đọc review: lễ tân nhận ra được, lỡ đóng thì máy tự đọc lại** (YC-238, H-1972 a,
+H-1973 a). Tới 1.5.2 tab nền không có nhãn gì, lễ tân không biết là của máy nên đóng giữa chừng, kênh
+báo đỏ `TAB` (ca thật: The Passion Airport, `BKG-TAB` lúc 10:17 ngày 26/10/2026).
+
+- Tab quét nằm trong nhóm tab màu xanh tên **Urban B · đang đọc review** trên thanh tab. Các kênh của
+  cùng một lượt quét dùng chung một nhóm. Tab vẫn mở nền, không giật tiêu điểm của lễ tân.
+- Đầu trang đang đọc có dải chữ xanh: "Urban B đang đọc review trên trang này. Tab sẽ tự đóng khi đọc
+  xong, xin đừng đóng tab." Dải chữ không bắt chuột, không che nút của trang.
+- Lỡ đóng tab giữa chừng: kênh chưa báo đỏ. Khung Urban B trên PMS, khối Thu review, báo một dòng "Bạn
+  vừa đóng tab … lúc máy đang đọc review. Máy sẽ đọc lại lúc hh:mm." (khung đang gập thì dòng ấy hiện ở
+  dải nhắc dưới trang). Sau 2 phút máy tự đọc lại riêng kênh ấy, một lần. Đạt thì kênh xanh và dòng
+  tự hết. Lần đọc lại cũng hỏng thì báo lỗi như trước: đỏ, mã `TAB` hoặc mã thật của lần ấy.
+- Lời giải thích của mã `TAB` nay nói máy đã tự đọc lại mà tab vẫn bị đóng, và chỉ chỗ nhóm tab xanh.
+- Extension xin thêm quyền `tabGroups`. Nhóm tab hay dải chữ không làm được (cửa sổ đặc biệt, trang
+  chặn) thì máy vẫn đọc review bình thường.
+- Hợp đồng gửi Hub không đổi. Lượt đọc lại gửi lên Hub như lượt hẹn giờ; việc chờ đọc lại không gửi Hub.
+
 ## 1.5.2
 
 **Review chỉ lên Hub, không ghi Google Sheet review nữa** (YC-228). Tới 1.5.1, Sheet hỏng (sai URL,
