@@ -30,6 +30,24 @@ phần của extension.
 đặt có thêm link **Xem video hướng dẫn cập nhật**. Bấm vào là video mở ở tab mới, người ở quầy xem rồi
 làm theo, không phải hỏi ai.
 
+**Quầy biết khi phiên đăng nhập PMS gửi Google Sheet bị từ chối hoặc đã chết** (YC-240, H-1980 a). Tới
+1.5.3 lời "bị từ chối" chỉ hiện 10 giây và chỉ lần đầu; token đã lưu rồi mới chết thì máy không biết gì
+(ca thật: Linh Đan Phú Nhuận, ngày 26/10/2026 có 7 booking Go2Joy không vào được ezCloud mà quầy không
+hay).
+
+- Google Sheet không nhận phiên đăng nhập PMS (hoặc Go2Joy) máy vừa gửi: khung Urban B trên PMS (đầu
+  mọi tab), nút gập và ô bật lên giữ một dòng đỏ nói giờ gửi và việc phải làm (mở lại hoặc đăng nhập lại
+  PMS), tới khi máy gửi được phiên mới. Lời báo 10 giây lần đầu vẫn như cũ.
+- Phiên đăng nhập đang chờ Quản lý cơ sở xác nhận ở bước 2 trên Google Sheet: dòng vàng, giữ tới khi
+  được xác nhận.
+- Google Sheet báo ezCloud đã từ chối phiên đăng nhập đã lưu: dòng đỏ nói giờ bị từ chối, số booking
+  đang chờ vào ezCloud, và bảo mở lại hoặc đăng nhập lại PMS. Sheet báo chưa có phiên đăng nhập: bảo báo
+  Quản trị hệ thống dán mã kết nối lên Hub. Lễ tân đăng nhập lại, máy gửi phiên mới được lưu thì dòng
+  tự hết ở lượt đọc kế.
+- Phần Sheet báo sức khoẻ phiên đăng nhập cần bản Apps Script mới của Google Sheet khách sạn (làn
+  Apps Script của YC-240). Sheet còn bản cũ thì máy không hiện gì thêm, không báo lỗi.
+- Chữ hiện không có token, khoá, URL Web App hay email. Hợp đồng gửi Hub không đổi.
+
 ## 1.5.3
 
 **Tab máy tự mở để đọc review: lễ tân nhận ra được, lỡ đóng thì máy tự đọc lại** (YC-238, H-1972 a,
