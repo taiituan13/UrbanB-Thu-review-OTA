@@ -128,7 +128,8 @@ Hub đọc từ cookie phiên.
   (`extensionWriteAllowed`) và chặn giai đoạn Học việc, như `web-orders`.
 - Cơ sở = cơ sở ghép với `ezcloudHotelId` (`capacity_hotel_links`), **và** người đăng nhập có quyền
   `counter_handover.create` tại đúng cơ sở ấy (`resolveCounterBranchFor`).
-- Luật thân tin (repo UrbanB): `src/modules/payments/handover/pms-handover.rules.ts` (`parsePmsHandoverReport`).
+- Luật thân tin (repo UrbanB): lượt đọc ở `src/modules/payments/handover/pms-reading.rules.ts`
+  (`parsePmsReadingReport`), lượt bấm Bàn giao ở `pms-handover.rules.ts` (`parsePmsHandoverReport`).
 
 ## Response
 
