@@ -46,7 +46,10 @@ hay).
   tự hết ở lượt đọc kế.
 - Phần Sheet báo sức khoẻ phiên đăng nhập cần bản Apps Script mới của Google Sheet khách sạn (làn
   Apps Script của YC-240). Sheet còn bản cũ thì máy không hiện gì thêm, không báo lỗi.
-- Chữ hiện không có token, khoá, URL Web App hay email. Hợp đồng gửi Hub không đổi.
+- Sheet báo ezCloud đã từ chối phiên đăng nhập đã lưu: máy báo Hub bằng mã lỗi sẵn có "Phiên PMS máy đẩy
+  lên bị Booking OTA từ chối", kèm số đơn đang chờ, để Quản trị thấy trên màn Máy quầy. Không có mã mới,
+  hợp đồng gửi Hub không đổi.
+- Chữ hiện không có token, khoá, URL Web App hay email.
 
 ## 1.5.3
 
