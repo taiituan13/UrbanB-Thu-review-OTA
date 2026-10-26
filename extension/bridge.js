@@ -46,10 +46,29 @@
   window.addEventListener("message", (e) => {
     if (e.source !== window) return;
     const d = e.data;
+    if (kind === "ezcloud" && d && d.__urbanbQuay === "shiftHandover") return void onShiftHandover(d);
     if (!d || d.__urbanbQuay !== "auth" || d.kind !== kind || typeof d.token !== "string" || !d.token) return;
     captured = true;
     push(d.token, Number(d.hotelSn) || 0, false);
   });
+
+  // YC-246 (H-2034 b) — lễ tân bấm Bàn giao trên PMS: chỉ khi ezCloud báo xong mới dựng thân tin (số và mã,
+  // quay/shift-handover.js) rồi gửi service worker. Thân request của PMS không rời trang.
+  const onShiftHandover = async (d) => {
+    try {
+      if (typeof d.body !== "string" || typeof d.response !== "string") return;
+      const S = await import(chrome.runtime.getURL("quay/shift-handover.js"));
+      if (!S.ezcloudSucceeded(d.status, d.response)) return;
+      const report = S.handoverReport({
+        requestBody: d.body,
+        handedOverAt: new Date().toISOString(),
+        extensionVersion: chrome.runtime.getManifest().version,
+        pageHotelId: bridge.hotelId,
+      });
+      if (!report) return;
+      chrome.runtime.sendMessage({ type: "quay:shiftHandover", report }, () => void chrome.runtime.lastError);
+    } catch {}
+  };
 
   setTimeout(async () => {
     if (captured) return;

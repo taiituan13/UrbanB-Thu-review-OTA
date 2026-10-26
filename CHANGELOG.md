@@ -5,6 +5,21 @@ quản lý thấy gì khác. Máy đã cài không tự lên bản: khi có bả
 "Có bản mới …" và phải có người chạy lại lệnh cài (xem [docs/cai-tu-xa.md](docs/cai-tu-xa.md) mục
 Cập nhật).
 
+## 1.5.5
+
+**Số "Bàn giao cho ca sau" của PMS về thẳng trang Giao ca quầy trên Hub** (YC-246, H-2034 b). Lễ tân bấm
+**Bàn giao** trên trang Bàn giao ca của PMS ezCloud thì extension gửi Hub con số lễ tân vừa chốt ở dòng 7
+"Bàn giao cho ca sau", kèm dòng 6 "Thực tế trong két" và dòng 8 "Bàn giao cho quản lý". Ô "Số sổ ezCloud"
+trên trang Giao ca quầy của Hub đọc số này. Trang Hub do UrbanB dựng riêng; bản này chỉ là phần của extension.
+
+- Chỉ gửi khi ezCloud báo bàn giao xong. Bấm Bàn giao mà PMS báo lỗi thì không gửi gì.
+- Mỗi ca ezCloud gửi một lần. Lễ tân bấm hai lần hay PMS gửi lại thì Hub vẫn chỉ nhận một lượt.
+- Hub không trả lời được (mất mạng, hết phiên đăng nhập Hub) thì máy giữ lại và gửi lại sau, tối đa 3 ngày.
+- Tin gửi Hub chỉ gồm số và mã: mã khách sạn, mã và số ca ezCloud, ba con số, giờ bàn giao, phiên bản
+  extension. Không có token PMS, tên lễ tân hay email. Hợp đồng: [docs/hop-dong-ban-giao-ca-pms.md](docs/hop-dong-ban-giao-ca-pms.md).
+- Hub chưa lên bản có trang nhận số thì máy giữ lượt ấy trong hàng chờ, khung quầy không báo lỗi gì.
+- Extension không bấm gì và không gửi gì tới ezCloud; nó chỉ đọc lượt bấm của lễ tân.
+
 ## 1.5.4
 
 **Trang Giao ca quầy trên Hub quét được review ngay trên máy quầy** (YC-239, H-1996 a, H-1976 c).

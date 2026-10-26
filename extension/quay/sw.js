@@ -10,6 +10,7 @@ import * as N from "./notifications.js";
 import * as W from "./web-orders.js";
 import * as C from "./counter-heartbeat.js";
 import * as P from "./counter-problems.js";
+import * as S from "./shift-handover.js";
 import { DEV_FLAGS } from "../env.js";
 import { BRANCH_KEY, HUB_COLLECT_KEY, MINE_KEY, loadEffectiveConfig, parseHubSettings, reviewMissingHelp, reviewMissingText } from "../hub-config.js";
 import { CHANNELS, getDeviceId, loadStatus } from "../config.js";
@@ -748,6 +749,52 @@ export async function readNotifications(ids) {
   return r;
 }
 
+// ---------- Bàn giao ca PMS (YC-246, H-2034 b) ----------
+
+let flushingHandovers = null;
+
+/**
+ * Gửi Hub mọi lượt Bàn giao ca đang chờ (quay/shift-handover.js). Một lượt một lúc. Hub lỗi tạm ⇒ lượt ở lại
+ * hàng; Hub cũ chưa có route ⇒ ở lại hàng, không báo gì lên khung quầy. Không ném.
+ */
+export function flushShiftHandovers() {
+  flushingHandovers ??= (async () => {
+    try {
+      const queue = S.pruneQueue(await get(S.QUEUE_KEY), now());
+      const origin = await hubOriginNow();
+      const done = new Map();
+      for (const entry of queue) {
+        const { url, init } = S.shiftHandoverRequest(origin, entry.report);
+        const verdict = S.settle(await hubFetch(url, init));
+        if (verdict.out) await noteSession({ state: "out" });
+        if (verdict.action !== "keep") done.set(entry.key, verdict.action);
+      }
+      // Đọc lại hàng: lượt mới xếp vào trong lúc đang gửi không bị ghi đè.
+      const [latest, sent] = await Promise.all([get(S.QUEUE_KEY), get(S.SENT_KEY)]);
+      let nextSent = sent ?? [];
+      for (const [key, action] of done) if (action === "sent") nextSent = S.markSent(nextSent, key);
+      const nextQueue = S.pruneQueue(latest, now()).filter((e) => !done.has(e.key));
+      await chrome.storage.local.set({ [S.QUEUE_KEY]: nextQueue, [S.SENT_KEY]: nextSent });
+    } catch {
+      // Hàng chờ vẫn nằm trong bộ nhớ; lượt sau gửi lại.
+    } finally {
+      flushingHandovers = null;
+    }
+  })();
+  return flushingHandovers;
+}
+
+/** bridge.js báo một lượt Bàn giao thành công trên PMS: xếp hàng (chống trùng theo ca) rồi gửi. */
+export async function onShiftHandover(report) {
+  const clean = S.cleanReport(report);
+  if (!clean) return { ok: false };
+  await flushingHandovers;
+  const [queue, sent] = await Promise.all([get(S.QUEUE_KEY), get(S.SENT_KEY)]);
+  await set(S.QUEUE_KEY, S.enqueue(S.pruneQueue(queue, now()), sent, clean, now()));
+  await flushShiftHandovers();
+  return { ok: true };
+}
+
 // ---------- Tin nhắn ----------
 
 const HANDLERS = {
@@ -760,6 +807,7 @@ const HANDLERS = {
   "quay:review": () => reviewStatus(),
   "quay:webOrderResolve": (m) => resolveWebOrder(String(m.hotelId ?? ""), String(m.id ?? "")),
   "quay:token": (m, sender) => onToken(m, sender?.tab?.id),
+  "quay:shiftHandover": (m) => onShiftHandover(m.report),
   "quay:pageHotel": (m, sender) => onPageHotel(m.hotelId, sender?.tab?.id, m.hotelName),
   "quay:tabHotel": async (_m, sender) => ({ hotelId: sender?.tab?.id != null ? (await chrome.storage.session.get(`quayTab:${sender.tab.id}`).catch(() => ({})))[`quayTab:${sender.tab.id}`] ?? "" : "" }),
   "quay:openHub": (m) => openHub(String(m.path ?? "/")),

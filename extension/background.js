@@ -9,7 +9,7 @@ import { hubBatches, hubRunMeta, hubSnapshots, hubSummaryText, ingestRequest, pa
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
-import { hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
+import { flushShiftHandovers, hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
 import { alarmMinutes, loadEffectiveConfig, reviewMissingHelp, reviewMissingText, scanAlarmFor } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
 import { autoRescanChannel } from "./login-watch.js";
@@ -86,6 +86,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     reloadIfDiskNewer();
     checkRemoteVersion();
     importSetupFile();
+    flushShiftHandovers(); // YC-246: lượt Bàn giao ca PMS còn chờ vì Hub lỗi tạm
   }
 });
 
