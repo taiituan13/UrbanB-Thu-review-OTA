@@ -92,6 +92,10 @@ nhật** và ba bước làm. Khối Cài đặt cũng luôn có lệnh này ở
 bản nào. Extension không tự chạy được PowerShell, nên vẫn phải có người dán lệnh. Máy còn chạy bản
 cũ hơn 0.8.1 thì không có dải này: chạy lệnh tay một lần.
 
+Từ bản 1.5.4, dải vàng và khối Cài đặt có thêm link **Xem video hướng dẫn cập nhật** (video trên
+Google Drive, mở ở tab mới). Đổi video thì sửa `UPDATE_VIDEO_URL` trong `extension/update.js` và cả hai
+link trong `extension/popup.html`, rồi phát hành bản mới.
+
 Chạy lại đúng lệnh ở bước 1 trên máy cần cập nhật. Lệnh chép bản mới nhất đè lên
 `C:\UrbanB\extension`; không phải làm lại bước 2 và 3. Extension tự kiểm thư mục mỗi 30 phút,
 thấy bản trên đĩa mới hơn thì tự nạp lại (trừ khi đang quét dở), giữ nguyên cài đặt và mã máy.

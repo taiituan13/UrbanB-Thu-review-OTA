@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { VERSION } from "../extension/config.js";
-import { REPO, UPDATE_COMMAND, isNewer, parseRemoteVersion, updateNotice } from "../extension/update.js";
+import { REPO, UPDATE_COMMAND, UPDATE_VIDEO_URL, isNewer, parseRemoteVersion, updateNotice } from "../extension/update.js";
 
 test("So phiên bản theo số, không theo chữ", () => {
   assert.equal(isNewer("0.10.0", "0.9.9"), true);
@@ -70,4 +70,18 @@ test("Dải 'Có bản mới' chỉ hiện khi GitHub mới hơn bản đang ch�
   assert.equal(updateNotice({ latest: "0.8.1" }, "0.8.1"), null);
   assert.equal(updateNotice({ latest: "0.8.0" }, "0.8.1"), null, "máy chạy bản mới hơn GitHub (đang thử) thì không nhắc");
   assert.equal(updateNotice(undefined, "0.8.1"), null);
+});
+
+test("Ô bật lên có link video hướng dẫn cập nhật ở dải Có bản mới và nhóm Cập nhật, mở tab mới", () => {
+  const html = readFileSync(new URL("../extension/popup.html", import.meta.url), "utf8");
+  assert.match(UPDATE_VIDEO_URL, /^https:\/\/drive\.google\.com\/file\/d\/[\w-]+\/view$/);
+  const block = (start, end) => html.slice(html.indexOf(start), html.indexOf(end, html.indexOf(start)));
+  const banner = block('<div class="update" id="update"', "</div>");
+  const settings = block('<h3 class="grp">Cập nhật</h3>', "</details>");
+  for (const [name, part] of [["dải Có bản mới", banner], ["nhóm Cập nhật", settings]]) {
+    const a = part.match(/<a [^>]*class="video"[^>]*>/)?.[0];
+    assert.ok(a, `thiếu link video ở ${name}`);
+    assert.ok(a.includes(`href="${UPDATE_VIDEO_URL}"`), `link ở ${name} lệch UPDATE_VIDEO_URL`);
+    assert.match(a, /target="_blank"/, `link ở ${name} phải mở tab mới, không đè ô bật lên`);
+  }
 });

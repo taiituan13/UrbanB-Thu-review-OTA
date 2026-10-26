@@ -26,6 +26,10 @@ phần của extension.
 - Mọi máy quầy phải chạy lại lệnh cài để lên 1.5.4 thì trang Giao ca mới quét được; máy còn bản cũ
   không trả lời lệnh quét.
 
+**Video hướng dẫn cập nhật ngay trong ô bật lên.** Dải vàng "Có bản mới …" và nhóm Cập nhật trong Cài
+đặt có thêm link **Xem video hướng dẫn cập nhật**. Bấm vào là video mở ở tab mới, người ở quầy xem rồi
+làm theo, không phải hỏi ai.
+
 ## 1.5.3
 
 **Tab máy tự mở để đọc review: lễ tân nhận ra được, lỡ đóng thì máy tự đọc lại** (YC-238, H-1972 a,

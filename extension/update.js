@@ -21,6 +21,12 @@ export const REMOTE_MANIFEST_URL = `https://raw.githubusercontent.com/${REPO}/ma
 /** Lệnh cài và cập nhật trên Windows; trùng nguyên văn với windows/cai-dat.ps1 và docs/cai-tu-xa.md. */
 export const UPDATE_COMMAND = `irm https://raw.githubusercontent.com/${REPO}/main/windows/cai-dat.ps1 | iex`;
 
+/**
+ * Video hướng dẫn cập nhật (Google Drive, ai có link cũng xem được; user gửi 26/10/2026). popup.html ghi
+ * nguyên văn link này ở dải "Có bản mới" và nhóm Cập nhật trong Cài đặt; test/update.test.mjs giữ hai chỗ khớp.
+ */
+export const UPDATE_VIDEO_URL = "https://drive.google.com/file/d/14guKOBoZcwGGTENs-GnCB3kcM-QYbWWE/view";
+
 /** "0.10.0" > "0.9.3". Phần không phải số (ví dụ "-thu") bị bỏ qua. */
 export function isNewer(candidate, current) {
   const parts = (v) => String(v ?? "").split(".").map((x) => parseInt(x, 10) || 0);
