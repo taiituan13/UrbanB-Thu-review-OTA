@@ -55,6 +55,7 @@ globalThis.chrome = {
     onInstalled: event(),
     onStartup: event(),
     onMessage: event(),
+    onConnect: event(), // YC-239: cổng quét của trang Giao ca quầy (hub-bridge.js)
     lastError: undefined,
     getURL: (p) => `chrome-extension://urbanb/${p}`,
     getManifest: () => ({ version: "1.5.3" }),

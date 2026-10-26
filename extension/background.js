@@ -10,7 +10,7 @@ import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
 import { hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
-import { alarmMinutes, loadEffectiveConfig, reviewMissingText, scanAlarmFor } from "./hub-config.js";
+import { alarmMinutes, loadEffectiveConfig, reviewMissingHelp, reviewMissingText, scanAlarmFor } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
 import { autoRescanChannel } from "./login-watch.js";
 import { PAGE_RUN_TIMEOUT_MS, REMOTE_TIMEOUT_MS, isTimeout, withTimeout } from "./quay/net.js";
@@ -26,6 +26,8 @@ import {
   showScanBanner,
 } from "./tab-scan.js";
 import { TAB_RETRY_KEY } from "./quay/review-status.js";
+import { HUB_ORIGINS } from "./env.js";
+import { MSG, OUTCOME, SCAN_PORT, createScanRun, isHubSender, joinMode, parseRequestId } from "./shift-scan.js";
 import {
   bookingSessionInPage,
   scanAgodaInPage,
@@ -538,6 +540,8 @@ async function scanCrashed(e) {
 // ---------- Một lượt quét ----------
 
 let running = false;
+/** Lượt đang chạy nhìn từ trang Hub (shift-scan.js createScanRun); `null` khi không có lượt nào. */
+let current = null;
 
 /**
  * Trả chuỗi mô tả nếu lượt quét không chạy được; undefined nếu đã chạy xong. `only` = danh sách kênh cần quét
@@ -548,6 +552,10 @@ const BUSY_TEXT = "Đang có một lượt quét chạy, đợi nó xong.";
 async function runScan(trigger, only = null) {
   if (running) return BUSY_TEXT;
   running = true;
+  // YC-239: mọi lượt (không riêng lượt giao ca) đều có bản nhìn từ trang Hub, để trang gắn vào lượt đang chạy.
+  const run = (current = createScanRun({ full: !only, version: chrome.runtime.getManifest().version, labels: CHANNEL_LABEL }));
+  let outcome = OUTCOME.failed;
+  let missingHelp = null;
   // Tab của kênh vừa đọc: đóng sau khi tab kênh kế tiếp đã vào nhóm, để nhóm tab không mất rồi hiện lại giữa hai kênh.
   let leftover = null;
   try {
@@ -555,22 +563,101 @@ async function runScan(trigger, only = null) {
     await syncHubSettings();
     const cfg = await loadEffectiveConfig();
     // Tên khách sạn, mã chỗ nghỉ theo Hub (H-1527 a); chưa biết chi nhánh thì theo cấu hình cũ của máy.
+    // YC-239: thiếu cấu hình ⇒ trang Hub nhận kết cục "not-configured" kèm lời hướng dẫn, không quét kênh nào.
+    missingHelp = reviewMissingHelp(cfg.review);
     const missing = reviewMissingText(cfg.review);
     if (missing) return missing;
     // Một mã cho cả lượt (mọi kênh): Hub gom các lô của cùng một lần quét (YC-157).
     const runId = crypto.randomUUID();
+    const channels = [];
     for (const channel of CHANNELS) {
       if (!cfg.enabled[channel]) continue;
       if (only && !only.includes(channel)) continue;
-      leftover = await scanOne(channel, cfg, trigger, runId, leftover);
+      channels.push(channel);
+    }
+    run.setChannels(channels);
+    for (const channel of channels) {
+      run.channelStarted(channel);
+      leftover = await scanOne(channel, cfg, trigger, runId, leftover, run);
     }
     await chrome.storage.local.remove("scanCrash");
+    outcome = OUTCOME.done;
   } finally {
     await closeTab(leftover);
     running = false;
-    // YC-157: báo Hub sau mọi lượt quét, kể cả lượt thiếu cấu hình hay hỏng giữa chừng — máy vẫn còn sống.
-    await sendHeartbeat({ scan: true }).catch(() => {});
-    await refreshBadge();
+    current = null;
+    try {
+      // YC-157: báo Hub sau mọi lượt quét, kể cả lượt thiếu cấu hình hay hỏng giữa chừng — máy vẫn còn sống.
+      await sendHeartbeat({ scan: true }).catch(() => {});
+      await refreshBadge();
+    } finally {
+      // Kết quả cho trang Hub gửi SAU lượt báo Hub: trang nhận kết quả thì Hub cũng đã có trạng thái lượt này.
+      run.finish({ outcome: missingHelp ? OUTCOME.notConfigured : outcome, missing: missingHelp });
+    }
+  }
+}
+
+// ---------- YC-239: lượt quét do trang Giao ca quầy trên Hub ra lệnh (hub-bridge.js) ----------
+
+/**
+ * hub-bridge.js mở cổng SCAN_PORT rồi gửi `{ type: "ext:scan", requestId }`. Chỉ nhận cổng từ content script trên
+ * gốc Hub thật (env.js HUB_ORIGINS). Trang đóng giữa chừng ⇒ cổng mất, lượt quét vẫn chạy hết và vẫn báo Hub như
+ * lượt thường; chỉ là không còn ai nhận tin.
+ */
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== SCAN_PORT) return;
+  if (!isHubSender(port.sender, HUB_ORIGINS)) {
+    port.disconnect();
+    return;
+  }
+  const taken = new Set();
+  port.onMessage.addListener((msg) => {
+    const requestId = msg?.type === MSG.scan ? parseRequestId(msg.requestId) : null;
+    if (!requestId || taken.has(requestId)) return;
+    taken.add(requestId);
+    shiftScan(port, requestId).catch(() => {});
+  });
+});
+
+async function shiftScan(port, requestId) {
+  let gone = false;
+  const send = (msg) => {
+    if (gone) return;
+    try {
+      port.postMessage({ ...msg, requestId });
+    } catch {
+      gone = true; // trang đã đóng
+    }
+  };
+  let attached = null;
+  port.onDisconnect.addListener(() => {
+    gone = true;
+    if (attached) attached.run.unsubscribe(attached.fn);
+  });
+  const attach = (run, mode) => {
+    const fn = (msg) => send(msg);
+    attached = { run, fn };
+    send({ type: MSG.accepted, mode, startedAt: run.startedAt });
+    run.subscribe(fn);
+  };
+  let queued = false;
+  while (!gone) {
+    const mode = joinMode(running, current);
+    if (mode === "started") {
+      // runScan đặt `running` và `current` ngay lúc gọi, trước mọi await: không lượt nào chen vào giữa.
+      const scan = runScan("giao ca");
+      attach(current, mode);
+      await scan.catch(scanCrashed);
+      return;
+    }
+    if (mode === "joined") {
+      attach(current, mode);
+      return;
+    }
+    // Lượt đang chạy chỉ quét vài kênh: báo trang đang chờ, xong lượt ấy thì vòng lại (mở lượt mới hoặc gắn vào).
+    if (!queued) send({ type: MSG.accepted, mode, startedAt: null });
+    queued = true;
+    await current.done;
   }
 }
 
@@ -602,7 +689,7 @@ chrome.tabs.onUpdated.addListener((_tabId, info, tab) => {
  * làm kênh đỏ (YC-228). `leftover` = tab của kênh trước, đóng ngay sau khi tab mới đã vào nhóm. Trả mã tab
  * của kênh này để người gọi đóng.
  */
-async function scanOne(channel, cfg, trigger, runId, leftover = null) {
+async function scanOne(channel, cfg, trigger, runId, leftover = null, run = null) {
   const startedAt = new Date().toISOString();
   // Kênh đang chờ đọc lại (tab lượt trước bị đóng) ⇒ lượt này là lần đọc lại, bị đóng nữa thì báo lỗi.
   const pending = (await loadTabRetries())[channel] ?? null;
@@ -642,7 +729,7 @@ async function scanOne(channel, cfg, trigger, runId, leftover = null) {
 
     // sendHub không ném: lỗi Hub nằm trong `hub`, không làm kênh đỏ.
     hub = await sendHub(channel, batch.reviews, startedAt, { trigger, id: runId }, hubSnapshots(result.snapshots, channel, result.channelHotelId));
-    await saveChannelStatus(channel, {
+    const status = {
       at: startedAt,
       // Giờ quét ỔN gần nhất (YC-158): gửi Hub hỏng thì review chưa lên Hub ⇒ giữ giờ ổn cũ.
       okAt: hub?.ok === false ? await lastOkAt(channel) : startedAt,
@@ -651,7 +738,9 @@ async function scanOne(channel, cfg, trigger, runId, leftover = null) {
       message: "",
       error: partial && errorBrief(partial),
       hub,
-    });
+    };
+    await saveChannelStatus(channel, status);
+    run?.channelDone(channel, { status });
   } catch (e) {
     const login = e instanceof LoginRequired;
     let url = "";
@@ -667,10 +756,12 @@ async function scanOne(channel, cfg, trigger, runId, leftover = null) {
     const { retry } = closedOutcome({ closed: !login && isTabCode(entry.code), pending, now: Date.now() });
     if (retry) {
       await scheduleTabRetry(channel, retry);
+      // YC-239: với trang Hub, tab bị đóng là lỗi TAB ngay, không chờ lần đọc lại (lần đọc lại vẫn hẹn như trên).
+      run?.channelDone(channel, { tabClosed: { code: entry.code, retryAt: retry.retryAt } });
       return null;
     }
     await queueLog(entry);
-    await saveChannelStatus(channel, {
+    const status = {
       at: startedAt,
       okAt: await lastOkAt(channel),
       state: login ? "login" : "error",
@@ -678,7 +769,9 @@ async function scanOne(channel, cfg, trigger, runId, leftover = null) {
       message: String(e?.message ?? e),
       error: errorBrief(entry),
       hub,
-    });
+    };
+    await saveChannelStatus(channel, status);
+    run?.channelDone(channel, { status });
   } finally {
     chrome.tabs.onRemoved.removeListener(onRemoved);
     await closeTab(leftover);

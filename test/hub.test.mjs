@@ -86,12 +86,14 @@ test("🔴 YC-157: kiểu lượt lạ không gửi; thiếu hết thông tin th
   assert.deepEqual(hubRunMeta(), {});
   const [body] = hubBatches([review(1)]);
   assert.ok(!("device" in body) && !("run" in body));
-  assert.deepEqual(Object.keys(HUB_TRIGGER).sort(), ["bấm tay", "hẹn giờ", "tự quét sau đăng nhập", "đọc lại sau khi tab bị đóng"]);
+  assert.deepEqual(Object.keys(HUB_TRIGGER).sort(), ["bấm tay", "giao ca", "hẹn giờ", "tự quét sau đăng nhập", "đọc lại sau khi tab bị đóng"]);
   // YC-199: Hub chỉ biết hai mã; lượt tự quét lại sau đăng nhập là lượt máy tự chạy.
   assert.deepEqual([...new Set(Object.values(HUB_TRIGGER))].sort(), ["manual", "schedule"]);
   assert.equal(hubRunMeta({ trigger: "tự quét sau đăng nhập" }).run.trigger, "schedule");
   // YC-238: lượt đọc lại sau khi tab quét bị đóng cũng là lượt máy tự chạy, mã Hub đã biết.
   assert.equal(hubRunMeta({ trigger: "đọc lại sau khi tab bị đóng" }).run.trigger, "schedule");
+  // YC-239: lễ tân bấm Quét trên trang Giao ca quầy ⇒ người bấm, mã Hub đã biết.
+  assert.equal(hubRunMeta({ trigger: "giao ca" }).run.trigger, "manual");
 });
 
 test("🔴 H-1233 a: request gửi Hub KHÔNG có header Authorization (Hub chọn đường phiên theo đúng header này)", () => {

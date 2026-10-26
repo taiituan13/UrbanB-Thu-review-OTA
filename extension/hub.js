@@ -76,6 +76,8 @@ export const HUB_TRIGGER = {
   "bấm tay": "manual",
   "tự quét sau đăng nhập": "schedule",
   "đọc lại sau khi tab bị đóng": "schedule",
+  // YC-239: lễ tân bấm Quét trên trang Giao ca quầy của Hub ⇒ người bấm (Hub đã biết mã này).
+  "giao ca": "manual",
 };
 
 /**
