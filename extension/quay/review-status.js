@@ -18,15 +18,21 @@ export const TAB_RETRY_KEY = "tabRetry";
  * @param {Record<string, boolean>} input.enabled — kênh đang bật
  * @param {Record<string, string>} input.labels — tên kênh hiện cho người dùng
  * @param {{what: string, why: string, steps: string[]} | null} input.missing — thu review chưa đủ cấu hình
- * @returns {{ state: "missing"|"none"|"never"|"bad"|"ok", missing: object|null, rows: object[], bad: number, lastOkAt: string|null }}
+ * @param {Record<string, {closedAt: string, retryAt: string}>} [input.retries] — kênh chờ đọc lại (`TAB_RETRY_KEY`)
+ * @returns {{ state: "missing"|"none"|"never"|"bad"|"ok", missing: object|null, rows: object[], bad: number, lastOkAt: string|null, retries: object[] }}
+ *
+ * `retries` chỉ để khung quầy báo một dòng; không phải lỗi (không tính vào `bad`, không lên Hub qua `hubChannels`).
  */
-export function reviewStatusModel({ status, order, enabled, labels, missing }) {
+export function reviewStatusModel({ status, order, enabled, labels, missing, retries }) {
   const rows = order.filter((ch) => enabled?.[ch]).map((ch) => channelRow(ch, labels?.[ch] ?? ch, status?.[ch]));
   const bad = rows.filter((r) => r.state === "error" || r.state === "login").length;
   const okTimes = rows.map((r) => Date.parse(r.okAt ?? "")).filter((t) => !Number.isNaN(t));
   const lastOkAt = okTimes.length ? new Date(Math.max(...okTimes)).toISOString() : null;
   const state = missing ? "missing" : !rows.length ? "none" : bad ? "bad" : rows.every((r) => r.state === null) ? "never" : "ok";
-  return { state, missing: missing ?? null, rows, bad, lastOkAt };
+  const waiting = order
+    .filter((ch) => enabled?.[ch] && retries?.[ch]?.retryAt)
+    .map((ch) => ({ key: ch, label: labels?.[ch] ?? ch, closedAt: retries[ch].closedAt ?? null, retryAt: retries[ch].retryAt }));
+  return { state, missing: missing ?? null, rows, bad, lastOkAt, retries: waiting };
 }
 
 /**
@@ -94,4 +100,15 @@ export function failedWhenText(row, now = new Date()) {
   if (!at) return "";
   const ok = hhmm(row.okAt, now);
   return ok ? `Lỗi lúc ${at}, quét được lần cuối lúc ${ok}.` : `Lỗi lúc ${at}, chưa quét được lần nào.`;
+}
+
+/**
+ * YC-238 — dòng báo khi tab quét bị đóng giữa chừng: kênh nào, máy đọc lại lúc mấy giờ. Đã tới giờ ⇒ máy
+ * đang đọc lại (hoặc sắp đọc, khi đang có lượt quét khác).
+ */
+export function tabRetryText(retry, now = new Date()) {
+  const lead = `Bạn vừa đóng tab ${retry.label} lúc máy đang đọc review.`;
+  const at = Date.parse(retry.retryAt ?? "");
+  if (Number.isNaN(at) || at <= now.getTime()) return `${lead} Máy đang đọc lại kênh này.`;
+  return `${lead} Máy sẽ đọc lại lúc ${hhmm(retry.retryAt, now)}.`;
 }

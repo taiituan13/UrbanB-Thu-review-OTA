@@ -4,7 +4,7 @@
 // Mỗi kênh lỗi nói đủ ba điều (bổ sung của user 21/10/2026): chuyện gì đang xảy ra, vì sao, làm gì tiếp
 // theo từng bước có số; kèm mã lỗi và nút Sao chép để gửi người quản lý. HTML thuần, không đọc DOM.
 
-import { failedWhenText, reviewSummaryText } from "./review-status.js";
+import { failedWhenText, reviewSummaryText, tabRetryText } from "./review-status.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
@@ -47,11 +47,13 @@ export function reviewBlockHTML(model, { now = new Date(), scanning = false, sca
   const note = scanNote ? `<div class="ota-muted" role="status">${esc(scanNote)}</div>` : "";
   const copiedNote = copied ? `<div class="ota-muted" role="status">Đã chép mã ${esc(copied)}. Dán mã này khi nhắn người quản lý.</div>` : "";
   if (model.state === "missing") return `<div class="rv-card">${helpHTML(model.missing)}</div>`;
+  // YC-238: tab quét bị đóng giữa chừng ⇒ một dòng, tự hết khi máy đọc lại xong.
+  const retry = (model.retries ?? []).map((r) => `<div class="qban warn rv-retry" role="status" data-ch="${esc(r.key)}">${esc(tabRetryText(r, now))}</div>`).join("");
   if (model.state !== "bad") {
     const btn = model.state === "none" ? "" : `<div class="bt">${scanBtn}</div>`;
-    return `<div class="rv-ok"><span>${esc(reviewSummaryText(model, now))}</span>${btn}</div>${note}`;
+    return `${retry}<div class="rv-ok"><span>${esc(reviewSummaryText(model, now))}</span>${btn}</div>${note}`;
   }
   const failed = model.rows.filter((r) => r.state === "error" || r.state === "login");
-  return `<div class="ota-muted">${esc(reviewSummaryText(model, now))} Làm theo các bước dưới từng kênh. Xong thì bấm Quét review ngay để kiểm lại.</div>
+  return `${retry}<div class="ota-muted">${esc(reviewSummaryText(model, now))} Làm theo các bước dưới từng kênh. Xong thì bấm Quét review ngay để kiểm lại.</div>
     ${failed.map((r) => channelCard(r, now)).join("")}${copiedNote}<div class="bt">${scanBtn}</div>${note}`;
 }

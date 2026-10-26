@@ -1,5 +1,7 @@
 // Phần thuần của việc gửi lên Hub và ghi lỗi — tách ra để test được ngoài Chrome.
 
+import { TAB_RETRY_MINUTES } from "./tab-scan.js";
+
 /** Lỗi khi gửi đi; `retryable` = gửi lại có thể thành công (withRetry đọc cờ này). */
 export class RetryableError extends Error {
   constructor(message, retryable) {
@@ -176,10 +178,15 @@ const CHANNEL_KINDS = [
     why: "Mạng của máy chậm, hoặc trang {kênh} đang chậm.",
     steps: ["Kiểm tra mạng của máy.", RESCAN, "Lỗi lặp lại nhiều lần thì bấm Sao chép cạnh mã lỗi và gửi cho người quản lý."],
   }],
+  // YC-238 (H-1973 a): lần đầu bị đóng thì máy tự đọc lại, không báo lỗi; lỗi này là lần đọc lại cũng hỏng.
   ["TAB", (stage, m) => stage === "mở tab" || /No tab with id|Tab bị đóng/i.test(m), {
-    what: "Tab {kênh} bị đóng khi máy đang đọc review.",
-    why: "Có người đóng tab mà máy tự mở để đọc review.",
-    steps: ["Lần sau thấy tab {kênh} tự mở thì cứ để nó, tab tự đóng khi đọc xong.", RESCAN],
+    what: "Tab {kênh} bị đóng khi máy đang đọc review, cả lần máy tự đọc lại.",
+    why: `Có người đóng tab mà máy tự mở để đọc review. Máy đã tự đọc lại sau ${TAB_RETRY_MINUTES} phút nhưng tab lại bị đóng.`,
+    steps: [
+      "Tab máy tự mở nằm trong nhóm tab màu xanh có chữ Urban B trên thanh tab, đầu trang có dải chữ xanh báo máy đang đọc review.",
+      "Thấy nhóm tab ấy thì cứ để nó, tab tự đóng khi đọc xong.",
+      RESCAN,
+    ],
   }],
   ["CAPTURE", /Không bắt được request|Không thấy request|Không đọc được phiên|không có SupplyReviewsQuery/i, {
     what: "Máy mở được trang {kênh} nhưng không đọc được danh sách review.",

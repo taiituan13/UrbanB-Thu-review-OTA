@@ -14,7 +14,7 @@ import { DEV_FLAGS } from "../env.js";
 import { BRANCH_KEY, HUB_COLLECT_KEY, MINE_KEY, loadEffectiveConfig, parseHubSettings, reviewMissingHelp, reviewMissingText } from "../hub-config.js";
 import { CHANNELS, getDeviceId, loadStatus } from "../config.js";
 import { CHANNEL_LABEL } from "../report.js";
-import { reviewStatusModel } from "./review-status.js";
+import { TAB_RETRY_KEY, reviewStatusModel } from "./review-status.js";
 import { HUB_TIMEOUT_MS, isTimeout } from "./net.js";
 
 const K = {
@@ -600,9 +600,12 @@ export async function extStatus(pageOrigin, path) {
   return { ok: true, status: view };
 }
 
-/** Mô hình thu review của máy này (quay/review-status.js), chỉ tính kênh đang bật. */
-function reviewModelOf(cfg, status) {
-  return reviewStatusModel({ status, order: CHANNELS, enabled: cfg.enabled, labels: CHANNEL_LABEL, missing: reviewMissingHelp(cfg.review) });
+/**
+ * Mô hình thu review của máy này (quay/review-status.js), chỉ tính kênh đang bật. `retries` = kênh chờ đọc lại
+ * vì tab quét bị đóng (YC-238), chỉ khung quầy cần.
+ */
+function reviewModelOf(cfg, status, retries = null) {
+  return reviewStatusModel({ status, order: CHANNELS, enabled: cfg.enabled, labels: CHANNEL_LABEL, missing: reviewMissingHelp(cfg.review), retries });
 }
 
 // ---------- Máy quầy báo Hub (YC-157) ----------
@@ -675,8 +678,8 @@ export async function sendHeartbeat({ scan = false, tokenPush = null, g2jLock = 
 
 /** YC-158 — dòng Thu review của khung quầy: đọc bộ nhớ, không gọi mạng. */
 export async function reviewStatus() {
-  const [cfg, status] = await Promise.all([loadEffectiveConfig(), loadStatus()]);
-  return { ok: true, model: reviewModelOf(cfg, status) };
+  const [cfg, status, retries] = await Promise.all([loadEffectiveConfig(), loadStatus(), get(TAB_RETRY_KEY)]);
+  return { ok: true, model: reviewModelOf(cfg, status, retries) };
 }
 
 

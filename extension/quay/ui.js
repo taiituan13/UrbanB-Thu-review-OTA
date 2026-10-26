@@ -10,6 +10,7 @@ import * as B from "./booking-ota.js";
 import * as H from "./hub-quay.js";
 import * as I from "./indicators.js";
 import * as R from "./review-ui.js";
+import { TAB_RETRY_KEY, tabRetryText } from "./review-status.js";
 import * as T from "./todo.js";
 import * as W from "./web-orders.js";
 import { QUAY_CSS } from "./ui-css.js";
@@ -176,7 +177,21 @@ export function mount({ bridge, plugins = [] } = {}) {
   // YC-158 — thu review là của máy, không theo cơ sở hay phiên Hub ⇒ đọc cả khi Hub chưa đăng nhập.
   async function loadReview() {
     const r = await send({ type: "quay:review" });
-    if (r?.model) S.review = r.model;
+    if (r?.model) {
+      // YC-238: tab quét vừa bị đóng ⇒ khung đang gập cũng báo một dòng (lượt tải đầu không báo lại việc cũ).
+      const seen = S.review ? new Set((S.review.retries ?? []).map((x) => x.key)) : null;
+      const fresh = seen ? (r.model.retries ?? []).filter((x) => !seen.has(x.key)) : [];
+      S.review = r.model;
+      if (fresh.length) {
+        S.note = { tone: "warn", text: fresh.map((x) => tabRetryText(x)).join(" "), at: Date.now() };
+        setTimeout(() => {
+          if (S.note && Date.now() - S.note.at >= 9900) {
+            S.note = null;
+            render();
+          }
+        }, 10000);
+      }
+    }
     render();
   }
 
@@ -241,9 +256,10 @@ export function mount({ bridge, plugins = [] } = {}) {
     start();
   });
 
-  // Lượt quét nào xong (hẹn giờ hay bấm tay) cũng ghi `status` ⇒ khối Thu review vẽ lại ngay.
+  // Lượt quét nào xong (hẹn giờ hay bấm tay) cũng ghi `status` ⇒ khối Thu review vẽ lại ngay. Tab quét bị
+  // đóng (hoặc đọc lại xong) ghi `tabRetry` (YC-238).
   chrome.storage?.onChanged?.addListener((changes, area) => {
-    if (area === "local" && changes.status) loadReview();
+    if (area === "local" && (changes.status || changes[TAB_RETRY_KEY])) loadReview();
   });
 
   // Tin từ service worker: lời báo đẩy token (userscript: notify).

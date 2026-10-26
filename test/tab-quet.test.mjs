@@ -393,3 +393,68 @@ test("nạp lại extension (báo thức mất) ⇒ kênh còn chờ được h�
   assert.ok(alarm.when > Date.now(), "giờ hẹn đã qua ⇒ đọc lại sớm, không hẹn vào quá khứ");
   assert.equal(state.store.tabRetry.trip.retryAt, new Date(alarm.when).toISOString());
 });
+
+// ---------- ③ Khung quầy trên PMS báo một dòng ----------
+
+const { reviewStatusModel, hubChannels, tabRetryText, TAB_RETRY_KEY } = await import("../extension/quay/review-status.js");
+const { reviewBlockHTML, reviewProblemCount } = await import("../extension/quay/review-ui.js");
+const { classifyError } = await import("../extension/report.js");
+
+const NOW = new Date("2026-10-26T03:17:30.000Z"); // 10:17:30 giờ Việt Nam
+const RETRY = { trip: { closedAt: "2026-10-26T03:17:00.000Z", retryAt: "2026-10-26T03:19:00.000Z" } };
+const base = { order: ["booking", "trip"], enabled: { booking: true, trip: true }, labels: { booking: "Booking", trip: "Trip" }, missing: null };
+
+test("🔴 ③ tab quét bị đóng ⇒ khung quầy báo một dòng: kênh nào, đọc lại lúc mấy giờ; không tính là lỗi", () => {
+  const m = reviewStatusModel({ ...base, status: { booking: OLD_OK, trip: OLD_OK }, retries: RETRY });
+  assert.deepEqual(m.retries, [{ key: "trip", label: "Trip", closedAt: RETRY.trip.closedAt, retryAt: RETRY.trip.retryAt }]);
+  assert.equal(m.state, "ok");
+  assert.equal(m.bad, 0);
+  assert.equal(reviewProblemCount(m), 0, "chờ đọc lại không phải việc lễ tân phải xử lý");
+  assert.equal(tabRetryText(m.retries[0], NOW), "Bạn vừa đóng tab Trip lúc máy đang đọc review. Máy sẽ đọc lại lúc 10:19.");
+  const html = reviewBlockHTML(m, { now: NOW });
+  assert.match(html, /class="qban warn rv-retry"[^>]*>Bạn vừa đóng tab Trip lúc máy đang đọc review\. Máy sẽ đọc lại lúc 10:19\.</);
+  // Kênh đang lỗi khác: dòng vẫn hiện trên đầu khối.
+  const bad = reviewStatusModel({ ...base, status: { booking: { ...OLD_OK, state: "error", error: { code: "BKG-HTTP" } }, trip: OLD_OK }, retries: RETRY });
+  assert.match(reviewBlockHTML(bad, { now: NOW }), /^<div class="qban warn rv-retry"/);
+  // Đọc lại xong ⇒ `tabRetry` rỗng ⇒ dòng tự hết.
+  assert.doesNotMatch(reviewBlockHTML(reviewStatusModel({ ...base, status: { trip: OLD_OK }, retries: {} }), { now: NOW }), /rv-retry/);
+  // Kênh đã tắt thì không báo.
+  assert.deepEqual(reviewStatusModel({ ...base, enabled: { booking: true }, status: {}, retries: RETRY }).retries, []);
+});
+
+test("tabRetryText: tới giờ mà chưa đọc xong ⇒ báo máy đang đọc lại", () => {
+  assert.equal(
+    tabRetryText({ label: "Booking", retryAt: "2026-10-26T03:19:00.000Z" }, new Date("2026-10-26T03:19:05.000Z")),
+    "Bạn vừa đóng tab Booking lúc máy đang đọc review. Máy đang đọc lại kênh này.",
+  );
+});
+
+test("🔴 hợp đồng Hub không đổi: chờ đọc lại không lọt vào kênh gửi Hub", () => {
+  const withRetry = reviewStatusModel({ ...base, status: { trip: OLD_OK }, retries: RETRY });
+  const without = reviewStatusModel({ ...base, status: { trip: OLD_OK } });
+  assert.deepEqual(hubChannels(withRetry), hubChannels(without));
+});
+
+test("🔴 ③ quay:review trả kênh chờ đọc lại ngay sau khi tab bị đóng", async () => {
+  fresh({ closeOn: ["ebooking.trip.com"] });
+  await message({ type: "scanChannel", channel: "trip" });
+  const r = await message({ type: "quay:review" });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.model.retries.map((x) => x.key), ["trip"]);
+  assert.equal(r.model.retries[0].retryAt, state.store[TAB_RETRY_KEY].trip.retryAt);
+});
+
+test("🔴 ③ khung quầy vẽ lại khi `tabRetry` đổi, và báo một dòng cả lúc khung đang gập", () => {
+  const ui = readFileSync(new URL("../extension/quay/ui.js", import.meta.url), "utf8");
+  assert.match(ui, /changes\.status \|\| changes\[TAB_RETRY_KEY\]/);
+  assert.match(ui, /S\.note = \{ tone: "warn", text: fresh\.map\(\(x\) => tabRetryText\(x\)\)/);
+});
+
+test("🔴 ③ lời giải thích mã TAB khớp hành vi mới: đã tự đọc lại sau 2 phút, chỉ chỗ nhóm tab", () => {
+  const { code, help } = classifyError("booking", "quét", "Tab bị đóng giữa lúc tải trang");
+  assert.equal(code, "BKG-TAB");
+  assert.match(help.why, /Máy đã tự đọc lại sau 2 phút nhưng tab lại bị đóng\./);
+  assert.match(help.steps.join(" "), /nhóm tab màu xanh có chữ Urban B/);
+  assert.match(help.steps.join(" "), /dải chữ xanh/);
+  assert.equal(SCAN_GROUP.color, "blue", "lời giải thích nói nhóm màu xanh");
+});
