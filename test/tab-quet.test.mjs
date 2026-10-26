@@ -537,6 +537,7 @@ test("🔴 YC-249 lượt trước bị cắt ngang (nhóm sót) ⇒ lượt sau
   assert.ok(tabs.has(51), "tab của lễ tân không bị đóng");
   assert.equal(tabs.get(51).groupId, -1, "tab của lễ tân ra khỏi nhóm");
   assert.deepEqual(state.ungrouped, [51]);
+  assert.equal(state.groups.length, 2, "dọn TRƯỚC khi mở tab: tab quét mới không vào lại nhóm sót (có tab lễ tân trong đó)");
   assert.deepEqual(liveScanGroups(), []);
   assert.equal(session.scanOwnTabs, undefined, "dọn xong thì quên danh sách tab của máy");
 });
