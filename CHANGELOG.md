@@ -5,6 +5,27 @@ quản lý thấy gì khác. Máy đã cài không tự lên bản: khi có bả
 "Có bản mới …" và phải có người chạy lại lệnh cài (xem [docs/cai-tu-xa.md](docs/cai-tu-xa.md) mục
 Cập nhật).
 
+## 1.5.4
+
+**Trang Giao ca quầy trên Hub quét được review ngay trên máy quầy** (YC-239, H-1996 a, H-1976 c).
+Trước khi giao ca, lễ tân bấm Quét trên trang Giao ca quầy của Hub; Hub gửi lệnh quét qua extension
+của chính máy quầy và nhận kết quả ngay trên trang. Trang Hub do UrbanB dựng riêng; bản này chỉ là
+phần của extension.
+
+- Extension nhận lệnh quét (`ext:scan`) từ trang Hub, chỉ trên `hub.urbanb.vn` và `urbanb.xyz`. Lượt
+  quét đi qua mọi kênh máy đang quét; trang thấy từng kênh đang quét, đạt, lỗi hay cần đăng nhập lại,
+  kèm mã lỗi như ô bật lên và khung trên PMS.
+- Đang có lượt quét mọi kênh (hẹn giờ, lễ tân bấm Quét review ngay) thì trang gắn vào lượt ấy, máy
+  không quét hai lượt chồng nhau. Đang có lượt quét một kênh thì chờ lượt ấy xong rồi mới quét.
+- Tab quét bị đóng giữa chừng: trang Giao ca báo ngay kênh ấy lỗi `TAB`, không chờ. Máy vẫn tự đọc lại
+  kênh ấy sau 2 phút như 1.5.3.
+- Đóng hay tải lại trang Giao ca giữa chừng: lượt quét vẫn chạy hết và vẫn gửi Hub như lượt thường.
+- Tin gửi trang Hub không có mã bí mật, URL Sheet, email hay mã kết nối OTA. Hợp đồng đầy đủ cho trang
+  Hub: [docs/hop-dong-hub-bridge.md](docs/hop-dong-hub-bridge.md).
+- Hợp đồng gửi Hub không đổi. Lượt quét giao ca gửi lên Hub như lượt người bấm.
+- Mọi máy quầy phải chạy lại lệnh cài để lên 1.5.4 thì trang Giao ca mới quét được; máy còn bản cũ
+  không trả lời lệnh quét.
+
 ## 1.5.3
 
 **Tab máy tự mở để đọc review: lễ tân nhận ra được, lỡ đóng thì máy tự đọc lại** (YC-238, H-1972 a,

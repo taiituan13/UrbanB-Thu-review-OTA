@@ -28,6 +28,7 @@ Hướng dẫn cho AI: `CLAUDE.md`. Các công cụ UrbanB khác: `../UrbanB-too
 | `docs/cai-tu-xa.md` | Cài cho khách sạn trên Windows bằng một lệnh (Sheet tạo lệnh kèm mã cài đặt riêng từng KS) |
 | `windows/cai-dat.ps1` | Lệnh cài (và cập nhật, khi chạy lại) trên Windows |
 | `docs/ma-loi.md` | Mã lỗi: khách sạn gửi mã nào, người quản lý tra ở đâu, từng loại lỗi xử lý ra sao |
+| `docs/hop-dong-hub-bridge.md` | Hợp đồng giữa trang Hub và extension trên máy quầy: trạng thái máy (`ext:status`), quét trước khi giao ca (`ext:scan`) |
 | `test/` | Test cho phần chuẩn hoá, gửi Hub, Code.gs và thống kê (`npm test`) |
 | `src/scripts/` | Script đo khả thi ban đầu (Playwright), không còn dùng |
 

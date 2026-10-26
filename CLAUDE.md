@@ -123,6 +123,8 @@ Kết luận bằng một mức: **gọn** (một lượt, ít rủi ro), **vừ
 
 - Extension gửi lên Hub qua `extension/hub.js`: `POST <hub>/api/ingest/reviews`. Hợp đồng do
   UrbanB giữ ở `../UrbanB/src/app/api/ingest/reviews/route.ts`. Repo này chỉ đọc bên ấy.
+- Trang Hub nói chuyện với extension trên máy quầy qua `extension/hub-bridge.js` (postMessage). Hợp
+  đồng do repo này giữ ở đầu tệp ấy và `docs/hop-dong-hub-bridge.md`; đổi gì phải báo điều phối trước.
 - Không gửi trường Hub chưa nhận. Máy khách sạn chạy bản cũ tới khi tự cập nhật, nên Hub phải
   nhận được cả dạng dữ liệu của bản extension cũ.
 
@@ -137,6 +139,7 @@ Kết luận bằng một mức: **gọn** (một lượt, ít rủi ro), **vừ
 | `extension/update.js` | Kiểm bản mới trên GitHub, `UPDATE_COMMAND` |
 | `extension/setup-code.js` | Mã cài đặt `URB1.…` (Sheet tạo, `cai-dat.ps1` ghi ra `ma-cai-dat.txt`, extension tự áp) |
 | `extension/hub.js`, `report.js`, `capture.js`, `nav.js` | Gửi Hub, mã lỗi, chụp request, mở tab |
+| `extension/hub-bridge.js`, `shift-scan.js` | Nói chuyện với trang Hub trên máy quầy (`ext:status`, `ext:scan`). Hợp đồng: `docs/hop-dong-hub-bridge.md` |
 | `apps-script/Code.gs` | Web App nhận dữ liệu của bản tới 1.5.1: ghi không trùng, tab Thống kê, Máy cài, Nhật ký lỗi |
 | `windows/cai-dat.ps1` | Lệnh cài / cập nhật trên Windows (`irm … \| iex`) |
 | `docs/` | Cài đặt, cài từ xa, mã lỗi, sơ đồ kiến trúc |
