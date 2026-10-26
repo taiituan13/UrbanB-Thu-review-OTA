@@ -10,6 +10,8 @@ import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
 import { flushShiftHandovers, hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
+import { PMS_HOME_URL, PMS_LOAD_TIMEOUT_MS, PMS_TAB_PATTERN, READING_TIMEOUT_MS, readShiftInPage, readingReport } from "./quay/ezcloud-reading.js";
+import { shiftHandoverRequest } from "./quay/shift-handover.js";
 import { alarmMinutes, loadEffectiveConfig, reviewMissingHelp, reviewMissingText, scanAlarmFor } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
 import { autoRescanChannel } from "./login-watch.js";
@@ -661,13 +663,20 @@ chrome.runtime.onConnect.addListener((port) => {
 
 async function shiftScan(port, requestId) {
   let gone = false;
-  const send = (msg) => {
+  const post = (msg) => {
     if (gone) return;
     try {
       port.postMessage({ ...msg, requestId });
     } catch {
       gone = true; // trang đã đóng
     }
+  };
+  // YC-246 (Q1 a): đọc số ezCloud song song với lượt quét. Kết quả quét chỉ tới trang SAU khi lượt đọc đã gửi Hub
+  // (hoặc hết trần), vì trang nhận kết quả là hỏi Hub số ezCloud của đúng mã lượt quét này.
+  const reading = withTimeout(readEzcloudForScan(requestId), READING_TIMEOUT_MS, "Hết giờ đọc số ezCloud").catch(() => {});
+  const send = (msg) => {
+    if (msg?.type === MSG.result) reading.then(() => post(msg));
+    else post(msg);
   };
   let attached = null;
   port.onDisconnect.addListener(() => {
@@ -698,6 +707,44 @@ async function shiftScan(port, requestId) {
     if (!queued) send({ type: MSG.accepted, mode, startedAt: null });
     queued = true;
     await current.done;
+  }
+}
+
+/**
+ * YC-246 (Q1 a, Q2 b): đọc ca ezCloud đang mở trong các tab PMS của máy và gửi Hub một lượt đọc gắn mã lượt quét
+ * `scanCode`. Không có tab PMS ⇒ mở một tab PMS nền (không vào nhóm quét review, không giật tiêu điểm), đọc xong
+ * đóng. Mỗi khách sạn gửi một lượt. Lỗi nào cũng nuốt: thiếu số ezCloud không được làm hỏng lượt quét review.
+ */
+async function readEzcloudForScan(scanCode) {
+  let opened = null;
+  try {
+    let targets = (await chrome.tabs.query({ url: PMS_TAB_PATTERN }).catch(() => [])).filter((t) => !t.discarded);
+    if (targets.length === 0) {
+      opened = await chrome.tabs.create({ url: "about:blank", active: false });
+      const loaded = waitForLoad(opened.id, PMS_LOAD_TIMEOUT_MS);
+      await chrome.tabs.update(opened.id, { url: PMS_HOME_URL });
+      await loaded;
+      await sleep(2500); // trang PMS là ứng dụng một trang: chờ nó dựng phiên xong
+      targets = [opened];
+    }
+    const origin = await hubOriginNow();
+    const sent = new Set();
+    for (const tab of targets) {
+      let page = null;
+      try {
+        page = await runInPage(tab.id, readShiftInPage);
+      } catch {
+        continue;
+      }
+      const report = readingReport({ page, scanCode, readAt: new Date().toISOString(), extensionVersion: chrome.runtime.getManifest().version });
+      if (!report || sent.has(report.ezcloudHotelId)) continue;
+      sent.add(report.ezcloudHotelId);
+      const { url, init } = shiftHandoverRequest(origin, report);
+      await hubFetch(url, init);
+    }
+  } catch {
+  } finally {
+    await closeTab(opened?.id);
   }
 }
 

@@ -1,19 +1,73 @@
 # Hợp đồng: số Bàn giao ca từ PMS ezCloud về Hub (YC-246)
 
-Bản 26/10/2026. Bên gửi: extension Urban B trên máy quầy (repo `urbanb-reviews`, từ bản 1.5.5). Bên nhận:
+Bản 27/10/2026. Bên gửi: extension Urban B trên máy quầy (repo `urbanb-reviews`, từ bản 1.5.5). Bên nhận:
 Hub UrbanB, route `POST /api/extension/shift-handover`. Bản gốc của hợp đồng này ở phía Hub:
 `UrbanB/docs/hop-dong-ban-giao-ca-pms.md`. Đổi một bên thì sửa cả hai.
 
+Route nhận **hai dạng thân tin**:
+
+- **Lượt đọc lúc Quét** (`"kind": "reading"`, từ 27/10/2026). Đây là nguồn của ô **Số sổ ezCloud**.
+- **Lượt bấm Bàn giao** (không có `kind`, dạng của 26/10/2026). Hub vẫn nhận và lưu, để máy đã nạp bản 1.5.5 đầu
+  tiên không báo lỗi, nhưng trang Giao ca quầy không còn đọc dạng này.
+
 ## Vì sao có hợp đồng này
 
-User chốt `H-2034` b ngày 26/10/2026: ô **Số sổ ezCloud** trên trang Giao ca quầy (`/front-desk/handover`) là số
-**"Bàn giao cho ca sau"** (dòng 7 trang Bàn giao ca của PMS) mà lễ tân vừa chốt khi bấm **Bàn giao** trên PMS.
+Ô **Số sổ ezCloud** trên trang Giao ca quầy (`/front-desk/handover`) là số **"Bàn giao cho ca sau"** (dòng 7 trang
+Bàn giao ca của PMS).
 
-Đo 26/10/2026: ở ca đang mở, máy chủ ezCloud không giữ dòng 7 (`GetCurrentShift` trả `MoneyNextShift = 0`).
-Trình duyệt tự tính Đầu ca + Tổng thu − Tổng chi, lễ tân sửa tay được, và con số chốt chỉ rời trình duyệt trong
-`POST api/Shift/ShiftHandover`. Vì vậy chỉ extension, đứng trong trang PMS, thấy được con số ấy.
+- 26/10/2026, `H-2034` b: lấy số lễ tân chốt khi bấm **Bàn giao** trên PMS.
+- 27/10/2026, user đổi: *"không bấm bàn giao, cứ lấy số tại thời điểm giao diện có"*. Chốt Q1 a: lúc lễ tân bấm
+  **Quét** trên Hub, máy tự tính số ấy từ ca ezCloud đang mở. Chốt Q2 b: máy không có tab PMS thì tự mở một tab
+  PMS nền để đọc; đọc không được thì ô ghi "Chưa lấy được số ezCloud" và lễ tân vẫn Chốt được.
 
-## Phía extension: bắt lượt Bàn giao
+Đo 26/10/2026: trang Bàn giao ca của PMS chỉ gọi `GET api/Shift/GetCurrentShift?shiftId=0`. Ở ca đang mở, máy chủ
+ezCloud không giữ dòng 7 (`MoneyNextShift = 0`); trình duyệt tự tính **Đầu ca + Tổng thu − Tổng chi** (khớp 2/2
+ca đo được) và lễ tân sửa tay được. Lượt đọc lúc Quét tính đúng con số trang hiện khi lễ tân chưa sửa tay.
+
+## Lượt đọc lúc Quét (`kind: "reading"`)
+
+- Trang Giao ca quầy gửi `ext:scan` kèm `requestId` (chính là mã lượt quét `scanCode` của Hub). Song song với lượt
+  quét review, extension đọc ca ezCloud đang mở trong **mọi tab `pms.ezcloudhotel.com`** của máy: chạy
+  `GET /api/Shift/GetCurrentShift?shiftId=0` ngay trong trang (world MAIN), bằng phiên ezCloud của trang; không
+  được thì thử lại với JWT trang giữ trong bộ nhớ. Không đổi khách sạn mặc định, không gọi lệnh ghi nào.
+- Máy không có tab PMS nào ⇒ mở một tab `https://pms.ezcloudhotel.com/` nền (không giật tiêu điểm, không vào nhóm
+  tab quét review), đọc xong đóng.
+- Chỉ gửi khi ezCloud trả `Code === 0` và ca đang mở (`IsFinish === false`). Mỗi khách sạn một lượt.
+- `ext:scan-result` chỉ tới trang **sau** khi lượt đọc đã gửi Hub xong (trần 30 giây), vì trang nhận kết quả là
+  hỏi Hub số ezCloud của đúng `scanCode` ấy.
+- Không xếp hàng, không gửi lại: lượt đọc chỉ có nghĩa cho lần Quét đang chờ.
+
+```json
+{
+  "kind": "reading",
+  "scanCode": "K7M2PQ",
+  "ezcloudHotelId": "17704",
+  "ezShiftId": 52011,
+  "ezShiftNumber": 14,
+  "shiftOpenedAt": "2026-10-26T07:00:00",
+  "money": [{ "name": "VND", "begin": 260000, "revenue": 1500000, "expenditure": 200000 }],
+  "readAt": "2026-10-27T02:00:00.000Z",
+  "extensionVersion": "1.5.5"
+}
+```
+
+| Trường | Kiểu | Nguồn |
+|---|---|---|
+| `kind` | `"reading"` | cố định |
+| `scanCode` | chuỗi | `requestId` của `ext:scan` |
+| `ezcloudHotelId` | chuỗi chữ số | `Data.HotelId` |
+| `ezShiftId` | số nguyên dương | `Data.ShiftId` |
+| `ezShiftNumber` | số nguyên ≥ 0 hoặc `null` | `Data.ShiftNumber` |
+| `shiftOpenedAt` | chuỗi hoặc `null` | `Data.CreateDate` (giờ ezCloud, không kèm múi giờ) |
+| `money` | mảng ≤ 10 phần tử | `Data.ListShiftDetailModels[]`: `MoneyName`, `MoneyBeginShift`, `TotalRevenue`, `TotalExpenditure` |
+| `readAt` | chuỗi ISO 8601 | giờ máy quầy lúc đọc |
+| `extensionVersion` | `x.y.z` | `manifest.json` |
+
+**Hub** chọn dòng `name = "VND"` và tính số "Bàn giao cho ca sau" = `begin + revenue − expenditure`; âm thì ô ghi
+0 kèm số gốc (`H-835` a), đúng như PMS kẹp dòng 6 "Thực tế trong két" về 0. Extension không tính số nào.
+Hub trả lời như bảng Response bên dưới; trùng `scanCode` ở cùng cơ sở ⇒ giữ lượt đầu, `duplicate: true`.
+
+## Phía extension: bắt lượt Bàn giao (dạng 26/10/2026)
 
 - `capture.js` (world MAIN, trên `pms.ezcloudhotel.com`) theo dõi request `POST …/api/Shift/ShiftHandover`, cả
   `fetch` lẫn `XMLHttpRequest`. Không sửa request, không gửi lại request nào tới ezCloud.

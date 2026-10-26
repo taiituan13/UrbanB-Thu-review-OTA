@@ -47,7 +47,22 @@ const machine = () => ({
   deviceId: "dev-test",
 });
 
-const state = { store: {}, fetched: [], created: [], closeOn: [], tripResult: null, hubFail: false, mine: MINE, scanDelay: 0 };
+// YC-246 (Q1 a): ca ezCloud đang mở mà readShiftInPage trả về từ tab PMS. Số giả, không phải số thật.
+const PMS_PAGE_OK = {
+  status: 200,
+  code: 0,
+  shift: {
+    ShiftId: 52011,
+    ShiftNumber: 14,
+    CreateDate: "2026-10-26T07:00:00",
+    IsFinish: false,
+    HotelId: 1234,
+    ListShiftDetailModels: [{ MoneyName: "VND", MoneyBeginShift: 260000, TotalRevenue: 1500000, TotalExpenditure: 200000 }],
+  },
+};
+const PMS_TAB = { id: 900, url: "https://pms.ezcloudhotel.com/#/home", status: "complete", windowId: 7, groupId: -1 };
+
+const state = { store: {}, fetched: [], created: [], closeOn: [], tripResult: null, hubFail: false, mine: MINE, scanDelay: 0, pmsTabs: [PMS_TAB], pmsPage: PMS_PAGE_OK, pmsReads: [] };
 
 function event() {
   const fns = [];
@@ -128,7 +143,7 @@ globalThis.chrome = {
       for (const id of [].concat(tabIds)) if (tabs.has(id)) tabs.get(id).groupId = g;
       return g;
     },
-    query: async () => [],
+    query: async (q = {}) => (String(q.url ?? "").startsWith("https://pms.ezcloudhotel.com") ? state.pmsTabs.map((t) => ({ ...t })) : []),
     sendMessage: async () => {},
     onUpdated: tabUpdated,
     onRemoved: tabRemoved,
@@ -137,6 +152,12 @@ globalThis.chrome = {
   scripting: {
     executeScript: async ({ target, func }) => {
       if (func.name === "showScanBanner") return [{ result: true }];
+      if (func.name === "readShiftInPage") {
+        const url = state.pmsTabs.find((t) => t.id === target.tabId)?.url ?? tabs.get(target.tabId)?.url ?? "";
+        state.pmsReads.push({ tabId: target.tabId, url });
+        if (!url.startsWith("https://pms.ezcloudhotel.com")) throw new Error(`No tab with id: ${target.tabId}.`);
+        return [{ result: structuredClone(state.pmsPage) }];
+      }
       if (!tabs.has(target.tabId)) throw new Error(`No tab with id: ${target.tabId}.`);
       if (state.scanDelay) await new Promise((r) => realSetTimeout(r, state.scanDelay));
       if (func.name === "scanTripInPage" && state.tripResult) return [{ result: structuredClone(state.tripResult) }];
@@ -152,6 +173,12 @@ globalThis.fetch = async (url, init = {}) => {
   state.fetched.push({ url: u, method: init.method ?? "GET", body: typeof init.body === "string" ? init.body : "", at: Date.now() });
   if (u.endsWith("/ma-cai-dat.txt")) return new Response("", { status: 404 });
   if (u.includes("/api/extension/connection")) return json(state.mine);
+  if (u.includes("/api/extension/shift-handover")) {
+    // Hub trả lời chậm một chút: kết quả quét không được tới trang trước khi lượt đọc đã lên Hub.
+    await new Promise((r) => realSetTimeout(r, 30));
+    state.readingDone = true;
+    return json({ ok: true, duplicate: false });
+  }
   if (u.includes("/api/ingest/reviews")) {
     if (state.hubFail && init.body?.includes('"ingest"')) return json({ ok: false, error: "Hub chưa bật nhận review" }, 403);
     return json({ ok: true, inserted: 0, updated: 0, unchanged: 0, unmatched: 0, errors: [], rejected: [] });
@@ -172,7 +199,7 @@ function message(msg) {
 }
 
 function fresh(extra = {}) {
-  Object.assign(state, { store: machine(), fetched: [], created: [], closeOn: [], tripResult: null, hubFail: false, mine: MINE, scanDelay: 0, ...extra });
+  Object.assign(state, { store: machine(), fetched: [], created: [], closeOn: [], tripResult: null, hubFail: false, mine: MINE, scanDelay: 0, pmsTabs: [PMS_TAB], pmsPage: PMS_PAGE_OK, pmsReads: [], ...extra });
   tabs.clear();
   alarms.clear();
 }
@@ -463,6 +490,69 @@ test("🔴 (f) tin gửi trang không chứa token, mã bí mật, URL Sheet, em
   // Danh sách khoá đóng: thêm khoá mới phải sửa hợp đồng (docs/hop-dong-hub-bridge.md) và test này.
   const allowed = new Set(["type", "requestId", "mode", "startedAt", "finishedAt", "outcome", "version", "channels", "channel", "label", "state", "count", "code", "ref", "retryAt", "what", "why", "steps"]);
   assert.deepEqual([...keys].filter((k) => !allowed.has(k)), []);
+});
+
+// ---------- YC-246 (Q1 a, Q2 b): đọc số ezCloud lúc Quét ----------
+
+const readingPosts = () => state.fetched.filter((f) => f.url.endsWith("/api/extension/shift-handover") && f.method === "POST").map((f) => JSON.parse(f.body));
+
+test("🔴 YC-246 ext:scan ⇒ đọc ca đang mở trong tab PMS, gửi Hub một lượt đọc gắn requestId, kết quả tới trang SAU khi Hub đã nhận", async () => {
+  fresh({ tripResult: TRIP_OK, readingDone: false });
+  const page = connect();
+  page.scan("K7M2PQ");
+  await until(() => page.results().length, "kết quả");
+  assert.equal(state.readingDone, true, "trang nhận kết quả là hỏi Hub số ezCloud ⇒ lượt đọc phải lên Hub trước");
+  assert.deepEqual(state.pmsReads.map((r) => r.tabId), [PMS_TAB.id], "đọc trong tab PMS sẵn có, không mở tab mới");
+  assert.equal(state.created.length, 2, "chỉ hai tab của Trip và Go2Joy");
+  const posts = readingPosts();
+  assert.equal(posts.length, 1);
+  assert.deepEqual(posts[0], {
+    kind: "reading",
+    scanCode: "K7M2PQ",
+    ezcloudHotelId: "1234",
+    ezShiftId: 52011,
+    ezShiftNumber: 14,
+    shiftOpenedAt: "2026-10-26T07:00:00",
+    money: [{ name: "VND", begin: 260000, revenue: 1500000, expenditure: 200000 }],
+    readAt: posts[0].readAt,
+    extensionVersion: "1.5.4",
+  });
+  assert.ok(!Number.isNaN(Date.parse(posts[0].readAt)));
+  const text = JSON.stringify(posts);
+  for (const [name, value] of Object.entries(SECRETS)) assert.ok(!text.includes(value), `lộ ${name}`);
+});
+
+test("🔴 YC-246 Q2 b: máy không có tab PMS ⇒ mở một tab PMS nền (không giật tiêu điểm, không vào nhóm quét), đọc xong đóng", async () => {
+  fresh({ tripResult: TRIP_OK, pmsTabs: [] });
+  const page = connect();
+  page.scan("K7M2PR");
+  await until(() => page.results().length, "kết quả");
+  const pms = state.pmsReads.at(-1);
+  assert.ok(pms?.url.startsWith("https://pms.ezcloudhotel.com/"), "đọc trong tab vừa mở tới PMS");
+  assert.ok(state.created.every((c) => c.active === false));
+  assert.ok(!tabs.has(pms.tabId), "tab PMS máy mở thì đóng sau khi đọc");
+  assert.equal(tabs.get(pms.tabId)?.groupId ?? -1, -1);
+  assert.equal(readingPosts().length, 1);
+  assert.equal(readingPosts()[0].scanCode, "K7M2PR");
+});
+
+test("🔴 YC-246 PMS chưa đăng nhập, hoặc không có ca đang mở ⇒ không gửi lượt đọc nào, lượt quét vẫn có kết quả", async () => {
+  for (const pmsPage of [{ status: 401, code: null, shift: null }, { ...PMS_PAGE_OK, shift: { ...PMS_PAGE_OK.shift, IsFinish: true } }]) {
+    fresh({ tripResult: TRIP_OK, pmsPage });
+    const page = connect();
+    page.scan("K7M2PS");
+    await until(() => page.results().length, "kết quả");
+    assert.equal(page.results()[0].outcome, OUTCOME.done);
+    assert.deepEqual(readingPosts(), []);
+  }
+});
+
+test("🔴 YC-246 tab PMS không chạy được mã (trang lỗi) ⇒ không gửi gì, kết quả quét vẫn tới trang", async () => {
+  fresh({ tripResult: TRIP_OK, pmsTabs: [{ ...PMS_TAB, url: "chrome-error://chromewebdata/" }] });
+  const page = connect();
+  page.scan("K7M2PT");
+  await until(() => page.results().length, "kết quả");
+  assert.deepEqual(readingPosts(), []);
 });
 
 // ---------- ② manifest: lệnh quét chỉ nhận trên gốc Hub thật ----------
