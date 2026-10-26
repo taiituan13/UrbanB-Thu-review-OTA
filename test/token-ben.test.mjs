@@ -211,3 +211,104 @@ test("Khung trên PMS vẽ dòng bền ở mọi tab và vẽ lại khi lượt 
   for (const fn of ["bookingsTab", "boardTab", "todoTab"]) assert.ok(ui.includes(`body = tokenAlertsHTML() + ${fn}()`), fn);
   assert.match(ui, /changes\[`quayTokenAt:\$\{kind\}`\]/);
 });
+
+// ---------- ② tokenHealth: Sheet báo token đã lưu rồi chết, chờ xác nhận, chưa có ----------
+
+const FAILED_AT = new Date(2026, 9, 25, 22, 40).toISOString(); // 22:40 ngày 25/10 giờ máy
+const health = (ezcloud) => ({ matches: [], tokenHealth: { ezcloud } });
+
+test("(b) auth-failed ⇒ dòng lỗi có giờ bị từ chối, số booking đang chờ, và việc lễ tân làm", () => {
+  const h = H.readTokenHealth(health({ state: "auth-failed", savedAt: null, authFailedAt: FAILED_AT, waitingRows: 7, message: "Token hỏng" }), AT);
+  const [a, ...rest] = H.tokenAlerts({ health: h, now: AT });
+  assert.equal(rest.length, 0);
+  assert.equal(a.tone, "err");
+  assert.equal(a.text, "Booking OTA: ezCloud đã từ chối phiên đăng nhập PMS lúc 22:40 ngày 25/10, 7 booking đang chờ vào ezCloud. Mở lại hoặc đăng nhập lại PMS để máy gửi phiên mới.");
+  // Cùng ngày ⇒ chỉ giờ. Không có booking chờ ⇒ không nói số.
+  const same = H.readTokenHealth(health({ state: "auth-failed", authFailedAt: new Date(AT - 60 * SEC).toISOString(), waitingRows: 0 }), AT);
+  assert.equal(H.tokenAlerts({ health: same, now: AT })[0].text, "Booking OTA: ezCloud đã từ chối phiên đăng nhập PMS lúc 09:04. Mở lại hoặc đăng nhập lại PMS để máy gửi phiên mới.");
+});
+
+test("② pending ⇒ Quản lý cơ sở xác nhận ở bước 2; missing ⇒ Quản trị dán mã lên Hub", () => {
+  const p = H.tokenAlerts({ health: H.readTokenHealth(health({ state: "pending", waitingRows: 2 }), AT), now: AT })[0];
+  assert.equal(p.tone, "warn");
+  assert.match(p.text, /đang chờ Quản lý cơ sở xác nhận ở bước 2 trên Google Sheet của khách sạn, 2 booking đang chờ vào ezCloud\./);
+  const m = H.tokenAlerts({ health: H.readTokenHealth(health({ state: "missing", waitingRows: 0 }), AT), now: AT })[0];
+  assert.equal(m.tone, "err");
+  assert.match(m.text, /chưa có phiên đăng nhập PMS\. Báo Quản trị hệ thống dán mã kết nối Booking OTA lên Hub\./);
+  // Lượt đẩy cũng đang chờ xác nhận ⇒ chỉ một dòng, không nói hai lần.
+  const both = H.tokenAlerts({ tokens: { ezcloud: { at: AT, outcome: "pending" } }, health: H.readTokenHealth(health({ state: "pending" }), AT), now: AT });
+  assert.equal(both.length, 1);
+});
+
+test("(c) Bản Apps Script cũ không có tokenHealth, hay dạng lạ ⇒ không hiện, không lỗi", () => {
+  for (const result of [undefined, null, {}, { matches: [] }, { tokenHealth: null }, { tokenHealth: {} }, health(null), health("ok"), health({ state: "het-han" }), health({})]) {
+    assert.equal(H.readTokenHealth(result, AT), null);
+  }
+  assert.deepEqual(H.tokenAlerts({ health: null, now: AT }), []);
+  assert.equal(H.latestHealth(null, undefined), null);
+  // Số booking chờ sai dạng ⇒ 0, ngày sai dạng ⇒ không nói giờ.
+  const h = H.readTokenHealth(health({ state: "auth-failed", authFailedAt: "không phải ngày", waitingRows: "abc" }), AT);
+  assert.deepEqual(h, { state: "auth-failed", savedAt: null, authFailedAt: null, waitingRows: 0, at: AT });
+  assert.match(H.tokenAlerts({ health: h, now: AT })[0].text, /^Booking OTA: ezCloud đã từ chối phiên đăng nhập PMS\. Mở lại/);
+});
+
+test("(d) ok ⇒ không hiện", () => {
+  const h = H.readTokenHealth(health({ state: "ok", savedAt: FAILED_AT, authFailedAt: null, waitingRows: 0, message: "Token chạy tốt" }), AT);
+  assert.equal(h.state, "ok");
+  assert.deepEqual(H.tokenAlerts({ health: h, now: AT }), []);
+});
+
+test("② Máy vừa lưu được token mới sau lượt đọc ⇒ bản đọc auth-failed đã cũ, không hiện; lưu trước lượt đọc thì vẫn hiện", () => {
+  const h = H.readTokenHealth(health({ state: "auth-failed", authFailedAt: FAILED_AT, waitingRows: 7 }), AT);
+  assert.deepEqual(H.tokenAlerts({ tokens: { ezcloud: { at: AT + SEC, outcome: "saved" } }, health: h, now: AT + SEC }), []);
+  assert.equal(H.tokenAlerts({ tokens: { ezcloud: { at: AT - SEC, outcome: "saved" } }, health: h, now: AT }).length, 1);
+  // "unchanged" = gửi lại đúng token đã lưu (có thể chính token đã chết) ⇒ không xoá dòng.
+  assert.equal(H.tokenAlerts({ tokens: { ezcloud: { at: AT + SEC, outcome: "unchanged" } }, health: h, now: AT + SEC }).length, 1);
+  // Bản đọc mới nhất thắng: bảng khoá đọc sau nói ok ⇒ hết.
+  const ok = H.readTokenHealth(health({ state: "ok" }), AT + 5 * SEC);
+  assert.equal(H.latestHealth(h, ok), ok);
+  assert.deepEqual(H.tokenAlerts({ health: H.latestHealth(h, ok), now: AT }), []);
+});
+
+test("(b)(c) sw.js: lượt đọc gần đây và bảng khoá mang tokenHealth lên popup; bản cũ không có trường thì im; token mới lưu ⇒ hết ở lượt đọc kế", async () => {
+  const healthLines = async () => {
+    const st = await SW.statusForPopup();
+    return H.popupPmsRow(st, Date.now()).subs.filter((s) => /ezCloud đã từ chối|Google Sheet của khách sạn chưa có|chờ Quản lý cơ sở/.test(s.text));
+  };
+  // Bản Apps Script cũ.
+  replies.get = { ok: true, result: { matches: [] } };
+  let r = await SW.bookings(HOTEL, "");
+  assert.equal(r.ok, true);
+  assert.equal(r.tokenHealth, null);
+  assert.deepEqual(await healthLines(), []);
+
+  // Token đã lưu rồi chết: Sheet báo auth-failed ở lượt đọc gần đây.
+  replies.get = { ok: true, result: health({ state: "auth-failed", savedAt: null, authFailedAt: FAILED_AT, waitingRows: 7, message: "x" }) };
+  r = await SW.bookings(HOTEL, "");
+  assert.equal(r.tokenHealth.state, "auth-failed");
+  let lines = await healthLines();
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].tone, "err");
+  assert.match(lines[0].text, /lúc 22:40 ngày 25\/10, 7 booking đang chờ vào ezCloud/);
+  assert.equal(store[`quayBook:${HOTEL}`].tokenHealth.state, "auth-failed", "bản đệm cho khung lúc mở lại");
+
+  // Lượt tìm (q) không đè sức khoẻ.
+  replies.get = { ok: true, result: { matches: [] } };
+  r = await SW.bookings(HOTEL, "abc");
+  assert.equal((await healthLines()).length, 1);
+
+  // Lễ tân đăng nhập lại, Sheet lưu token mới ⇒ lượt đọc bảng khoá kế nói ok ⇒ dòng hết.
+  mock.timers.tick(SEC);
+  replies.get = { ok: true, result: { occupancy: { ok: true, days: [], roomTypes: [] }, locks: {}, tokenHealth: { ezcloud: { state: "ok", savedAt: new Date().toISOString(), authFailedAt: null, waitingRows: 0, message: "" } } } };
+  r = await SW.board(HOTEL);
+  assert.equal(r.ok, true);
+  assert.equal(r.tokenHealth.state, "ok");
+  assert.deepEqual(await healthLines(), []);
+});
+
+test("Khung trên PMS lấy sức khoẻ token từ lượt đọc gần nhất (gần đây, bảng khoá, cả bản đệm)", () => {
+  const ui = readFileSync(new URL("../extension/quay/ui.js", import.meta.url), "utf8");
+  assert.match(ui, /H\.latestHealth\(S\.recent\?\.ok !== false \? S\.recent\?\.tokenHealth : null, S\.board\?\.ok !== false \? S\.board\?\.tokenHealth : null\)/);
+  assert.match(ui, /tokenHealth: c\.bookings\.tokenHealth \?\? null/);
+  assert.match(ui, /tokenHealth: H\.readTokenHealth\(c\.board\.result, c\.board\.at\)/);
+});

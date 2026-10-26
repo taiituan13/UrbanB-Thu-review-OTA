@@ -444,14 +444,57 @@ export function scrubSecrets(text) {
 const TOKEN_WHAT = { ezcloud: "phiên đăng nhập PMS", go2joy: "phiên đăng nhập Go2Joy" };
 const TOKEN_REOPEN = { ezcloud: "PMS", go2joy: "trang HA Go2Joy" };
 
+const HEALTH_STATES = new Set(["ok", "auth-failed", "pending", "missing"]);
+
 /**
- * Lời báo bền về phiên đăng nhập (token) máy gửi Google Sheet của khách sạn (YC-240 ①, H-1980 a).
+ * Sức khoẻ token ezCloud mà Google Sheet của khách sạn báo kèm lượt đọc `recent` và `board` (YC-240 ②).
+ * Hợp đồng do Apps Script giữ (repo ezcloud-ota-booking-sync):
+ *   result.tokenHealth.ezcloud = { state: ok|auth-failed|pending|missing, savedAt, authFailedAt, waitingRows, message }
+ * Bản Apps Script cũ không có trường này, trạng thái lạ hay sai dạng ⇒ null (không hiện gì, không báo lỗi).
+ * Không giữ `message`: chữ hiện do extension viết. `at` = lúc máy đọc được.
+ */
+export function readTokenHealth(result, at) {
+  const h = result?.tokenHealth?.ezcloud;
+  if (!h || typeof h !== "object" || !HEALTH_STATES.has(h.state)) return null;
+  const iso = (v) => (typeof v === "string" && !Number.isNaN(Date.parse(v)) ? v : null);
+  const n = Math.floor(Number(h.waitingRows));
+  return { state: h.state, savedAt: iso(h.savedAt), authFailedAt: iso(h.authFailedAt), waitingRows: n > 0 ? n : 0, at };
+}
+
+/** Bản sức khoẻ token đọc gần nhất trong các lượt (recent, board); không có ⇒ null. */
+export function latestHealth(...list) {
+  return list.filter((h) => h && Number.isFinite(h.at)).sort((a, b) => b.at - a.at)[0] ?? null;
+}
+
+/** Dòng cho sức khoẻ token ezCloud; `ok` ⇒ null. */
+function healthAlert(h, now) {
+  const waiting = h.waitingRows ? `${h.waitingRows} booking đang chờ vào ezCloud` : "";
+  if (h.state === "auth-failed") {
+    const when = h.authFailedAt ? ` lúc ${whenText(Date.parse(h.authFailedAt), now)}` : "";
+    return { kind: "ezcloud", tone: "err", at: h.at, short: "ezCloud từ chối phiên PMS", text: `Booking OTA: ezCloud đã từ chối phiên đăng nhập PMS${when}${waiting ? `, ${waiting}` : ""}. Mở lại hoặc đăng nhập lại PMS để máy gửi phiên mới.` };
+  }
+  if (h.state === "pending")
+    return { kind: "ezcloud", tone: "warn", at: h.at, short: "Phiên PMS chờ xác nhận", text: `Booking OTA: Phiên đăng nhập PMS mới đang chờ Quản lý cơ sở xác nhận ở bước 2 trên Google Sheet của khách sạn${waiting ? `, ${waiting}` : ""}.` };
+  if (h.state === "missing")
+    return { kind: "ezcloud", tone: "err", at: h.at, short: "Sheet chưa có phiên PMS", text: `Booking OTA: Google Sheet của khách sạn chưa có phiên đăng nhập PMS${waiting ? `, ${waiting}` : ""}. Báo Quản trị hệ thống dán mã kết nối Booking OTA lên Hub.` };
+  return null;
+}
+
+/**
+ * Lời báo bền về phiên đăng nhập (token) máy gửi Google Sheet của khách sạn (YC-240, H-1980 a).
  * `tokens` = { ezcloud, go2joy }, mỗi mục là lượt đẩy gần nhất `{ at, outcome, message, codeRejected }`
  * (sw.js flushToken). Bị từ chối hoặc chờ xác nhận ⇒ một dòng, giữ tới lượt đẩy kế được lưu
- * (saved / unchanged); không tự hết theo giờ. Trả [{ kind, tone, text, short, at }], lỗi đứng trước.
+ * (saved / unchanged); không tự hết theo giờ (①).
+ * `health` = readTokenHealth của lượt đọc gần nhất (②): token đã lưu rồi chết, chờ xác nhận, chưa có. Máy vừa
+ * lưu được token mới sau lượt đọc ấy ⇒ bản đọc đã cũ, chờ lượt đọc kế. Trả [{ kind, tone, text, short, at }],
+ * lỗi đứng trước.
  */
-export function tokenAlerts({ tokens, now = Date.now() } = {}) {
+export function tokenAlerts({ tokens, health = null, now = Date.now() } = {}) {
   const out = [];
+  const ez = tokens?.ezcloud;
+  const savedSince = health && ez?.outcome === "saved" && ez.at > health.at;
+  const fromHealth = health && !savedSince ? healthAlert(health, now) : null;
+  if (fromHealth) out.push(fromHealth);
   for (const kind of ["ezcloud", "go2joy"]) {
     const t = tokens?.[kind];
     if (!t?.at) continue;
@@ -462,7 +505,7 @@ export function tokenAlerts({ tokens, now = Date.now() } = {}) {
       out.push({ kind, tone: "err", at: t.at, short: "Mã kết nối bị từ chối", text: `Booking OTA: Google Sheet của khách sạn không nhận mã kết nối, nên ${what} máy gửi lúc ${when} chưa được lưu. Máy đã báo Hub, báo Quản trị hệ thống nhập lại mã.` });
     else if (t.outcome === "rejected")
       out.push({ kind, tone: "err", at: t.at, short: kind === "go2joy" ? "Phiên Go2Joy bị từ chối" : "Phiên PMS bị từ chối", text: `Booking OTA: Google Sheet của khách sạn không nhận ${what} máy gửi lúc ${when}. Mở lại hoặc đăng nhập lại ${TOKEN_REOPEN[kind]} để máy gửi phiên mới.${detail ? ` Chi tiết: ${detail}` : ""}` });
-    else if (t.outcome === "pending")
+    else if (t.outcome === "pending" && !(kind === "ezcloud" && fromHealth?.short === "Phiên PMS chờ xác nhận"))
       out.push({ kind, tone: "warn", at: t.at, short: kind === "go2joy" ? "Phiên Go2Joy chờ xác nhận" : "Phiên PMS chờ xác nhận", text: `Booking OTA: ${what[0].toUpperCase() + what.slice(1)} máy gửi lúc ${when} đang chờ Quản lý cơ sở xác nhận ở bước 2 trên Google Sheet của khách sạn.` });
   }
   return [...out.filter((x) => x.tone === "err"), ...out.filter((x) => x.tone !== "err")];
@@ -517,7 +560,7 @@ export function popupPmsRow(snap, now = Date.now()) {
   else if (b) subs.push({ tone: b.issues ? "warn" : "ok", text: `Booking OTA và Khoá G2J: ${b.count} booking${b.issues ? `, ${b.issues} booking lỗi` : ""}${snap.tokenAt ? `. Đã gửi phiên đăng nhập PMS lúc ${hhmm(snap.tokenAt)}` : ""}`, at: b.at });
   else subs.push({ tone: "off", text: "Booking OTA và Khoá G2J: chưa mở PMS", at: null, pmsClosed: true });
   // YC-240: phiên đăng nhập gửi Google Sheet bị từ chối / chờ xác nhận ⇒ dòng riêng, giữ tới khi lưu được.
-  if (session !== "nobranch") for (const a of tokenAlerts({ tokens: snap.tokens, now })) subs.push({ tone: a.tone, text: a.text, at: a.at });
+  if (session !== "nobranch") for (const a of tokenAlerts({ tokens: snap.tokens, health: snap.tokenHealth, now })) subs.push({ tone: a.tone, text: a.text, at: a.at });
 
   const ind = snap.indicators;
   if (session === "expired") subs.push({ tone: "warn", text: "Chỉ báo: dừng cập nhật tới khi đăng nhập lại", at: ind?.at });

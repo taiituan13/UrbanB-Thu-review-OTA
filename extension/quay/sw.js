@@ -295,11 +295,13 @@ export async function bookings(hotelId, q) {
     const { conn, result, hotel } = await withCode(hotelId, q ? B.searchParams(q) : B.recentParams());
     const matches = Array.isArray(result?.matches) ? result.matches : [];
     const at = now();
+    // YC-240 ②: Sheet báo kèm sức khoẻ token ezCloud ở lượt đọc gần đây (bản Apps Script cũ: null).
+    const tokenHealth = q ? null : H.readTokenHealth(result, at);
     if (!q) {
-      await set(K.book(hotelId), { matches, hotel, at });
-      await patchSnap({ booking: { count: matches.length, issues: B.countIssues(matches), at }, codeState: "ok", branchName: conn.branch?.name ?? "" });
+      await set(K.book(hotelId), { matches, hotel, at, tokenHealth });
+      await patchSnap({ booking: { count: matches.length, issues: B.countIssues(matches), at }, codeState: "ok", branchName: conn.branch?.name ?? "", tokenHealth });
     }
-    return { ok: true, matches, hotel, at, codeState: "ok", session: conn.session };
+    return { ok: true, matches, hotel, at, codeState: "ok", session: conn.session, tokenHealth };
   } catch (e) {
     const codeState = codeStateOf(e.conn, e);
     const cached = q ? null : await get(K.book(hotelId));
@@ -314,7 +316,9 @@ export async function board(hotelId) {
     const entry = { result, at: now() };
     await set(K.board(hotelId), entry);
     await noteFault("board", null);
-    return { ok: true, ...entry };
+    const tokenHealth = H.readTokenHealth(result, entry.at);
+    await patchSnap({ tokenHealth });
+    return { ok: true, ...entry, tokenHealth };
   } catch (e) {
     await noteFault("board", { at: now(), message: e.message });
     return { ok: false, error: e.message, kind: e.kind, codeState: codeStateOf(e.conn, e), cached: await get(K.board(hotelId)) };

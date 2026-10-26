@@ -100,8 +100,8 @@ export function mount({ bridge, plugins = [] } = {}) {
     S.view = await send({ type: "quay:hello", hotelId: S.hotelId });
     S.hello = true;
     const c = S.view?.cache;
-    if (c?.bookings && !S.booking) S.booking = S.recent = { ok: true, matches: c.bookings.matches, at: c.bookings.at, cachedOnly: true };
-    if (c?.board && !S.board) S.board = { ok: true, result: c.board.result, at: c.board.at, cachedOnly: true };
+    if (c?.bookings && !S.booking) S.booking = S.recent = { ok: true, matches: c.bookings.matches, at: c.bookings.at, tokenHealth: c.bookings.tokenHealth ?? null, cachedOnly: true };
+    if (c?.board && !S.board) S.board = { ok: true, result: c.board.result, at: c.board.at, tokenHealth: H.readTokenHealth(c.board.result, c.board.at), cachedOnly: true };
     if (c?.indicators && !S.ind) S.ind = { state: "ok", data: c.indicators.data, at: c.indicators.at, cachedOnly: true };
     render();
     for (const p of plugins) p.onState?.();
@@ -308,7 +308,9 @@ export function mount({ bridge, plugins = [] } = {}) {
 
   /** Lời báo bền về phiên đăng nhập gửi Google Sheet (H.tokenAlerts), lỗi đứng trước. */
   function tokenAlerts() {
-    return H.tokenAlerts({ tokens: S.view?.tokens });
+    // Sức khoẻ token theo lượt đọc gần nhất mà Sheet trả lời được (gần đây hoặc bảng khoá).
+    const health = H.latestHealth(S.recent?.ok !== false ? S.recent?.tokenHealth : null, S.board?.ok !== false ? S.board?.tokenHealth : null);
+    return H.tokenAlerts({ tokens: S.view?.tokens, health });
   }
 
   function tokenAlertsHTML() {
