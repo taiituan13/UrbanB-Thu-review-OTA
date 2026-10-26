@@ -39,6 +39,19 @@ test("cai-dat.ps1 giải nén vào thư mục tạm dưới C:\\UrbanB, không q
   assert.match(fin.slice(0, fin.indexOf("\n}\n")), /Remove-Item -Recurse -Force \$tmp /, "dọn thư mục tạm trong finally");
 });
 
+test("cai-dat.ps1 tải codeload trước, lui về đường archive cũ, mỗi đường thử lại (504 ngày 27/10)", () => {
+  const ps1 = readFileSync(new URL("../windows/cai-dat.ps1", import.meta.url), "utf8");
+  const code = ps1.split("\n").filter((l) => !l.trimStart().startsWith("#")).join("\n");
+  const codeload = code.indexOf('"https://codeload.github.com/$Repo/zip/refs/heads/main"');
+  const archive = code.indexOf('"https://github.com/$Repo/archive/refs/heads/main.zip"');
+  assert.ok(codeload > 0 && archive > codeload, "codeload đứng trước đường archive cũ");
+  assert.match(code, /^\$ZipTries = [2-9]$/m, "thử lại ít nhất hai lần mỗi đường");
+  assert.match(code, /foreach \(\$url in \$ZipUrls\)/);
+  assert.match(code, /Invoke-WebRequest -Uri \$url /, "tải theo danh sách, không ghim một đường");
+  assert.equal((code.match(/Invoke-WebRequest -Uri/g) || []).length, 1, "chỉ một chỗ tải");
+  assert.match(code, /^\s+Get-LatestZip \$zip$/m, "Install-Latest tải qua hàm có thử lại");
+});
+
 test("cai-dat.ps1 bật UTF-8 cho cửa sổ trước dòng chữ đầu tiên (YC-223)", () => {
   const ps1 = readFileSync(new URL("../windows/cai-dat.ps1", import.meta.url), "utf8");
   const code = ps1.split("\n").filter((l) => !l.trimStart().startsWith("#")).join("\n");

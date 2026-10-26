@@ -52,6 +52,36 @@ function Get-LocalVersion {
   try { return (Get-Content -Raw -Encoding UTF8 $manifest | ConvertFrom-Json).version } catch { return $null }
 }
 
+# Đường tải bản mới, thử theo thứ tự. codeload.github.com là máy chủ phát tệp zip thật;
+# github.com/…/archive chỉ chuyển hướng sang đó. Ngày 27/10/2026 github.com trả 504 (có bộ đệm)
+# cho đúng đường archive …/main.zip trong khi codeload vẫn phát bình thường, nên lệnh cài chết dù
+# GitHub báo mọi thứ bình thường. Vì vậy tải codeload trước, hỏng mới lui về đường cũ.
+$ZipUrls = @(
+  "https://codeload.github.com/$Repo/zip/refs/heads/main",
+  "https://github.com/$Repo/archive/refs/heads/main.zip"
+)
+$ZipTries = 3
+
+# Mỗi đường thử $ZipTries lần, nghỉ tăng dần giữa các lần. Lần hỏng chỉ ghi vào log, không in ra
+# cửa sổ: người cài chỉ cần thấy kết quả cuối. Hỏng hết thì ném lỗi của lần cuối.
+function Get-LatestZip($zip) {
+  $lastError = $null
+  foreach ($url in $ZipUrls) {
+    for ($try = 1; $try -le $ZipTries; $try++) {
+      try {
+        Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+        return
+      } catch {
+        $lastError = $_
+        $line = "{0:yyyy-MM-dd HH:mm:ss}  Tải hỏng (lần {1}/{2}) {3}: {4}" -f (Get-Date), $try, $ZipTries, $url, $_.Exception.Message
+        Add-Content -Path $Log -Value $line -Encoding UTF8 -ErrorAction SilentlyContinue
+        if ($try -lt $ZipTries) { Start-Sleep -Seconds (2 * $try) }
+      }
+    }
+  }
+  throw $lastError
+}
+
 function Install-Latest {
   # Dọn thư mục tạm lượt trước bỏ lại (cửa sổ bị đóng giữa chừng). Chỉ lệnh này dùng $TmpRoot.
   if (Test-Path $TmpRoot) {
@@ -61,7 +91,7 @@ function Install-Latest {
   New-Item -ItemType Directory -Path $tmp -Force | Out-Null
   try {
     $zip = Join-Path $tmp "main.zip"
-    Invoke-WebRequest -Uri "https://github.com/$Repo/archive/refs/heads/main.zip" -OutFile $zip -UseBasicParsing
+    Get-LatestZip $zip
     Expand-Archive -Path $zip -DestinationPath $tmp -Force
     $top = Get-ChildItem -Path $tmp -Directory |
       Where-Object { Test-Path (Join-Path $_.FullName "extension\manifest.json") } |
