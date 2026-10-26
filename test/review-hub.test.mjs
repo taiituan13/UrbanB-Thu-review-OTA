@@ -185,6 +185,6 @@ test("🔴 YC-228 — background.js không còn đường ghi Sheet; lượt qu�
     assert.ok(!bg.includes(bad), `background.js còn ${bad}`);
   }
   const body = (name) => bg.slice(bg.indexOf(`async function ${name}(`), bg.indexOf("\n}\n", bg.indexOf(`async function ${name}(`)));
-  assert.match(body("runScan"), /scanOne\(channel, cfg, trigger, runId\)/);
+  assert.match(body("runScan"), /scanOne\(channel, cfg, trigger, runId[,)]/);
   assert.match(body("scanOne"), /await sendHub\(channel, batch\.reviews,/);
 });

@@ -14,6 +14,7 @@ import { alarmMinutes, loadEffectiveConfig, reviewMissingText, scanAlarmFor } fr
 import { badgeText } from "./quay/notifications.js";
 import { autoRescanChannel } from "./login-watch.js";
 import { PAGE_RUN_TIMEOUT_MS, REMOTE_TIMEOUT_MS, isTimeout, withTimeout } from "./quay/net.js";
+import { BANNER_TEXT, BANNER_TIMEOUT_MS, SCAN_GROUP, pickScanGroup, showScanBanner } from "./tab-scan.js";
 import {
   bookingSessionInPage,
   scanAgodaInPage,
@@ -266,9 +267,47 @@ async function go(tabId, url) {
     await loaded;
     await sleep(2500);
     const now = (await chrome.tabs.get(tabId)).url ?? "";
-    if (!isBlankTab(now)) return now;
+    if (!isBlankTab(now)) {
+      await showBanner(tabId);
+      return now;
+    }
     if (attempt >= 2) throw new Error(blankTabMessage(url));
   }
+}
+
+/**
+ * YC-238: dải chữ "Urban B đang đọc review…" trên đầu trang vừa tải. Chèn lại sau mỗi lượt mở trang vì
+ * chuyển trang là mất. Chèn hỏng (trang chặn, hết giờ) thì bỏ qua: dải chữ là phụ, không làm kênh đỏ.
+ */
+async function showBanner(tabId) {
+  try {
+    const run = chrome.scripting.executeScript({ target: { tabId }, func: showScanBanner, args: [BANNER_TEXT] });
+    await withTimeout(run, BANNER_TIMEOUT_MS, "Hết giờ chèn dải chữ");
+  } catch {}
+}
+
+/**
+ * YC-238: cho tab quét vào nhóm "Urban B · đang đọc review" trên thanh tab. Đã có nhóm ấy trong cửa sổ
+ * (kênh trước của cùng lượt quét) thì vào nhóm ấy. API nhóm tab lỗi (cửa sổ không phải cửa sổ thường,
+ * Chrome đang kéo tab) thì bỏ qua: nhóm là phụ, lượt đọc vẫn chạy.
+ */
+async function joinScanGroup(tab) {
+  try {
+    const found = pickScanGroup(await chrome.tabGroups.query({ title: SCAN_GROUP.title }), tab.windowId);
+    if (found != null) {
+      await chrome.tabs.group({ groupId: found, tabIds: tab.id });
+      return;
+    }
+    const groupId = await chrome.tabs.group({ tabIds: tab.id, createProperties: { windowId: tab.windowId } });
+    await chrome.tabGroups.update(groupId, { title: SCAN_GROUP.title, color: SCAN_GROUP.color });
+  } catch {}
+}
+
+async function closeTab(tabId) {
+  if (tabId == null) return;
+  try {
+    await chrome.tabs.remove(tabId);
+  } catch {}
 }
 
 async function runInPage(tabId, func, args = []) {
@@ -494,6 +533,8 @@ let running = false;
 async function runScan(trigger, only = null) {
   if (running) return "Đang có một lượt quét chạy, đợi nó xong.";
   running = true;
+  // Tab của kênh vừa đọc: đóng sau khi tab kênh kế tiếp đã vào nhóm, để nhóm tab không mất rồi hiện lại giữa hai kênh.
+  let leftover = null;
   try {
     // Kênh và chu kỳ theo cấu hình đặt trên Hub (H-1348 a); hỏi lại trước mỗi lượt.
     await syncHubSettings();
@@ -506,10 +547,11 @@ async function runScan(trigger, only = null) {
     for (const channel of CHANNELS) {
       if (!cfg.enabled[channel]) continue;
       if (only && !only.includes(channel)) continue;
-      await scanOne(channel, cfg, trigger, runId);
+      leftover = await scanOne(channel, cfg, trigger, runId, leftover);
     }
     await chrome.storage.local.remove("scanCrash");
   } finally {
+    await closeTab(leftover);
     running = false;
     // YC-157: báo Hub sau mọi lượt quét, kể cả lượt thiếu cấu hình hay hỏng giữa chừng — máy vẫn còn sống.
     await sendHeartbeat({ scan: true }).catch(() => {});
@@ -542,15 +584,19 @@ chrome.tabs.onUpdated.addListener((_tabId, info, tab) => {
 /**
  * Quét một kênh rồi gửi Hub. Kênh `ok` khi quét và chuẩn hoá xong (gửi Hub hỏng thì ghi ở `hub`, kênh vẫn
  * ổn nhưng giữ giờ ổn cũ); `error`/`login` chỉ khi chính lượt quét hỏng. Không còn bước ghi Sheet nào
- * làm kênh đỏ (YC-228).
+ * làm kênh đỏ (YC-228). `leftover` = tab của kênh trước, đóng ngay sau khi tab mới đã vào nhóm. Trả mã tab
+ * của kênh này để người gọi đóng.
  */
-async function scanOne(channel, cfg, trigger, runId) {
+async function scanOne(channel, cfg, trigger, runId, leftover = null) {
   const startedAt = new Date().toISOString();
   let tab = null;
   let hub = null;
   let stage = "mở tab";
   try {
     tab = await chrome.tabs.create({ url: "about:blank", active: false });
+    await joinScanGroup(tab);
+    await closeTab(leftover);
+    leftover = null;
     stage = "quét";
     const result = await SCANNERS[channel](tab.id, cfg);
     // Không có kết quả nào (kể cả câu lỗi) ⇒ trang tự chuyển đi giữa lúc bộ quét đang chạy.
@@ -601,12 +647,9 @@ async function scanOne(channel, cfg, trigger, runId) {
       hub,
     });
   } finally {
-    if (tab?.id != null) {
-      try {
-        await chrome.tabs.remove(tab.id);
-      } catch {}
-    }
+    await closeTab(leftover);
   }
+  return tab?.id ?? null;
 }
 
 /** Giờ quét ổn gần nhất đã lưu của kênh; bản cũ chưa ghi `okAt` thì lượt cuối ổn là giờ ổn. */

@@ -1,0 +1,248 @@
+// YC-238 · H-1972 a, H-1973 a — tab nền mà máy tự mở để đọc review: nhóm tab có tên, dải chữ trên trang, lỡ
+// đóng giữa chừng thì đọc lại một lần sau 2 phút. Chạy thật background.js với `chrome` và `fetch` giả.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { BANNER_TEXT, SCAN_GROUP, channelOfRetryAlarm, closedOutcome, pickScanGroup, retryAlarmName, showScanBanner } from "../extension/tab-scan.js";
+
+// Lời đáp scope=mine của Hub: một chi nhánh, bật Trip và Go2Joy.
+const MINE = {
+  ok: true,
+  branches: [{ id: "br_pct", name: "Phạm Công Trứ", code: "PCT", ezcloudHotelId: 1234, otaSync: null, reviewIds: { booking: null, agoda: null, expedia: null } }],
+  reviewCollect: { enabled: { booking: false, agoda: false, trip: true, expedia: false, traveloka: false, go2joy: true }, intervalHours: 6 },
+  reviewSheetReason: null,
+};
+
+const machine = () => ({ config: { hotel: "Tên máy", enabled: { trip: true, go2joy: true } }, hubCollect: { at: 1 }, deviceId: "dev-test" });
+
+const state = { store: {}, fetched: [], scripts: [], created: [], groups: [], closeOn: [], groupApi: "ok", bannerApi: "ok" };
+
+function event() {
+  const fns = [];
+  return {
+    addListener: (f) => fns.push(f),
+    removeListener: (f) => fns.includes(f) && fns.splice(fns.indexOf(f), 1),
+    fire: (...a) => fns.map((f) => f(...a)),
+    fns,
+  };
+}
+
+const keysOf = (keys) => (keys == null ? Object.keys(state.store) : typeof keys === "string" ? [keys] : Array.isArray(keys) ? keys : Object.keys(keys));
+const area = (getStore) => ({
+  get: async (keys) => Object.fromEntries(keysOf(keys).filter((k) => k in getStore()).map((k) => [k, structuredClone(getStore()[k])])),
+  set: async (obj) => void Object.assign(getStore(), structuredClone(obj)),
+  remove: async (keys) => void [].concat(keys).forEach((k) => delete getStore()[k]),
+});
+const session = {};
+const tabs = new Map();
+const alarms = new Map();
+let nextTab = 1;
+let nextGroup = 100;
+const tabUpdated = event();
+const tabRemoved = event();
+const onAlarm = event();
+
+globalThis.chrome = {
+  storage: { local: area(() => state.store), session: area(() => session), onChanged: event() },
+  alarms: {
+    create: async (name, info) => void alarms.set(name, { name, ...info }),
+    clear: async (name) => alarms.delete(name),
+    get: async (name) => alarms.get(name),
+    getAll: async () => [...alarms.values()],
+    onAlarm,
+  },
+  runtime: {
+    onInstalled: event(),
+    onStartup: event(),
+    onMessage: event(),
+    lastError: undefined,
+    getURL: (p) => `chrome-extension://urbanb/${p}`,
+    getManifest: () => ({ version: "1.5.3" }),
+    getPlatformInfo: (cb) => cb?.({}),
+    reload: () => {},
+    sendMessage: async () => {},
+  },
+  tabs: {
+    create: async (props) => {
+      const t = { id: nextTab++, url: props.url, status: "complete", windowId: 7, groupId: -1 };
+      state.created.push({ ...props });
+      tabs.set(t.id, t);
+      return { ...t };
+    },
+    update: async (id, { url }) => {
+      if (!tabs.has(id)) throw new Error(`No tab with id: ${id}.`);
+      tabs.get(id).url = url;
+      // Người ở quầy đóng tab lúc trang đang tải (ca BKG-TAB 26/10/2026).
+      const close = state.closeOn.findIndex((host) => url.includes(host));
+      if (close >= 0) {
+        state.closeOn.splice(close, 1);
+        tabs.delete(id);
+        setTimeout(() => tabRemoved.fire(id, {}), 0);
+        return { id, url };
+      }
+      setTimeout(() => tabs.has(id) && tabUpdated.fire(id, { status: "complete" }, { ...tabs.get(id) }), 0);
+      return { ...tabs.get(id) };
+    },
+    get: async (id) => {
+      if (!tabs.has(id)) throw new Error(`No tab with id: ${id}.`);
+      return { ...tabs.get(id), status: "complete" };
+    },
+    remove: async (id) => {
+      if (!tabs.delete(id)) throw new Error(`No tab with id: ${id}.`);
+      tabRemoved.fire(id, {});
+    },
+    group: async ({ groupId, tabIds, createProperties }) => {
+      if (state.groupApi === "throw") throw new Error("Tabs cannot be edited right now (user may be dragging a tab).");
+      let g = state.groups.find((x) => x.id === groupId);
+      if (groupId != null && !g) throw new Error(`No group with id: ${groupId}.`);
+      if (!g) {
+        g = { id: nextGroup++, title: "", color: "grey", windowId: createProperties?.windowId };
+        state.groups.push(g);
+      }
+      for (const id of [].concat(tabIds)) tabs.get(id).groupId = g.id;
+      return g.id;
+    },
+    query: async () => [],
+    sendMessage: async () => {},
+    onUpdated: tabUpdated,
+    onRemoved: tabRemoved,
+  },
+  tabGroups: {
+    query: async ({ title }) => {
+      if (state.groupApi === "throw") throw new Error("Grouping is not supported by tabs in this window.");
+      // Nhóm không còn tab nào thì Chrome tự bỏ nhóm.
+      return state.groups.filter((g) => g.title === title && [...tabs.values()].some((t) => t.groupId === g.id)).map((g) => ({ ...g }));
+    },
+    update: async (id, props) => Object.assign(state.groups.find((g) => g.id === id), props),
+  },
+  scripting: {
+    executeScript: async ({ target, func, args }) => {
+      state.scripts.push({ tabId: target.tabId, func: func.name, args, url: tabs.get(target.tabId)?.url });
+      if (func === showScanBanner) {
+        if (state.bannerApi === "throw") throw new Error("Cannot access contents of the page. Extension manifest must request permission to access the respective host.");
+        return [{ result: true }];
+      }
+      if (!tabs.has(target.tabId)) throw new Error(`No tab with id: ${target.tabId}.`);
+      return [{ result: { ok: true, reviews: [], total: 0, channelHotelId: "555", snapshots: [] } }];
+    },
+  },
+  action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
+};
+
+const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+globalThis.fetch = async (url, init = {}) => {
+  const u = String(url);
+  state.fetched.push({ url: u, method: init.method ?? "GET", body: typeof init.body === "string" ? init.body : "" });
+  if (u.endsWith("/ma-cai-dat.txt")) return new Response("", { status: 404 });
+  if (u.includes("/api/extension/connection")) return json(MINE);
+  if (u.includes("/api/ingest/reviews")) return json({ ok: true, inserted: 0, updated: 0, unchanged: 0, unmatched: 0, errors: [], rejected: [] });
+  return json({ ok: true });
+};
+
+// Lượt mở trang của background.js chờ 2,5 giây cho trang tự chuyển hướng; trong test thì khỏi chờ.
+const realSetTimeout = globalThis.setTimeout;
+globalThis.setTimeout = (fn, ms, ...a) => realSetTimeout(fn, ms === 2500 ? 0 : ms, ...a);
+
+await import("../extension/background.js");
+
+function message(msg) {
+  return new Promise((resolve) => {
+    for (const fn of chrome.runtime.onMessage.fns) if (fn(msg, {}, resolve) === true) return;
+    resolve(undefined);
+  });
+}
+
+function fresh(extra = {}) {
+  Object.assign(state, { store: machine(), fetched: [], scripts: [], created: [], groups: [], closeOn: [], groupApi: "ok", bannerApi: "ok", ...extra });
+  tabs.clear();
+  alarms.clear();
+}
+
+// ---------- ① Nhóm tab + dải chữ ----------
+
+test("🔴 ① tab quét vào nhóm 'Urban B · đang đọc review'; hai kênh nối nhau dùng chung một nhóm", async () => {
+  fresh();
+  assert.deepEqual(await message({ type: "scanNow" }), { ok: true });
+  assert.equal(state.created.length, 2, "Trip và Go2Joy, mỗi kênh một tab");
+  assert.ok(state.created.every((c) => c.active === false), "tab vẫn mở nền, không giật tiêu điểm");
+  assert.equal(state.groups.length, 1, "kênh thứ hai phải vào nhóm của kênh thứ nhất, không đẻ nhóm mới");
+  assert.equal(state.groups[0].title, SCAN_GROUP.title);
+  assert.equal(state.groups[0].color, SCAN_GROUP.color);
+  assert.equal(state.groups[0].windowId, 7, "nhóm nằm trong cửa sổ của tab quét");
+  assert.equal(tabs.size, 0, "xong lượt quét thì mọi tab quét đã đóng");
+  assert.equal(state.store.status.trip.state, "ok");
+  assert.equal(state.store.status.go2joy.state, "ok");
+});
+
+test("🔴 ① dải chữ được chèn vào mỗi trang vừa tải, trước khi bộ quét chạy", async () => {
+  fresh();
+  await message({ type: "scanChannel", channel: "trip" });
+  const banners = state.scripts.filter((s) => s.func === "showScanBanner");
+  assert.equal(banners.length, 1);
+  assert.deepEqual(banners[0].args, [BANNER_TEXT]);
+  assert.match(banners[0].url, /ebooking\.trip\.com/);
+  const order = state.scripts.map((s) => s.func);
+  assert.ok(order.indexOf("showScanBanner") < order.indexOf("scanTripInPage"), order.join(","));
+});
+
+test("🔴 (e) API nhóm tab lỗi và chèn dải chữ lỗi ⇒ lượt quét vẫn chạy, kênh ok", async () => {
+  fresh({ groupApi: "throw", bannerApi: "throw" });
+  assert.deepEqual(await message({ type: "scanNow" }), { ok: true });
+  assert.equal(state.groups.length, 0);
+  assert.equal(state.store.status.trip.state, "ok");
+  assert.equal(state.store.status.go2joy.state, "ok");
+  assert.ok(state.scripts.some((s) => s.func === "scanGo2joyInPage"));
+  assert.equal(tabs.size, 0);
+});
+
+test("pickScanGroup: chỉ lấy nhóm cùng tên trong đúng cửa sổ", () => {
+  const groups = [
+    { id: 1, title: SCAN_GROUP.title, windowId: 3 },
+    { id: 2, title: "Nhóm của lễ tân", windowId: 7 },
+    { id: 4, title: SCAN_GROUP.title, windowId: 7 },
+  ];
+  assert.equal(pickScanGroup(groups, 7), 4);
+  assert.equal(pickScanGroup(groups, 9), null);
+  assert.equal(pickScanGroup(undefined, 7), null);
+});
+
+test("🔴 showScanBanner: cố định đầu trang, không bắt chuột, gọi lại không thêm dải thứ hai", () => {
+  const nodes = [];
+  globalThis.document = {
+    getElementById: (id) => nodes.find((n) => n.id === id) ?? null,
+    createElement: () => ({ style: {}, setAttribute() {} }),
+    documentElement: { appendChild: (n) => nodes.push(n) },
+  };
+  try {
+    assert.equal(showScanBanner(BANNER_TEXT), true);
+    assert.equal(showScanBanner(BANNER_TEXT), true);
+    assert.equal(nodes.length, 1);
+    const css = nodes[0].style.cssText;
+    assert.match(css, /position:fixed/);
+    assert.match(css, /top:0/);
+    assert.match(css, /pointer-events:none/);
+    assert.equal(nodes[0].textContent, BANNER_TEXT);
+  } finally {
+    delete globalThis.document;
+  }
+});
+
+test("manifest xin quyền tabGroups", () => {
+  const manifest = JSON.parse(readFileSync(new URL("../extension/manifest.json", import.meta.url), "utf8"));
+  assert.ok(manifest.permissions.includes("tabGroups"));
+});
+
+test("tên báo thức đọc lại đi hai chiều", () => {
+  assert.equal(channelOfRetryAlarm(retryAlarmName("booking")), "booking");
+  assert.equal(channelOfRetryAlarm("scan"), null);
+  assert.equal(channelOfRetryAlarm("tabRetry:"), null);
+});
+
+test("closedOutcome: lần đóng đầu hẹn đọc lại sau 2 phút; đã là lần đọc lại hay lỗi khác thì không", () => {
+  const now = Date.parse("2026-10-26T03:17:00.000Z");
+  assert.deepEqual(closedOutcome({ closed: true, pending: null, now }), {
+    retry: { closedAt: "2026-10-26T03:17:00.000Z", retryAt: "2026-10-26T03:19:00.000Z" },
+  });
+  assert.deepEqual(closedOutcome({ closed: true, pending: { retryAt: "x" }, now }), { retry: null });
+  assert.deepEqual(closedOutcome({ closed: false, pending: null, now }), { retry: null });
+});
