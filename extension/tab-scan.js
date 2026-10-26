@@ -42,6 +42,39 @@ export function pickScanGroup(groups, windowId) {
 }
 
 /**
+ * YC-249: tab trong nhóm quét mà không phải tab máy tự mở (lễ tân tự kéo vào, hoặc Chrome mở lại sau khi tắt
+ * giữa lượt). "ungroup" = tháo khỏi nhóm, giữ tab; "close" = đóng luôn. CÂU CHỜ CHỐT (YC-249 câu 3): tạm để
+ * "ungroup" vì không làm lễ tân mất tab nào.
+ */
+export const FOREIGN_TAB_POLICY = "ungroup";
+
+/**
+ * YC-249 — dọn nhóm quét. `groups` = `chrome.tabGroups.query({ title })`, `tabs` = các tab đang nằm trong những
+ * nhóm ấy, `own` = mã các tab máy tự mở trong phiên trình duyệt này. Tab do một tab của máy mở ra (trang
+ * extranet mở cửa sổ con: Chrome cho tab con vào nhóm của tab mẹ) cũng tính là của máy. Trả
+ * `{ close, ungroup }`; nhóm không còn tab nào thì Chrome tự bỏ nhóm.
+ */
+export function scanGroupSweep({ groups, tabs, own, policy = FOREIGN_TAB_POLICY }) {
+  const groupIds = new Set((groups ?? []).filter((g) => g?.title === SCAN_GROUP.title).map((g) => g.id));
+  const inGroup = (tabs ?? []).filter((t) => t?.id != null && groupIds.has(t.groupId));
+  const mine = new Set(own ?? []);
+  // Tab con của tab con cũng là của máy: lặp tới khi không thêm được tab nào.
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const t of inGroup) {
+      if (!mine.has(t.id) && t.openerTabId != null && mine.has(t.openerTabId)) {
+        mine.add(t.id);
+        grew = true;
+      }
+    }
+  }
+  const close = [];
+  const ungroup = [];
+  for (const t of inGroup) (mine.has(t.id) || policy === "close" ? close : ungroup).push(t.id);
+  return { close, ungroup };
+}
+
+/**
  * Kết cục của một lượt đọc hỏng. `closed` = tab quét bị đóng giữa chừng (mã TAB); `pending` = kênh đang chờ
  * đọc lại, tức lượt này chính là lần đọc lại. Trả `{ retry: { closedAt, retryAt } }` khi phải hẹn đọc lại,
  * `{ retry: null }` khi báo lỗi như thường. Mỗi lượt đọc bị đóng chỉ được đọc lại một lần.

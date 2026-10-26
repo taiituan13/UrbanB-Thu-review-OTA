@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { BANNER_TEXT, SCAN_GROUP, channelOfRetryAlarm, closedOutcome, pickScanGroup, retryAlarmName, showScanBanner } from "../extension/tab-scan.js";
+import { BANNER_TEXT, FOREIGN_TAB_POLICY, SCAN_GROUP, channelOfRetryAlarm, closedOutcome, pickScanGroup, retryAlarmName, scanGroupSweep, showScanBanner } from "../extension/tab-scan.js";
 
 // Lời đáp scope=mine của Hub: một chi nhánh, bật Trip và Go2Joy.
 const MINE = {
@@ -15,7 +15,7 @@ const MINE = {
 
 const machine = () => ({ config: { hotel: "Tên máy", enabled: { trip: true, go2joy: true } }, hubCollect: { at: 1 }, deviceId: "dev-test" });
 
-const state = { store: {}, fetched: [], scripts: [], created: [], groups: [], closeOn: [], groupApi: "ok", bannerApi: "ok", tripResult: null };
+const state = { store: {}, fetched: [], scripts: [], created: [], groups: [], closeOn: [], groupApi: "ok", bannerApi: "ok", tripResult: null, ungrouped: [] };
 
 function event() {
   const fns = [];
@@ -65,7 +65,7 @@ globalThis.chrome = {
   },
   tabs: {
     create: async (props) => {
-      const t = { id: nextTab++, url: props.url, status: "complete", windowId: 7, groupId: -1 };
+      const t = { id: nextTab++, url: props.url, status: "complete", windowId: 7, groupId: -1, openerTabId: props.openerTabId };
       state.created.push({ ...props });
       tabs.set(t.id, t);
       return { ...t };
@@ -103,7 +103,12 @@ globalThis.chrome = {
       for (const id of [].concat(tabIds)) tabs.get(id).groupId = g.id;
       return g.id;
     },
-    query: async () => [],
+    // YC-249: tháo tab khỏi nhóm (tab vẫn mở).
+    ungroup: async (tabIds) => {
+      state.ungrouped.push(...[].concat(tabIds));
+      for (const id of [].concat(tabIds)) if (tabs.has(id)) tabs.get(id).groupId = -1;
+    },
+    query: async (q = {}) => (q.groupId != null ? [...tabs.values()].filter((t) => t.groupId === q.groupId).map((t) => ({ ...t })) : []),
     sendMessage: async () => {},
     onUpdated: tabUpdated,
     onRemoved: tabRemoved,
@@ -130,6 +135,12 @@ globalThis.chrome = {
         tabs.delete(target.tabId);
         tabRemoved.fire(target.tabId, {});
         return [{ result: undefined }];
+      }
+      if (func.name === state.openChild) {
+        // Trang extranet mở một tab con: Chrome cho tab con vào nhóm của tab mẹ (YC-249).
+        state.openChild = null;
+        const child = { id: nextTab++, url: "https://extranet.example/popup", status: "complete", windowId: 7, groupId: tabs.get(target.tabId).groupId, openerTabId: target.tabId };
+        tabs.set(child.id, child);
       }
       if (func.name === "scanTripInPage" && state.tripResult) return [{ result: state.tripResult }];
       return [{ result: { ok: true, reviews: [], total: 0, channelHotelId: "555", snapshots: [] } }];
@@ -162,7 +173,8 @@ function message(msg) {
 }
 
 function fresh(extra = {}) {
-  Object.assign(state, { store: machine(), fetched: [], scripts: [], created: [], groups: [], closeOn: [], groupApi: "ok", bannerApi: "ok", tripResult: null, closeDuringScan: null, ...extra });
+  Object.assign(state, { store: machine(), fetched: [], scripts: [], created: [], groups: [], closeOn: [], groupApi: "ok", bannerApi: "ok", tripResult: null, closeDuringScan: null, openChild: null, ungrouped: [], ...extra });
+  for (const k of Object.keys(session)) delete session[k];
   tabs.clear();
   alarms.clear();
 }
@@ -476,4 +488,74 @@ test("🔴 ③ lời giải thích mã TAB khớp hành vi mới: đã tự đ�
   assert.match(help.steps.join(" "), /nhóm tab màu xanh có chữ Urban B/);
   assert.match(help.steps.join(" "), /dải chữ xanh/);
   assert.equal(SCAN_GROUP.color, "blue", "lời giải thích nói nhóm màu xanh");
+});
+
+// ---------- YC-249: quét xong (đạt, hỏng hay bị cắt ngang) thì nhóm quét biến mất ----------
+
+/** Nhóm quét còn tab nào không (Chrome tự bỏ nhóm không còn tab). */
+const liveScanGroups = () => state.groups.filter((g) => g.title === SCAN_GROUP.title && [...tabs.values()].some((t) => t.groupId === g.id));
+
+/** Nhóm sót từ lượt bị cắt ngang: một tab máy tự mở (mã đã ghi trong storage.session) và một tab lễ tân kéo vào. */
+function leftoverGroup() {
+  state.groups.push({ id: 900, title: SCAN_GROUP.title, color: SCAN_GROUP.color, windowId: 7 });
+  tabs.set(50, { id: 50, url: "https://ebooking.trip.com/x", status: "complete", windowId: 7, groupId: 900 });
+  tabs.set(51, { id: 51, url: "https://mail.example/inbox", status: "complete", windowId: 7, groupId: 900 });
+  session.scanOwnTabs = [50];
+}
+
+test("scanGroupSweep: tab của máy (kể cả tab con, cháu) thì đóng; tab lạ theo FOREIGN_TAB_POLICY; nhóm khác không đụng", () => {
+  const groups = [
+    { id: 1, title: SCAN_GROUP.title },
+    { id: 2, title: "Nhóm của lễ tân" },
+  ];
+  const tabsIn = [
+    { id: 10, groupId: 1 },
+    { id: 11, groupId: 1, openerTabId: 10 },
+    { id: 12, groupId: 1, openerTabId: 11 },
+    { id: 13, groupId: 1 },
+    { id: 14, groupId: 2 },
+  ];
+  assert.equal(FOREIGN_TAB_POLICY, "ungroup", "câu chờ chốt YC-249: tạm giữ tab của lễ tân");
+  assert.deepEqual(scanGroupSweep({ groups, tabs: tabsIn, own: [10] }), { close: [10, 11, 12], ungroup: [13] });
+  assert.deepEqual(scanGroupSweep({ groups, tabs: tabsIn, own: [10], policy: "close" }), { close: [10, 11, 12, 13], ungroup: [] });
+  assert.deepEqual(scanGroupSweep({ groups: [], tabs: tabsIn, own: [10] }), { close: [], ungroup: [] });
+});
+
+test("🔴 YC-249 trang extranet mở tab con vào nhóm ⇒ xong lượt, tab con cũng đóng, không còn nhóm quét", async () => {
+  fresh({ openChild: "scanTripInPage" });
+  await message({ type: "scanChannel", channel: "trip" });
+  assert.equal(state.store.status.trip.state, "ok");
+  assert.equal(tabs.size, 0, "tab con do trang mở cũng là tab của máy");
+  assert.deepEqual(liveScanGroups(), []);
+});
+
+test("🔴 YC-249 lượt trước bị cắt ngang (nhóm sót) ⇒ lượt sau dọn: đóng tab của máy, tháo tab của lễ tân ra khỏi nhóm mà giữ tab", async () => {
+  fresh();
+  leftoverGroup();
+  await message({ type: "scanChannel", channel: "trip" });
+  assert.ok(!tabs.has(50), "tab máy tự mở ở lượt trước phải đóng");
+  assert.ok(tabs.has(51), "tab của lễ tân không bị đóng");
+  assert.equal(tabs.get(51).groupId, -1, "tab của lễ tân ra khỏi nhóm");
+  assert.deepEqual(state.ungrouped, [51]);
+  assert.deepEqual(liveScanGroups(), []);
+  assert.equal(session.scanOwnTabs, undefined, "dọn xong thì quên danh sách tab của máy");
+});
+
+test("🔴 YC-249 lượt quét hỏng giữa chừng ⇒ vẫn không còn nhóm quét", async () => {
+  fresh({ tripResult: { ok: false, error: "Trang lỗi" } });
+  await message({ type: "scanChannel", channel: "trip" });
+  assert.equal(state.store.status.trip.state, "error");
+  assert.equal(tabs.size, 0);
+  assert.deepEqual(liveScanGroups(), []);
+});
+
+// Ca này nạp lại background.js (service worker khởi động lại) nên để cuối tệp.
+test("🔴 YC-249 service worker khởi động lại sau khi bị dừng giữa lượt ⇒ dọn nhóm sót ngay, không chờ lượt quét sau", async () => {
+  fresh();
+  leftoverGroup();
+  await import("../extension/background.js?khoi-dong-lai");
+  await new Promise((r) => realSetTimeout(r, 20));
+  assert.ok(!tabs.has(50));
+  assert.ok(tabs.has(51));
+  assert.deepEqual(liveScanGroups(), []);
 });

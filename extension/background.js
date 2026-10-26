@@ -23,6 +23,7 @@ import {
   closedOutcome,
   pickScanGroup,
   retryAlarmName,
+  scanGroupSweep,
   showScanBanner,
 } from "./tab-scan.js";
 import { TAB_RETRY_KEY } from "./quay/review-status.js";
@@ -319,6 +320,40 @@ async function joinScanGroup(tab) {
   } catch {}
 }
 
+// YC-249: mã các tab máy tự mở để quét, giữ trong storage.session để service worker bị dừng giữa lượt rồi chạy
+// lại vẫn biết tab nào là của máy. Mở lại Chrome thì danh sách mất, cũng như mã tab cũ.
+const OWN_TABS_KEY = "scanOwnTabs";
+
+async function rememberOwnTab(tabId) {
+  try {
+    const own = (await chrome.storage.session.get(OWN_TABS_KEY))[OWN_TABS_KEY] ?? [];
+    await chrome.storage.session.set({ [OWN_TABS_KEY]: [...own, tabId] });
+  } catch {}
+}
+
+/**
+ * YC-249: nhóm "Urban B · đang đọc review" phải biến mất khi không có lượt quét nào chạy. finally của runScan
+ * chỉ đóng tab cuối; nhóm còn lại khi lượt bị cắt ngang (service worker dừng, Chrome tắt rồi mở lại khôi phục
+ * cả nhóm), khi một bước báo lỗi ném ra ngoài scanOne làm mất mã tab, hoặc khi trang extranet mở tab con vào
+ * nhóm. Gọi ở cuối lượt, đầu lượt sau và mỗi lần service worker khởi động. Lỗi API nhóm thì bỏ qua.
+ */
+async function sweepScanGroups() {
+  try {
+    const groups = await chrome.tabGroups.query({ title: SCAN_GROUP.title });
+    if (groups.length) {
+      const inGroups = (await Promise.all(groups.map((g) => chrome.tabs.query({ groupId: g.id })))).flat();
+      const own = (await chrome.storage.session.get(OWN_TABS_KEY))[OWN_TABS_KEY] ?? [];
+      const { close, ungroup } = scanGroupSweep({ groups, tabs: inGroups, own });
+      if (ungroup.length) await chrome.tabs.ungroup(ungroup);
+      for (const id of close) await closeTab(id);
+    }
+    await chrome.storage.session.remove(OWN_TABS_KEY);
+  } catch {}
+}
+
+// Service worker vừa chạy lại (kể cả sau khi bị dừng giữa lượt quét): không lượt nào đang chạy ⇒ dọn ngay.
+const bootSweep = sweepScanGroups();
+
 async function closeTab(tabId) {
   if (tabId == null) return;
   try {
@@ -560,6 +595,9 @@ async function runScan(trigger, only = null) {
   // Tab của kênh vừa đọc: đóng sau khi tab kênh kế tiếp đã vào nhóm, để nhóm tab không mất rồi hiện lại giữa hai kênh.
   let leftover = null;
   try {
+    // YC-249: nhóm quét sót từ lượt bị cắt ngang thì dọn trước, để lượt này không vào lại nhóm cũ.
+    await bootSweep;
+    await sweepScanGroups();
     // Kênh và chu kỳ theo cấu hình đặt trên Hub (H-1348 a); hỏi lại trước mỗi lượt.
     await syncHubSettings();
     const cfg = await loadEffectiveConfig();
@@ -585,6 +623,7 @@ async function runScan(trigger, only = null) {
     outcome = OUTCOME.done;
   } finally {
     await closeTab(leftover);
+    await sweepScanGroups();
     running = false;
     current = null;
     try {
@@ -705,6 +744,7 @@ async function scanOne(channel, cfg, trigger, runId, leftover = null, run = null
   chrome.tabs.onRemoved.addListener(onRemoved);
   try {
     tab = await chrome.tabs.create({ url: "about:blank", active: false });
+    await rememberOwnTab(tab.id);
     await joinScanGroup(tab);
     await closeTab(leftover);
     leftover = null;

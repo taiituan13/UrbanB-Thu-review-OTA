@@ -20,6 +20,14 @@ trên trang Giao ca quầy của Hub đọc số này. Trang Hub do UrbanB dựn
 - Hub chưa lên bản có trang nhận số thì máy giữ lượt ấy trong hàng chờ, khung quầy không báo lỗi gì.
 - Extension không bấm gì và không gửi gì tới ezCloud; nó chỉ đọc lượt bấm của lễ tân.
 
+**Nhóm tab "Urban B · đang đọc review" biến mất khi quét xong** (YC-249). Trước đây nhóm có thể còn lại
+trên thanh tab khi lượt quét bị cắt ngang (Chrome dừng tiến trình nền giữa lượt, hoặc tắt Chrome rồi mở
+lại), khi một bước báo lỗi làm máy mất dấu tab, hoặc khi trang extranet tự mở thêm một tab trong nhóm.
+
+- Máy dọn nhóm ở cuối mỗi lượt quét (đạt hay hỏng), ở đầu lượt sau, và mỗi khi tiến trình nền chạy lại.
+- Tab máy tự mở, kể cả tab do trang extranet mở ra từ tab ấy, thì đóng.
+- Tab lễ tân tự kéo vào nhóm thì chỉ được tháo ra khỏi nhóm, tab vẫn mở.
+
 ## 1.5.4
 
 **Trang Giao ca quầy trên Hub quét được review ngay trên máy quầy** (YC-239, H-1996 a, H-1976 c).
