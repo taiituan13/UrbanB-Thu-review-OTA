@@ -5,6 +5,19 @@ quản lý thấy gì khác. Máy đã cài không tự lên bản: khi có bả
 "Có bản mới …" và phải có người chạy lại lệnh cài (xem [docs/cai-tu-xa.md](docs/cai-tu-xa.md) mục
 Cập nhật).
 
+## 1.5.8
+
+**Lễ tân không phải F5 tab PMS sau khi máy lên bản mới** (YC-246, 27/10/2026). Đo trên máy quầy chạy 1.5.7: tab PMS
+mở từ trước khi extension nạp lại vẫn chạy mã bắt token bản cũ, nên ezCloud từ chối và thẻ giao ca ghi "Chưa lấy
+được số ezCloud" tới khi lễ tân tải lại tab PMS.
+
+- Mọi tab PMS đang mở đều bị ezCloud từ chối thì máy tự mở một tab PMS nền mới (không giật tiêu điểm), đọc số ở đó
+  rồi đóng. Ca đã kết hay Hub từ chối thì không mở tab.
+- Tab PMS vừa mở hay đang đứng yên chưa gửi gì: máy chờ trang gửi request đầu tiên rồi mới đọc (tối đa 3 giây ở tab
+  đang mở, 6 giây ở tab máy mở).
+- Mã lỗi mới `PMS_READING_NO_TOKEN`: ezCloud từ chối mà trang PMS chưa gửi token nào (thường là PMS chưa đăng
+  nhập). `PMS_READING_AUTH` nay chỉ còn nghĩa ezCloud từ chối cả token trang.
+
 ## 1.5.7
 
 **Máy lấy được số ezCloud lúc Quét** (YC-246, 27/10/2026). Bản 1.5.6 chưa lấy được số nào: đo trên PMS Bình Thạnh,
