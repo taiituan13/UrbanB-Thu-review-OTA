@@ -229,8 +229,8 @@ nhắc chọn. Tài khoản một cơ sở thì không phải chọn.
 
 **Đọc kết quả:** dưới mỗi kênh trong ô bật lên có dòng
 "Hub: 3 mới · 1 đổi · 662 chờ ghép". *Chờ ghép* là bài của mã khách sạn mà Admin Hub
-chưa ghép với cơ sở: bài nằm ở bảng chờ của Hub và tự vào khi Admin ghép ở
-`/admin/review-hotel-links`. *Mã ngoài phạm vi* là mã khách sạn đã ghép vào một cơ sở mà
+chưa ghép với cơ sở: bài nằm ở bảng chờ của Hub và tự vào khi Admin ghép ở màn Chi nhánh, khối
+"Mã khách sạn review chưa ghép" đầu `/admin/branches`. *Mã ngoài phạm vi* là mã khách sạn đã ghép vào một cơ sở mà
 tài khoản đang đăng nhập không được gán: Hub không nhận bài của mã đó (lỗi `HUB-SCOPE`), các mã
 khác vẫn nhận.
 
