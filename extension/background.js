@@ -30,7 +30,7 @@ import {
 } from "./tab-scan.js";
 import { TAB_RETRY_KEY } from "./quay/review-status.js";
 import { HUB_ORIGINS } from "./env.js";
-import { MSG, OUTCOME, SCAN_PORT, createScanRun, isHubSender, joinMode, parseRequestId } from "./shift-scan.js";
+import { MSG, OUTCOME, SCAN_PORT, createScanRun, isHubSender, joinMode, parseRequestId, parseReuseMinutes, reusableOkAt } from "./shift-scan.js";
 import {
   bookingSessionInPage,
   scanAgodaInPage,
@@ -583,11 +583,12 @@ let current = null;
 
 /**
  * Trả chuỗi mô tả nếu lượt quét không chạy được; undefined nếu đã chạy xong. `only` = danh sách kênh cần quét
- * (YC-199: quét lại một kênh); bỏ trống ⇒ mọi kênh đang bật.
+ * (YC-199: quét lại một kênh); bỏ trống ⇒ mọi kênh đang bật. `reuseMinutes` (YC-246, chỉ lượt Quét giao ca): kênh
+ * có lượt gần nhất đạt trong ngần ấy phút thì dùng lại, không mở trang kênh (shift-scan.js reusableOkAt).
  */
 const BUSY_TEXT = "Đang có một lượt quét chạy, đợi nó xong.";
 
-async function runScan(trigger, only = null) {
+async function runScan(trigger, only = null, { reuseMinutes = null } = {}) {
   if (running) return BUSY_TEXT;
   running = true;
   // YC-239: mọi lượt (không riêng lượt giao ca) đều có bản nhìn từ trang Hub, để trang gắn vào lượt đang chạy.
@@ -617,7 +618,13 @@ async function runScan(trigger, only = null) {
       channels.push(channel);
     }
     run.setChannels(channels);
+    const saved = reuseMinutes ? await loadStatus() : {};
     for (const channel of channels) {
+      const okAt = reusableOkAt(saved[channel], reuseMinutes, Date.now());
+      if (okAt) {
+        run.channelReused(channel, okAt);
+        continue;
+      }
       run.channelStarted(channel);
       leftover = await scanOne(channel, cfg, trigger, runId, leftover, run);
     }
@@ -657,11 +664,11 @@ chrome.runtime.onConnect.addListener((port) => {
     const requestId = msg?.type === MSG.scan ? parseRequestId(msg.requestId) : null;
     if (!requestId || taken.has(requestId)) return;
     taken.add(requestId);
-    shiftScan(port, requestId).catch(() => {});
+    shiftScan(port, requestId, parseReuseMinutes(msg.reuseOkWithinMinutes)).catch(() => {});
   });
 });
 
-async function shiftScan(port, requestId) {
+async function shiftScan(port, requestId, reuseMinutes = null) {
   let gone = false;
   const post = (msg) => {
     if (gone) return;
@@ -694,7 +701,8 @@ async function shiftScan(port, requestId) {
     const mode = joinMode(running, current);
     if (mode === "started") {
       // runScan đặt `running` và `current` ngay lúc gọi, trước mọi await: không lượt nào chen vào giữa.
-      const scan = runScan("giao ca");
+      // YC-246: chỉ lượt do trang Giao ca mở mới dùng lại kênh đạt gần đây; gắn vào lượt khác thì nhận đúng lượt ấy.
+      const scan = runScan("giao ca", null, { reuseMinutes });
       attach(current, mode);
       await scan.catch(scanCrashed);
       return;
