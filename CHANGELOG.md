@@ -5,6 +5,95 @@ quản lý thấy gì khác. Máy đã cài không tự lên bản: khi có bả
 "Có bản mới …" và phải có người chạy lại lệnh cài (xem [docs/cai-tu-xa.md](docs/cai-tu-xa.md) mục
 Cập nhật).
 
+## 1.5.9
+
+**Chưa ghép mã khách sạn ezCloud thì máy chỉ báo một lỗi** (YC-251 · H-2047 c, 27/10/2026). Trước đây khách sạn đang
+mở trên PMS chưa được ghép với chi nhánh nào trên Hub (hoặc ghép sang chi nhánh tài khoản không được gán, hoặc chi
+nhánh đã xoá) thì máy báo Hub ba lỗi: lỗi chưa ghép, "Khung PMS không tải được Chỉ báo" và "Hub chưa có mã kết nối
+Booking OTA" của bảng khoá G2J. Hai lỗi sau chỉ là hệ quả của lỗi đầu, và lời sửa của chúng (kiểm mạng, nhập mã kết
+nối) dẫn sai việc.
+
+- Từ 1.5.9, máy chỉ báo lỗi gốc. Ghép mã xong thì khung tự tải lại Chỉ báo và bảng khoá như cũ.
+- Bảng khoá lỗi vì lý do khác (Web App quá thời gian, Apps Script lỗi) vẫn báo như trước.
+- Câu hướng dẫn trong khung chỉ Quản trị tới màn Chi nhánh, khối Mã ezCloud chưa ghép, thay cho màn Kết nối.
+- Máy chạy bản cũ hơn 1.5.9 vẫn gửi đủ ba lỗi; Hub tự gộp chúng thành một.
+
+**Ô bật lên chỉ đúng chỗ đổi kênh quét trên Hub** (YC-250 · H-2049 a, 27/10/2026). Cấu hình chung của Extension máy quầy
+đã rời màn Kết nối. Câu "Nhắn Quản trị hệ thống bật kênh trên Hub" nay chỉ tới màn Chi nhánh, mục Cấu hình chung cả
+chuỗi, khối Extension máy quầy.
+
+## 1.5.8
+
+**Lễ tân không phải F5 tab PMS sau khi máy lên bản mới** (YC-246, 27/10/2026). Đo trên máy quầy chạy 1.5.7: tab PMS
+mở từ trước khi extension nạp lại vẫn chạy mã bắt token bản cũ, nên ezCloud từ chối và thẻ giao ca ghi "Chưa lấy
+được số ezCloud" tới khi lễ tân tải lại tab PMS.
+
+- Mọi tab PMS đang mở đều bị ezCloud từ chối thì máy tự mở một tab PMS nền mới (không giật tiêu điểm), đọc số ở đó
+  rồi đóng. Ca đã kết hay Hub từ chối thì không mở tab.
+- Tab PMS vừa mở hay đang đứng yên chưa gửi gì: máy chờ trang gửi request đầu tiên rồi mới đọc (tối đa 3 giây ở tab
+  đang mở, 6 giây ở tab máy mở).
+- Mã lỗi mới `PMS_READING_NO_TOKEN`: ezCloud từ chối mà trang PMS chưa gửi token nào (thường là PMS chưa đăng
+  nhập). `PMS_READING_AUTH` nay chỉ còn nghĩa ezCloud từ chối cả token trang.
+
+## 1.5.7
+
+**Máy lấy được số ezCloud lúc Quét** (YC-246, 27/10/2026). Bản 1.5.6 chưa lấy được số nào: đo trên PMS Bình Thạnh,
+ezCloud chỉ nhận đúng token mà trang PMS đang gửi, còn hai cách 1.5.6 dùng (phiên cookie, token trang giữ trong bộ
+nhớ) đều bị từ chối. 1.5.7 dùng token ấy trước, hai cách cũ để dự phòng. Token chỉ nằm trong trang PMS, không gửi
+đi đâu.
+
+- Lượt đọc không lấy được số thì máy báo lỗi máy quầy kèm mã `PMS_READING_*` (không có trang PMS, ezCloud từ chối
+  phiên, ezCloud báo lỗi, không có ca đang mở, Hub không nhận). Lượt sau lấy được thì lỗi tự tắt. Hub chưa khai
+  các mã này nên tạm hiện ở nhóm "lỗi khác" kèm mã.
+
+**Quét giao ca dùng lại kênh vừa quét đạt** (YC-252, user chốt 27/10/2026). Lễ tân bấm Quét trên trang Giao ca
+quầy: kênh review nào có lượt quét gần nhất đạt trong vòng 60 phút thì máy không mở trang kênh ấy nữa, thẻ ghi giờ
+lượt quét đó kèm chữ "dùng lại". Kênh lỗi hay cần đăng nhập thì vẫn quét lại. Số ezCloud luôn đọc mới.
+
+- Mốc 60 phút do Hub gửi kèm lệnh Quét. Hub chưa lên bản mới thì máy quét đủ mọi kênh như 1.5.6.
+- Lượt quét hẹn giờ và các nút quét khác không dùng lại.
+
+## 1.5.6
+
+Hai phần dưới đây từng được phát dưới số 1.5.5 (lần hai, 27/10/2026). Máy đã nạp 1.5.5 đầu thấy cùng số nên không
+tự nạp mã mới. 1.5.6 mang đúng mã ấy, chỉ đổi số phiên bản để máy tự nạp lại.
+
+**Lễ tân bấm Quét trên trang Giao ca quầy thì máy tự lấy số ezCloud** (YC-246, đổi 27/10/2026). Lễ tân không phải
+bấm Bàn giao trên PMS nữa. Cùng lúc quét review, extension đọc ca ezCloud đang mở trong tab PMS của máy (đúng lệnh
+trang Bàn giao ca của PMS gọi) và gửi Hub số Đầu ca, Tổng thu, Tổng chi. Hub tính ra số "Bàn giao cho ca sau" cho ô
+"Số sổ ezCloud".
+
+- Máy chưa mở tab PMS nào thì extension tự mở một tab PMS nền, đọc xong đóng. Tab này không vào nhóm tab quét review.
+- Chưa đăng nhập PMS, ca đã kết hay mất mạng thì không gửi gì; ô trên Hub ghi "Chưa lấy được số ezCloud" và lễ tân
+  vẫn Chốt được.
+- Kết quả quét chỉ về trang Hub sau khi số ezCloud đã gửi xong, chậm nhất 30 giây.
+- Extension chỉ đọc: không đổi khách sạn mặc định, không gọi lệnh ghi nào tới ezCloud. Tin gửi Hub chỉ gồm số và
+  mã, không token, không tên người. Hợp đồng: [docs/hop-dong-ban-giao-ca-pms.md](docs/hop-dong-ban-giao-ca-pms.md).
+
+**Nhóm tab "Urban B · đang đọc review" biến mất khi quét xong** (YC-249). Trước đây nhóm có thể còn lại
+trên thanh tab khi lượt quét bị cắt ngang (Chrome dừng tiến trình nền giữa lượt, hoặc tắt Chrome rồi mở
+lại), khi một bước báo lỗi làm máy mất dấu tab, hoặc khi trang extranet tự mở thêm một tab trong nhóm.
+
+- Máy dọn nhóm ở cuối mỗi lượt quét (đạt hay hỏng), ở đầu lượt sau, và mỗi khi tiến trình nền chạy lại.
+- Tab máy tự mở, kể cả tab do trang extranet mở ra từ tab ấy, thì đóng.
+- Tab lễ tân tự kéo vào nhóm thì chỉ được tháo ra khỏi nhóm, tab vẫn mở.
+
+## 1.5.5
+
+**Lễ tân bấm Bàn giao trên PMS thì máy gửi Hub số Bàn giao cho ca sau** (H-2034 b, 26/10/2026). Từ 1.5.6 lượt
+này vẫn được gửi Hub như trước, nhưng trang Giao ca quầy không còn đọc số này. Lễ tân bấm
+**Bàn giao** trên trang Bàn giao ca của PMS ezCloud thì extension gửi Hub con số lễ tân vừa chốt ở dòng 7
+"Bàn giao cho ca sau", kèm dòng 6 "Thực tế trong két" và dòng 8 "Bàn giao cho quản lý". Ô "Số sổ ezCloud"
+trên trang Giao ca quầy của Hub đọc số này. Trang Hub do UrbanB dựng riêng; bản này chỉ là phần của extension.
+
+- Chỉ gửi khi ezCloud báo bàn giao xong. Bấm Bàn giao mà PMS báo lỗi thì không gửi gì.
+- Mỗi ca ezCloud gửi một lần. Lễ tân bấm hai lần hay PMS gửi lại thì Hub vẫn chỉ nhận một lượt.
+- Hub không trả lời được (mất mạng, hết phiên đăng nhập Hub) thì máy giữ lại và gửi lại sau, tối đa 3 ngày.
+- Tin gửi Hub chỉ gồm số và mã: mã khách sạn, mã và số ca ezCloud, ba con số, giờ bàn giao, phiên bản
+  extension. Không có token PMS, tên lễ tân hay email. Hợp đồng: [docs/hop-dong-ban-giao-ca-pms.md](docs/hop-dong-ban-giao-ca-pms.md).
+- Hub chưa lên bản có trang nhận số thì máy giữ lượt ấy trong hàng chờ, khung quầy không báo lỗi gì.
+- Extension không bấm gì và không gửi gì tới ezCloud; nó chỉ đọc lượt bấm của lễ tân.
+
 ## 1.5.4
 
 **Trang Giao ca quầy trên Hub quét được review ngay trên máy quầy** (YC-239, H-1996 a, H-1976 c).

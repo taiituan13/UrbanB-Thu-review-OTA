@@ -354,7 +354,7 @@ export function blockedNote({ session, why, hotelId, branchName, hasCache = fals
     return {
       tone: "bad",
       title: "Khách sạn đang mở trên PMS chưa được ghép với chi nhánh nào trên Hub.",
-      text: `Mã khách sạn ezCloud: ${hotelId}. Gửi mã này cho Quản trị hệ thống để ghép với chi nhánh trên Hub (màn Kết nối, nút Ghép mã ezCloud). Ghép xong, khung tự hiện booking và chỉ báo.`,
+      text: `Mã khách sạn ezCloud: ${hotelId}. Gửi mã này cho Quản trị hệ thống để ghép với chi nhánh trên Hub (màn Chi nhánh, khối Mã ezCloud chưa ghép). Ghép xong, khung tự hiện booking và chỉ báo.`,
     };
   if (why === "scope")
     return {

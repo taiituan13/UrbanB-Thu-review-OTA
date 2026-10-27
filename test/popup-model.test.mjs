@@ -46,11 +46,12 @@ test("reviewRow: quét ổn mà Hub không nhận ⇒ nói rõ; chưa đăng nh�
   assert.equal(reviewRow(cfg, { booking: { state: "ok", count: 2, at, hub: { ok: true } }, agoda: { state: "ok", at } }, CH).tone, "ok");
 });
 
-test("🔴 YC-156 L2 — chỉ đường đúng tên trên Hub: màn Kết nối › tab Mã kết nối Booking OTA › khối Extension máy quầy", async () => {
+test("🔴 YC-156 L2 · YC-250 — chỉ đường đúng tên trên Hub: màn Chi nhánh › mục Cấu hình chung cả chuỗi › khối Extension máy quầy", async () => {
   const { noChannelText } = await import("../extension/popup-model.js");
   const { reviewMissingText } = await import("../extension/hub-config.js");
   for (const text of [noChannelText({ collect: { fromHub: { enabled: true } } }), noChannelText({})]) {
-    assert.match(text, /màn Kết nối, tab Mã kết nối Booking OTA, khối Extension máy quầy/);
+    assert.match(text, /màn Chi nhánh, mục Cấu hình chung cả chuỗi, khối Extension máy quầy/);
+    assert.doesNotMatch(text, /màn Kết nối/);
     assert.doesNotMatch(text, /phần Extension máy quầy/);
   }
   const missing = reviewMissingText({ hubSeen: true, hotel: "" }) ?? "";

@@ -59,6 +59,29 @@ export function joinMode(running, current) {
   return current?.full ? "joined" : "queued";
 }
 
+/**
+ * YC-252 (user chốt 27/10/2026, H-2053 a): trang Giao ca gửi kèm `reuseOkWithinMinutes` — kênh đã quét ĐẠT trong ngần ấy
+ * phút thì dùng lại, không mở trang kênh. Số phút do Hub giữ (`HANDOVER_REUSE_OK_WITHIN_MINUTES`); ở đây chỉ kiểm
+ * hình dạng. Trần kỹ thuật một ngày. Sai hay vắng ⇒ `null` (quét đủ mọi kênh như bản trước).
+ */
+export const REUSE_MINUTES_MAX = 24 * 60;
+
+export function parseReuseMinutes(value) {
+  return Number.isSafeInteger(value) && value > 0 && value <= REUSE_MINUTES_MAX ? value : null;
+}
+
+/**
+ * Giờ ISO của lượt quét đạt dùng lại được cho kênh, hay `null` (phải quét lại). `status` là trạng thái kênh đã lưu
+ * (config.js saveChannelStatus). Chỉ dùng lại khi lượt GẦN NHẤT của kênh là đạt và đã lên Hub (H-2053 a: kênh lỗi, cần
+ * đăng nhập, hay gửi Hub hỏng thì luôn quét lại), và giờ đạt nằm trong `minutes` phút trước `nowMs`.
+ */
+export function reusableOkAt(status, minutes, nowMs) {
+  if (!minutes || !status || status.state !== "ok" || status.hub?.ok === false) return null;
+  const at = Date.parse(status.okAt ?? status.at ?? "");
+  if (!Number.isFinite(at) || at > nowMs || nowMs - at > minutes * 60_000) return null;
+  return new Date(at).toISOString();
+}
+
 /** Trạng thái kênh trong tin gửi trang. */
 export const CHANNEL_STATE = Object.freeze({
   running: "running", // đang quét (chỉ có trong ext:scan-progress)
@@ -166,6 +189,12 @@ export function createScanRun({ full, version, labels = {}, now = () => new Date
     },
     channelStarted(ch) {
       const row = pendingChannel(ch, labelOf(ch), CHANNEL_STATE.running, now());
+      channels.set(ch, row);
+      emit(progressOf(row));
+    },
+    /** Kênh đạt nhờ dùng lại lượt quét đạt lúc `okAt` (YC-246): không mở tab, báo trang ngay. */
+    channelReused(ch, okAt) {
+      const row = { ...pendingChannel(ch, labelOf(ch), CHANNEL_STATE.ok, okAt), finishedAt: okAt, reused: true };
       channels.set(ch, row);
       emit(progressOf(row));
     },

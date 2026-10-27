@@ -10,6 +10,10 @@
 // API của nó được chuyển cho bridge.js (thế giới ISOLATED) bằng window.postMessage, để service worker
 // gửi về Apps Script của khách sạn — đúng việc userscript EZCloud OTA Sync 3.2.0 đang làm. Chỉ chuyển
 // khi token (hoặc hotelSn của Go2Joy) đổi, không chuyển mỗi request.
+//
+// Bàn giao ca (YC-246, H-2034 b): trên PMS, lượt `POST api/Shift/ShiftHandover` (lễ tân bấm Bàn giao) được
+// chuyển cho bridge.js kèm mã HTTP và thân phản hồi, để bridge.js chỉ gửi Hub khi ezCloud báo xong. Chỉ đọc
+// bản sao của phản hồi; request và phản hồi của trang đi y nguyên.
 
 (() => {
   if (window.__urbanbCapInstalled) return;
@@ -39,6 +43,10 @@
     if (!AUTH_KIND || !auth || !isAuthApi(url)) return;
     const m = String(auth).match(/^Bearer\s+(\S+)/i);
     if (!m) return;
+    // YC-246 (đo 27/10/2026 trên PMS 17200): GetCurrentShift chỉ nhận đúng token trang đang gửi — cookie và JWT trong
+    // bộ nhớ trang đều bị 401. Giữ token ấy trong trang cho lượt đọc số lúc Quét (quay/ezcloud-reading.js
+    // readShiftInPage, cũng chạy trong world MAIN); không chuyển đi đâu.
+    if (AUTH_KIND === "ezcloud") window.__urbanbCap.ezcloudToken = m[1];
     let hotelSn = 0;
     try {
       hotelSn = Number(new URL(url, location.href).searchParams.get("hotelSn")) || 0;
@@ -60,14 +68,44 @@
     return key ? headers[key] || "" : "";
   };
 
+  // Bàn giao ca: chỉ trên PMS, chỉ POST …/api/Shift/ShiftHandover (cùng luật quay/shift-handover.js
+  // isShiftHandoverRequest; tệp này chạy trong trang nên không import được).
+  const MAX_HANDOVER_TEXT = 256 * 1024;
+  const isHandover = (url, method) => {
+    if (AUTH_KIND !== "ezcloud" || String(method ?? "").toUpperCase() !== "POST") return false;
+    try {
+      const u = new URL(url, location.href);
+      return u.hostname === "pms.ezcloudhotel.com" && /\/api\/Shift\/ShiftHandover$/i.test(u.pathname);
+    } catch {}
+    return false;
+  };
+  const postHandover = (body, status, response) => {
+    if (typeof body !== "string" || body.length > MAX_HANDOVER_TEXT) return;
+    if (typeof response !== "string" || response.length > MAX_HANDOVER_TEXT) return;
+    window.postMessage({ __urbanbQuay: "shiftHandover", body, status: Number(status) || 0, response }, location.origin);
+  };
+
   const original = window.fetch;
   window.fetch = function (input, init) {
+    let handoverBody = null;
     try {
       const url = typeof input === "string" ? input : input?.url ?? String(input);
       record(url, { ...init });
       if (AUTH_KIND) seeAuth(url, headerOf(init?.headers) || headerOf(input?.headers), init?.body);
+      if (isHandover(url, init?.method ?? input?.method)) handoverBody = typeof init?.body === "string" ? init.body : "";
     } catch {}
-    return original.apply(this, arguments);
+    const result = original.apply(this, arguments);
+    if (handoverBody === null) return result;
+    return result.then((res) => {
+      try {
+        res
+          .clone()
+          .text()
+          .then((text) => postHandover(handoverBody, res.status, text))
+          .catch(() => {});
+      } catch {}
+      return res;
+    });
   };
 
   const xhr = XMLHttpRequest.prototype;
@@ -87,6 +125,15 @@
       const r = this.__urbanbReq;
       if (r) record(r.url, { method: r.method, headers: { ...r.headers }, body: typeof body === "string" ? body : undefined });
       if (r && AUTH_KIND) seeAuth(r.url, headerOf(r.headers), body);
+      if (r && isHandover(r.url, r.method) && typeof body === "string") {
+        this.addEventListener("loadend", () => {
+          try {
+            const type = this.responseType;
+            const text = type === "" || type === "text" ? this.responseText : type === "json" ? JSON.stringify(this.response) : null;
+            postHandover(body, this.status, text);
+          } catch {}
+        });
+      }
     } catch {}
     return send.apply(this, arguments);
   };

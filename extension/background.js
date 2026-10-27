@@ -9,7 +9,9 @@ import { hubBatches, hubRunMeta, hubSnapshots, hubSummaryText, ingestRequest, pa
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
-import { hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
+import { flushShiftHandovers, hubFetch, hubOriginNow, installQuay, noteReadingFault, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
+import { FRESH_TAB_TOKEN_WAIT_MS, PAGE_TOKEN_WAIT_MS, PMS_HOME_URL, PMS_LOAD_TIMEOUT_MS, PMS_TAB_PATTERN, READING_TIMEOUT_MS, isReadingAuthFault, readShiftInPage, readingFaultCode, readingReport } from "./quay/ezcloud-reading.js";
+import { shiftHandoverRequest } from "./quay/shift-handover.js";
 import { alarmMinutes, loadEffectiveConfig, reviewMissingHelp, reviewMissingText, scanAlarmFor } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
 import { autoRescanChannel } from "./login-watch.js";
@@ -23,11 +25,12 @@ import {
   closedOutcome,
   pickScanGroup,
   retryAlarmName,
+  scanGroupSweep,
   showScanBanner,
 } from "./tab-scan.js";
 import { TAB_RETRY_KEY } from "./quay/review-status.js";
 import { HUB_ORIGINS } from "./env.js";
-import { MSG, OUTCOME, SCAN_PORT, createScanRun, isHubSender, joinMode, parseRequestId } from "./shift-scan.js";
+import { MSG, OUTCOME, SCAN_PORT, createScanRun, isHubSender, joinMode, parseRequestId, parseReuseMinutes, reusableOkAt } from "./shift-scan.js";
 import {
   bookingSessionInPage,
   scanAgodaInPage,
@@ -86,6 +89,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     reloadIfDiskNewer();
     checkRemoteVersion();
     importSetupFile();
+    flushShiftHandovers(); // YC-246: lượt Bàn giao ca PMS còn chờ vì Hub lỗi tạm
   }
 });
 
@@ -318,6 +322,40 @@ async function joinScanGroup(tab) {
   } catch {}
 }
 
+// YC-249: mã các tab máy tự mở để quét, giữ trong storage.session để service worker bị dừng giữa lượt rồi chạy
+// lại vẫn biết tab nào là của máy. Mở lại Chrome thì danh sách mất, cũng như mã tab cũ.
+const OWN_TABS_KEY = "scanOwnTabs";
+
+async function rememberOwnTab(tabId) {
+  try {
+    const own = (await chrome.storage.session.get(OWN_TABS_KEY))[OWN_TABS_KEY] ?? [];
+    await chrome.storage.session.set({ [OWN_TABS_KEY]: [...own, tabId] });
+  } catch {}
+}
+
+/**
+ * YC-249: nhóm "Urban B · đang đọc review" phải biến mất khi không có lượt quét nào chạy. finally của runScan
+ * chỉ đóng tab cuối; nhóm còn lại khi lượt bị cắt ngang (service worker dừng, Chrome tắt rồi mở lại khôi phục
+ * cả nhóm), khi một bước báo lỗi ném ra ngoài scanOne làm mất mã tab, hoặc khi trang extranet mở tab con vào
+ * nhóm. Gọi ở cuối lượt, đầu lượt sau và mỗi lần service worker khởi động. Lỗi API nhóm thì bỏ qua.
+ */
+async function sweepScanGroups() {
+  try {
+    const groups = await chrome.tabGroups.query({ title: SCAN_GROUP.title });
+    if (groups.length) {
+      const inGroups = (await Promise.all(groups.map((g) => chrome.tabs.query({ groupId: g.id })))).flat();
+      const own = (await chrome.storage.session.get(OWN_TABS_KEY))[OWN_TABS_KEY] ?? [];
+      const { close, ungroup } = scanGroupSweep({ groups, tabs: inGroups, own });
+      if (ungroup.length) await chrome.tabs.ungroup(ungroup);
+      for (const id of close) await closeTab(id);
+    }
+    await chrome.storage.session.remove(OWN_TABS_KEY);
+  } catch {}
+}
+
+// Service worker vừa chạy lại (kể cả sau khi bị dừng giữa lượt quét): không lượt nào đang chạy ⇒ dọn ngay.
+const bootSweep = sweepScanGroups();
+
 async function closeTab(tabId) {
   if (tabId == null) return;
   try {
@@ -545,11 +583,12 @@ let current = null;
 
 /**
  * Trả chuỗi mô tả nếu lượt quét không chạy được; undefined nếu đã chạy xong. `only` = danh sách kênh cần quét
- * (YC-199: quét lại một kênh); bỏ trống ⇒ mọi kênh đang bật.
+ * (YC-199: quét lại một kênh); bỏ trống ⇒ mọi kênh đang bật. `reuseMinutes` (YC-246, chỉ lượt Quét giao ca): kênh
+ * có lượt gần nhất đạt trong ngần ấy phút thì dùng lại, không mở trang kênh (shift-scan.js reusableOkAt).
  */
 const BUSY_TEXT = "Đang có một lượt quét chạy, đợi nó xong.";
 
-async function runScan(trigger, only = null) {
+async function runScan(trigger, only = null, { reuseMinutes = null } = {}) {
   if (running) return BUSY_TEXT;
   running = true;
   // YC-239: mọi lượt (không riêng lượt giao ca) đều có bản nhìn từ trang Hub, để trang gắn vào lượt đang chạy.
@@ -559,6 +598,9 @@ async function runScan(trigger, only = null) {
   // Tab của kênh vừa đọc: đóng sau khi tab kênh kế tiếp đã vào nhóm, để nhóm tab không mất rồi hiện lại giữa hai kênh.
   let leftover = null;
   try {
+    // YC-249: nhóm quét sót từ lượt bị cắt ngang thì dọn trước, để lượt này không vào lại nhóm cũ.
+    await bootSweep;
+    await sweepScanGroups();
     // Kênh và chu kỳ theo cấu hình đặt trên Hub (H-1348 a); hỏi lại trước mỗi lượt.
     await syncHubSettings();
     const cfg = await loadEffectiveConfig();
@@ -576,7 +618,13 @@ async function runScan(trigger, only = null) {
       channels.push(channel);
     }
     run.setChannels(channels);
+    const saved = reuseMinutes ? await loadStatus() : {};
     for (const channel of channels) {
+      const okAt = reusableOkAt(saved[channel], reuseMinutes, Date.now());
+      if (okAt) {
+        run.channelReused(channel, okAt);
+        continue;
+      }
       run.channelStarted(channel);
       leftover = await scanOne(channel, cfg, trigger, runId, leftover, run);
     }
@@ -584,6 +632,7 @@ async function runScan(trigger, only = null) {
     outcome = OUTCOME.done;
   } finally {
     await closeTab(leftover);
+    await sweepScanGroups();
     running = false;
     current = null;
     try {
@@ -615,19 +664,26 @@ chrome.runtime.onConnect.addListener((port) => {
     const requestId = msg?.type === MSG.scan ? parseRequestId(msg.requestId) : null;
     if (!requestId || taken.has(requestId)) return;
     taken.add(requestId);
-    shiftScan(port, requestId).catch(() => {});
+    shiftScan(port, requestId, parseReuseMinutes(msg.reuseOkWithinMinutes)).catch(() => {});
   });
 });
 
-async function shiftScan(port, requestId) {
+async function shiftScan(port, requestId, reuseMinutes = null) {
   let gone = false;
-  const send = (msg) => {
+  const post = (msg) => {
     if (gone) return;
     try {
       port.postMessage({ ...msg, requestId });
     } catch {
       gone = true; // trang đã đóng
     }
+  };
+  // YC-246 (Q1 a): đọc số ezCloud song song với lượt quét. Kết quả quét chỉ tới trang SAU khi lượt đọc đã gửi Hub
+  // (hoặc hết trần), vì trang nhận kết quả là hỏi Hub số ezCloud của đúng mã lượt quét này.
+  const reading = withTimeout(readEzcloudForScan(requestId), READING_TIMEOUT_MS, "Hết giờ đọc số ezCloud").catch(() => {});
+  const send = (msg) => {
+    if (msg?.type === MSG.result) reading.then(() => post(msg));
+    else post(msg);
   };
   let attached = null;
   port.onDisconnect.addListener(() => {
@@ -645,7 +701,8 @@ async function shiftScan(port, requestId) {
     const mode = joinMode(running, current);
     if (mode === "started") {
       // runScan đặt `running` và `current` ngay lúc gọi, trước mọi await: không lượt nào chen vào giữa.
-      const scan = runScan("giao ca");
+      // YC-246: chỉ lượt do trang Giao ca mở mới dùng lại kênh đạt gần đây; gắn vào lượt khác thì nhận đúng lượt ấy.
+      const scan = runScan("giao ca", null, { reuseMinutes });
       attach(current, mode);
       await scan.catch(scanCrashed);
       return;
@@ -658,6 +715,60 @@ async function shiftScan(port, requestId) {
     if (!queued) send({ type: MSG.accepted, mode, startedAt: null });
     queued = true;
     await current.done;
+  }
+}
+
+/**
+ * YC-246 (Q1 a, Q2 b): đọc ca ezCloud đang mở trong các tab PMS của máy và gửi Hub một lượt đọc gắn mã lượt quét
+ * `scanCode`. Không có tab PMS ⇒ mở một tab PMS nền (không vào nhóm quét review, không giật tiêu điểm), đọc xong
+ * đóng. Mỗi khách sạn gửi một lượt. Lỗi không ném ra: thiếu số ezCloud không được làm hỏng lượt quét review; lượt
+ * không gửi được số nào thì ghi mã lỗi (`readingFaultCode`) để Hub thấy vì sao.
+ *
+ * 1.5.8: mọi tab PMS sẵn có đều bị ezCloud từ chối ⇒ mở thêm một tab PMS nền và đọc lại ở đó. Đo 27/10/2026 trên máy
+ * quầy: tab PMS mở từ trước khi extension nạp lại vẫn chạy capture.js bản cũ, không giữ token trang, nên bị 401 tới
+ * khi lễ tân F5. Tab mới nạp capture.js từ đầu và bắt được token ở request đầu tiên trang gửi.
+ */
+async function readEzcloudForScan(scanCode) {
+  let opened = null;
+  let fault = null;
+  try {
+    const origin = await hubOriginNow();
+    const sent = new Set();
+    // Trả mã lỗi, `null` khi số đã lên Hub, `undefined` khi khách sạn này đã gửi ở tab trước.
+    const readTab = async (tabId, waitMs) => {
+      let page = null;
+      try {
+        page = await runInPage(tabId, readShiftInPage, [waitMs]);
+      } catch {}
+      const report = page ? readingReport({ page, scanCode, readAt: new Date().toISOString(), extensionVersion: chrome.runtime.getManifest().version }) : null;
+      if (report && sent.has(report.ezcloudHotelId)) return undefined;
+      let hub = null;
+      if (report) {
+        sent.add(report.ezcloudHotelId);
+        const { url, init } = shiftHandoverRequest(origin, report);
+        hub = await hubFetch(url, init);
+      }
+      return readingFaultCode({ page, report, hub });
+    };
+    const targets = (await chrome.tabs.query({ url: PMS_TAB_PATTERN }).catch(() => [])).filter((t) => !t.discarded);
+    const faults = [];
+    for (const tab of targets) faults.push(await readTab(tab.id, PAGE_TOKEN_WAIT_MS));
+    if (!faults.includes(null) && (targets.length === 0 || faults.some(isReadingAuthFault))) {
+      opened = await chrome.tabs.create({ url: "about:blank", active: false });
+      const loaded = waitForLoad(opened.id, PMS_LOAD_TIMEOUT_MS);
+      await chrome.tabs.update(opened.id, { url: PMS_HOME_URL });
+      await loaded;
+      // Trang PMS là ứng dụng một trang: readShiftInPage chờ nó gửi request đầu tiên (token) thay cho một nhịp ngủ cố định.
+      faults.push(await readTab(opened.id, FRESH_TAB_TOKEN_WAIT_MS));
+    }
+    // Tab máy vừa mở là lần thử sau cùng, nên mã của nó nói đúng nhất vì sao vẫn chưa có số.
+    fault = faults.includes(null) ? null : (faults.filter(Boolean).at(-1) ?? "PMS_READING_NO_PAGE");
+  } catch {
+    fault = "PMS_READING_NO_PAGE";
+  } finally {
+    // Lượt đọc hỏng không còn im: mã lỗi lên màn Máy quầy của Hub qua lượt báo sống (counter-problems.js).
+    await noteReadingFault(fault).catch(() => {});
+    await closeTab(opened?.id);
   }
 }
 
@@ -704,6 +815,7 @@ async function scanOne(channel, cfg, trigger, runId, leftover = null, run = null
   chrome.tabs.onRemoved.addListener(onRemoved);
   try {
     tab = await chrome.tabs.create({ url: "about:blank", active: false });
+    await rememberOwnTab(tab.id);
     await joinScanGroup(tab);
     await closeTab(leftover);
     leftover = null;

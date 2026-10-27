@@ -1,5 +1,5 @@
 // Cấu hình thu review đặt trên Hub (YC-152 mục 2 · H-1348 a · F8 của YC-120): một cấu hình cho cả chuỗi,
-// Quản trị hệ thống sửa ở màn Kết nối › tab Mã kết nối Booking OTA › khối Extension máy quầy (H-1904 a). Phần thuần ở trên, phần đọc bộ nhớ ở cuối.
+// Quản trị hệ thống sửa ở màn Chi nhánh › mục Cấu hình chung cả chuỗi › khối Extension máy quầy (H-1904 a · YC-250 H-2049 a). Phần thuần ở trên, phần đọc bộ nhớ ở cuối.
 //
 // Hợp đồng (repo UrbanB, chỉ đọc: src/app/api/extension/connection/route.ts, counter-settings.rules.ts):
 // mọi lời đáp 200 của GET /api/extension/connection (ezcloudHotelId, branchId, scope=mine) có thể kèm
@@ -25,10 +25,11 @@ import { CHANNELS, DEFAULT_CONFIG, loadConfig } from "./config.js";
 import { pickBranch } from "./quay/hub-quay.js";
 
 /**
- * Chỉ đường trên Hub (YC-156 L2 · H-1904 a): tên thật của màn, tab và khối, đo trên Hub. Màn Kết nối có tab
- * đầu "Mã kết nối Booking OTA"; trong tab ấy khối "Extension máy quầy" giữ kênh quét và chu kỳ.
+ * Chỉ đường trên Hub (YC-156 L2 · H-1904 a): tên thật của màn, mục và khối, đo trên Hub. Từ YC-250 (H-2049 a) cấu hình
+ * chung rời màn Kết nối, sang mục "Cấu hình chung cả chuỗi" ở đầu màn Chi nhánh; trong mục ấy khối "Extension máy quầy"
+ * giữ kênh quét và chu kỳ.
  */
-export const HUB_COUNTER_PLACE = "màn Kết nối, tab Mã kết nối Booking OTA, khối Extension máy quầy";
+export const HUB_COUNTER_PLACE = "màn Chi nhánh, mục Cấu hình chung cả chuỗi, khối Extension máy quầy";
 
 /** Cận kỹ thuật, khớp CHECK của Hub (counter_extension_settings_*_range). Ngoài cận ⇒ coi như vắng. */
 export const INTERVAL_HOURS_RANGE = { min: 1, max: 168 };

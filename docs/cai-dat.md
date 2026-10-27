@@ -197,8 +197,8 @@ trên `hub.urbanb.vn` hay `urbanb.xyz` (để thử); ô bật lên chỉ hiện
 thử không ghi gì lên Hub). Chưa đăng nhập hay hết phiên thì review chưa lên đâu cả, ô bật lên báo
 "Review chưa lên Hub · cần đăng nhập Hub"; lượt quét sau khi đăng nhập gửi lại toàn bộ bài.
 
-**Cấu hình đặt trên Hub** (`H-1348` a): Quản trị hệ thống đặt ở màn Kết nối › tab Mã kết nối Booking OTA ›
-khối Extension máy quầy,
+**Cấu hình đặt trên Hub** (`H-1348` a): Quản trị hệ thống đặt ở màn Chi nhánh › mục Cấu hình chung cả
+chuỗi › khối Extension máy quầy,
 một cấu hình cho cả chuỗi:
 
 - **Kênh quét** và **chu kỳ tự quét**. Máy hỏi Hub trước mỗi lượt quét và mỗi 30 phút. Có cấu
@@ -229,8 +229,8 @@ nhắc chọn. Tài khoản một cơ sở thì không phải chọn.
 
 **Đọc kết quả:** dưới mỗi kênh trong ô bật lên có dòng
 "Hub: 3 mới · 1 đổi · 662 chờ ghép". *Chờ ghép* là bài của mã khách sạn mà Admin Hub
-chưa ghép với cơ sở: bài nằm ở bảng chờ của Hub và tự vào khi Admin ghép ở
-`/admin/review-hotel-links`. *Mã ngoài phạm vi* là mã khách sạn đã ghép vào một cơ sở mà
+chưa ghép với cơ sở: bài nằm ở bảng chờ của Hub và tự vào khi Admin ghép ở màn Chi nhánh, khối
+"Mã khách sạn review chưa ghép" đầu `/admin/branches`. *Mã ngoài phạm vi* là mã khách sạn đã ghép vào một cơ sở mà
 tài khoản đang đăng nhập không được gán: Hub không nhận bài của mã đó (lỗi `HUB-SCOPE`), các mã
 khác vẫn nhận.
 
