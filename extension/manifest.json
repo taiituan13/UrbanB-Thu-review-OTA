@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Urban B",
-  "version": "1.5.6",
+  "version": "1.5.9",
   "description": "Khung UrbanB trên PMS ezCloud (Booking OTA, Khoá G2J, Chỉ báo) và thu review OTA lên Hub UrbanB. Đăng nhập bằng tài khoản Hub.",
   "permissions": [
     "storage",

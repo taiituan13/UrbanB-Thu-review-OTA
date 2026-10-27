@@ -8,6 +8,7 @@ người chạy lại lệnh cài.
 |---|---|---|
 | `ext:hello` / `ext:status` | 1.2.x | YC-156 |
 | `ext:scan` (quét trước khi giao ca) | 1.5.4 | YC-239, H-1996 a, H-1976 c |
+| `ext:scan` dùng lại kênh đạt gần đây (`reuseOkWithinMinutes`, `reused`) | 1.5.7 | YC-252, user chốt 27/10/2026 (H-2052 a, H-2053 a, H-2054 a) |
 
 ## Chung
 
@@ -49,6 +50,9 @@ window.postMessage({ source: "urbanb-hub", type: "ext:scan", requestId: "gc-7f3a
 - `requestId`: chuỗi 1–64 ký tự, chỉ gồm `A–Z a–z 0–9 - _`, do trang sinh, mỗi lần bấm Quét một mã mới.
 - Sai kiểu, quá dài, có ký tự khác, hoặc trùng một `requestId` đang chờ kết quả trên cùng trang ⇒ extension
   bỏ qua, **không trả gì**.
+- `reuseOkWithinMinutes` (tuỳ chọn, từ 1.5.7): số nguyên phút 1–1440. Kênh có lượt quét **gần nhất** đạt (review
+  đã lên Hub) trong ngần ấy phút thì extension dùng lại, không mở trang kênh. Số phút do Hub giữ
+  (`HANDOVER_REUSE_OK_WITHIN_MINUTES`); extension chỉ kiểm hình dạng. Vắng hay sai ⇒ quét đủ mọi kênh như 1.5.4.
 
 ### Extension làm gì
 
@@ -62,6 +66,9 @@ window.postMessage({ source: "urbanb-hub", type: "ext:scan", requestId: "gc-7f3a
     tab bị đóng) ⇒ trang được báo `mode: "queued"`, chờ lượt ấy xong rồi mới mở lượt mọi kênh (hoặc gắn vào lượt
     mọi kênh khác vừa kịp bắt đầu). Khi chạy, trang nhận thêm một `ext:scan-accepted` mang `"started"` hoặc
     `"joined"`.
+- Có `reuseOkWithinMinutes` thì kênh dùng lại được báo ngay bằng một `ext:scan-progress` `state: "ok"`,
+  `reused: true`, `finishedAt` = giờ lượt quét đạt được dùng lại; không có tin `"running"` cho kênh ấy. Chỉ lượt
+  do trang này mở (`mode: "started"`) mới dùng lại; trang gắn vào lượt khác thì nhận đúng lượt ấy.
 - Lượt quét giao ca gửi review lên Hub và báo sống (`POST /api/extension/connection`) như mọi lượt quét khác,
   với `run.trigger = "manual"`. Hợp đồng HTTP với Hub không đổi.
 - Trang đóng hay tải lại giữa chừng ⇒ lượt quét vẫn chạy hết, vẫn gửi Hub; chỉ là không còn ai nhận tin.
@@ -127,7 +134,8 @@ Mỗi phần tử `channels` (và mỗi `ext:scan-progress`):
 | `channel` | `"booking"` · `"agoda"` · `"trip"` · `"expedia"` · `"traveloka"` · `"go2joy"` |
 | `label` | tên kênh để hiện: Booking, Agoda, Trip, Expedia, Traveloka, Go2Joy |
 | `state` | `"ok"` đạt (đọc xong và review đã lên Hub) · `"error"` lỗi · `"login"` cần đăng nhập lại trang kênh · `"not-run"` lượt dừng trước khi tới kênh này · `"running"` đang quét (chỉ trong `ext:scan-progress`). **Chỉ `"ok"` là đạt.** |
-| `startedAt`, `finishedAt` | giờ kênh bắt đầu và xong quét |
+| `startedAt`, `finishedAt` | giờ kênh bắt đầu và xong quét; kênh `reused` thì cả hai là giờ lượt quét đạt được dùng lại |
+| `reused` | chỉ có, và chỉ là `true`, ở kênh đạt nhờ dùng lại kết quả gần đây (từ 1.5.7) |
 | `count` | số bài đọc được ở lượt này; `null` khi không có |
 | `code` | loại lỗi theo `report.js` / `docs/ma-loi.md`, ví dụ `BKG-LOGIN`, `TRP-TAB`, `AGD-HTTP`, `HUB-NET`; `null` khi đạt |
 | `ref` | mã tham chiếu `E-XXXXXX` của lần lỗi (lễ tân đọc cho người sửa, tra ở lỗi gần nhất trên máy); `null` khi đạt hoặc khi chưa thành lỗi trên máy (tab bị đóng lần đầu) |

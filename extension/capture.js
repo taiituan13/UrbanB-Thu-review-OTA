@@ -43,6 +43,10 @@
     if (!AUTH_KIND || !auth || !isAuthApi(url)) return;
     const m = String(auth).match(/^Bearer\s+(\S+)/i);
     if (!m) return;
+    // YC-246 (đo 27/10/2026 trên PMS 17200): GetCurrentShift chỉ nhận đúng token trang đang gửi — cookie và JWT trong
+    // bộ nhớ trang đều bị 401. Giữ token ấy trong trang cho lượt đọc số lúc Quét (quay/ezcloud-reading.js
+    // readShiftInPage, cũng chạy trong world MAIN); không chuyển đi đâu.
+    if (AUTH_KIND === "ezcloud") window.__urbanbCap.ezcloudToken = m[1];
     let hotelSn = 0;
     try {
       hotelSn = Number(new URL(url, location.href).searchParams.get("hotelSn")) || 0;

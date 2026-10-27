@@ -6,8 +6,23 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import { HUB_ORIGINS } from "../extension/env.js";
-import { CHANNEL_STATE, MSG, OUTCOME, REQUEST_ID_MAX, SCAN_PORT, createScanRun, isHubSender, joinMode, parseRequestId } from "../extension/shift-scan.js";
+import {
+  CHANNEL_STATE,
+  MSG,
+  OUTCOME,
+  REQUEST_ID_MAX,
+  REUSE_MINUTES_MAX,
+  SCAN_PORT,
+  createScanRun,
+  isHubSender,
+  joinMode,
+  parseRequestId,
+  parseReuseMinutes,
+  reusableOkAt,
+} from "../extension/shift-scan.js";
 import { retryAlarmName } from "../extension/tab-scan.js";
+import { READING_FAULT_KEY } from "../extension/quay/counter-problems.js";
+import { FRESH_TAB_TOKEN_WAIT_MS, PAGE_TOKEN_WAIT_MS } from "../extension/quay/ezcloud-reading.js";
 
 // Chuỗi đánh dấu bí mật: không được lọt vào bất kỳ tin nào gửi trang. Giá trị giả, không phải bí mật thật.
 const SECRETS = {
@@ -150,13 +165,15 @@ globalThis.chrome = {
   },
   tabGroups: { query: async () => [], update: async () => {} },
   scripting: {
-    executeScript: async ({ target, func }) => {
+    executeScript: async ({ target, func, args }) => {
       if (func.name === "showScanBanner") return [{ result: true }];
       if (func.name === "readShiftInPage") {
         const url = state.pmsTabs.find((t) => t.id === target.tabId)?.url ?? tabs.get(target.tabId)?.url ?? "";
-        state.pmsReads.push({ tabId: target.tabId, url });
+        state.pmsReads.push({ tabId: target.tabId, url, args });
         if (!url.startsWith("https://pms.ezcloudhotel.com")) throw new Error(`No tab with id: ${target.tabId}.`);
-        return [{ result: structuredClone(state.pmsPage) }];
+        // `pmsPage` là hàm ⇒ mỗi tab một kết quả (tab sẵn có ≠ tab máy vừa mở).
+        const page = typeof state.pmsPage === "function" ? state.pmsPage(target.tabId) : state.pmsPage;
+        return [{ result: structuredClone(page) }];
       }
       if (!tabs.has(target.tabId)) throw new Error(`No tab with id: ${target.tabId}.`);
       if (state.scanDelay) await new Promise((r) => realSetTimeout(r, state.scanDelay));
@@ -488,8 +505,64 @@ test("🔴 (f) tin gửi trang không chứa token, mã bí mật, URL Sheet, em
     assert.ok(!keys.has(bad), `có khoá ${bad}`);
   }
   // Danh sách khoá đóng: thêm khoá mới phải sửa hợp đồng (docs/hop-dong-hub-bridge.md) và test này.
-  const allowed = new Set(["type", "requestId", "mode", "startedAt", "finishedAt", "outcome", "version", "channels", "channel", "label", "state", "count", "code", "ref", "retryAt", "what", "why", "steps"]);
+  const allowed = new Set(["type", "requestId", "mode", "startedAt", "finishedAt", "outcome", "version", "channels", "channel", "label", "state", "count", "code", "ref", "retryAt", "what", "why", "steps", "reused"]);
   assert.deepEqual([...keys].filter((k) => !allowed.has(k)), []);
+});
+
+// ---------- YC-252 (user chốt 27/10/2026, H-2052 a, H-2053 a, H-2054 a): dùng lại kênh đạt gần đây ----------
+
+const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString();
+const savedOk = (m) => ({ at: minutesAgo(m), okAt: minutesAgo(m), state: "ok", count: 3, message: "", error: null, hub: { ok: true } });
+
+// ĐỐI CHỨNG: runScan bỏ nhánh dùng lại ⇒ Trip mở tab ⇒ ĐỎ; bỏ phép so trạng thái gần nhất ⇒ Trip lỗi vẫn dùng lại ⇒ ĐỎ.
+test("🔴 YC-246 ext:scan kèm reuseOkWithinMinutes ⇒ kênh đạt trong mốc dùng lại (không mở tab), kênh quá mốc hay lỗi thì quét", async () => {
+  fresh({ tripResult: TRIP_OK });
+  state.store.status = { trip: savedOk(10), go2joy: savedOk(90) };
+  const page = connect();
+  page.send({ type: MSG.scan, requestId: "rq-reuse", reuseOkWithinMinutes: 60 });
+  await until(() => page.results().length, "kết quả");
+  const progress = page.got.filter((m) => m.type === MSG.progress).map((m) => `${m.channel}:${m.state}${m.reused ? ":reused" : ""}`);
+  assert.deepEqual(progress, ["trip:ok:reused", "go2joy:running", "go2joy:ok"]);
+  const ch = byChannel(page.results()[0]);
+  assert.equal(ch.trip.reused, true);
+  assert.equal(ch.trip.finishedAt, state.store.status.trip.okAt, "giờ của lượt quét đạt được dùng lại");
+  assert.equal(ch.go2joy.reused, undefined);
+  assert.equal(state.created.length, 1, "chỉ Go2Joy mở tab");
+  assert.equal(readingPosts().length, 1, "số ezCloud vẫn đọc mới (H-2052 a)");
+
+  fresh({ tripResult: TRIP_OK });
+  state.store.status = { trip: { ...savedOk(10), state: "error" }, go2joy: { ...savedOk(5), hub: { ok: false } } };
+  const again = connect();
+  again.send({ type: MSG.scan, requestId: "rq-reuse-2", reuseOkWithinMinutes: 60 });
+  await until(() => again.results().length, "kết quả");
+  assert.ok(again.got.every((m) => !m.reused), "kênh lỗi, gửi Hub hỏng ⇒ quét lại (H-2053 a)");
+  assert.equal(state.created.length, 2);
+});
+
+test("🔴 YC-246 Hub cũ không gửi mốc (hay gửi rác) ⇒ quét đủ mọi kênh như trước", async () => {
+  for (const reuseOkWithinMinutes of [undefined, 0, -5, "60", 1e9]) {
+    fresh({ tripResult: TRIP_OK });
+    state.store.status = { trip: savedOk(1), go2joy: savedOk(1) };
+    const page = connect();
+    page.send({ type: MSG.scan, requestId: "rq-old", reuseOkWithinMinutes });
+    await until(() => page.results().length, "kết quả");
+    assert.equal(state.created.length, 2, `mốc ${reuseOkWithinMinutes}`);
+  }
+});
+
+test("parseReuseMinutes / reusableOkAt: chỉ số nguyên dương trong trần; chỉ lượt gần nhất đạt, đã lên Hub, trong mốc", () => {
+  assert.equal(parseReuseMinutes(60), 60);
+  for (const bad of [undefined, null, 0, -1, 1.5, "60", REUSE_MINUTES_MAX + 1]) assert.equal(parseReuseMinutes(bad), null);
+  const now = Date.parse("2026-10-27T08:00:00.000Z");
+  const st = (okAt, extra = {}) => ({ at: okAt, okAt, state: "ok", hub: { ok: true }, ...extra });
+  assert.equal(reusableOkAt(st("2026-10-27T07:00:00.000Z"), 60, now), "2026-10-27T07:00:00.000Z", "đúng mốc vẫn dùng lại");
+  assert.equal(reusableOkAt(st("2026-10-27T06:59:59.000Z"), 60, now), null, "quá mốc");
+  assert.equal(reusableOkAt(st("2026-10-27T08:05:00.000Z"), 60, now), null, "giờ lưu đi trước giờ máy");
+  assert.equal(reusableOkAt(st("2026-10-27T07:30:00.000Z", { state: "login" }), 60, now), null);
+  assert.equal(reusableOkAt(st("2026-10-27T07:30:00.000Z", { hub: { ok: false } }), 60, now), null);
+  assert.equal(reusableOkAt(st("2026-10-27T07:30:00.000Z"), null, now), null, "không có mốc ⇒ không dùng lại");
+  assert.equal(reusableOkAt(null, 60, now), null);
+  assert.equal(reusableOkAt({ at: "2026-10-27T07:30:00.000Z", state: "ok" }, 60, now), "2026-10-27T07:30:00.000Z", "bản cũ chưa ghi okAt");
 });
 
 // ---------- YC-246 (Q1 a, Q2 b): đọc số ezCloud lúc Quét ----------
@@ -562,6 +635,55 @@ test("🔴 YC-246 tab PMS không chạy được mã (trang lỗi) ⇒ không g�
   page.scan("K7M2PT");
   await until(() => page.results().length, "kết quả");
   assert.deepEqual(readingPosts(), []);
+});
+
+// ---------- YC-246 bản 1.5.8: tab PMS sẵn có bị từ chối ⇒ đọc lại ở tab PMS mới ----------
+
+// Đo 27/10/2026 trên máy quầy (1.5.7): tab PMS mở từ trước khi extension nạp lại vẫn chạy capture.js cũ, không có
+// token trang ⇒ 401 ⇒ "Chưa lấy được số ezCloud" tới khi lễ tân F5.
+const PMS_NO_TOKEN = { status: 401, code: 401, auth: "cookie", pageToken: false, shift: null };
+const readingFault = () => state.store[READING_FAULT_KEY]?.code ?? null;
+
+// ĐỐI CHỨNG: bỏ nhánh mở tab mới ⇒ không có lượt đọc nào lên Hub, máy báo PMS_READING_NO_TOKEN ⇒ ĐỎ.
+test("🔴 1.5.8 tab PMS sẵn có bị từ chối vì chưa có token ⇒ mở tab PMS nền mới, đọc ở đó, gửi Hub, đóng tab", async () => {
+  fresh({ tripResult: TRIP_OK, pmsPage: (tabId) => (tabId === PMS_TAB.id ? PMS_NO_TOKEN : PMS_PAGE_OK) });
+  const page = connect();
+  page.scan("K7M2PV");
+  await until(() => page.results().length, "kết quả");
+  assert.equal(state.pmsReads.length, 2);
+  const [old, again] = state.pmsReads;
+  assert.equal(old.tabId, PMS_TAB.id);
+  assert.deepEqual(old.args, [PAGE_TOKEN_WAIT_MS], "tab sẵn có: chờ token ngắn");
+  assert.notEqual(again.tabId, PMS_TAB.id);
+  assert.ok(again.url.startsWith("https://pms.ezcloudhotel.com/"));
+  assert.deepEqual(again.args, [FRESH_TAB_TOKEN_WAIT_MS], "tab mới: chờ trang gửi request đầu tiên");
+  assert.ok(!tabs.has(again.tabId), "tab máy mở thì đóng sau khi đọc");
+  assert.ok(state.created.every((c) => c.active === false), "không giật tiêu điểm");
+  assert.equal(readingPosts().length, 1);
+  assert.equal(readingPosts()[0].scanCode, "K7M2PV");
+  assert.equal(readingFault(), null, "đã có số ⇒ không báo lỗi");
+});
+
+test("🔴 1.5.8 tab mới cũng bị từ chối ⇒ không gửi gì, máy báo mã của lần thử sau cùng", async () => {
+  fresh({ tripResult: TRIP_OK, pmsPage: (tabId) => (tabId === PMS_TAB.id ? PMS_NO_TOKEN : { ...PMS_NO_TOKEN, pageToken: true, auth: "page" }) });
+  const page = connect();
+  page.scan("K7M2PW");
+  await until(() => page.results().length, "kết quả");
+  assert.equal(state.pmsReads.length, 2);
+  assert.deepEqual(readingPosts(), []);
+  assert.equal(readingFault(), "PMS_READING_AUTH");
+});
+
+// ĐỐI CHỨNG: mở tab mới cho mọi lỗi ⇒ ca đã kết cũng mở tab ⇒ ĐỎ.
+test("1.5.8 tab sẵn có đọc được, hay lỗi không phải xác thực (ca đã kết) ⇒ không mở tab mới", async () => {
+  for (const pmsPage of [PMS_PAGE_OK, { ...PMS_PAGE_OK, shift: { ...PMS_PAGE_OK.shift, IsFinish: true } }]) {
+    fresh({ tripResult: TRIP_OK, pmsPage });
+    const page = connect();
+    page.scan("K7M2PX");
+    await until(() => page.results().length, "kết quả");
+    assert.deepEqual(state.pmsReads.map((r) => r.tabId), [PMS_TAB.id]);
+  }
+  assert.equal(readingFault(), "PMS_READING_NO_SHIFT");
 });
 
 // ---------- ② manifest: lệnh quét chỉ nhận trên gốc Hub thật ----------
@@ -682,6 +804,13 @@ test("🔴 (a) hub-bridge: ext:scan hợp lệ ⇒ mở cổng SCAN_PORT, chuy�
   assert.deepEqual(got.map((x) => x.data.type), [MSG.accepted, MSG.progress, MSG.result]);
   assert.ok(got.every((x) => x.origin === "https://hub.urbanb.vn" && x.data.source === "urbanb-ext" && x.data.requestId === "rq-1"));
   assert.equal(port.disconnected, true, "có kết quả thì đóng cổng");
+});
+
+test("🔴 YC-246 hub-bridge: chuyển tiếp reuseOkWithinMinutes của trang tới service worker", async () => {
+  const p = loadHubPage("https://hub.urbanb.vn/giao-ca");
+  await p.flush();
+  p.send({ ...SCAN("rq-r"), reuseOkWithinMinutes: 60 });
+  assert.deepEqual(JSON.parse(JSON.stringify(p.ports[0].sent)), [{ type: MSG.scan, requestId: "rq-r", reuseOkWithinMinutes: 60 }]);
 });
 
 test("🔴 (c) hub-bridge: khung khác, gốc khác, nguồn khác, requestId sai ⇒ không mở cổng", async () => {

@@ -98,3 +98,19 @@ test("Trang extranet khác (Booking.com) không gửi token nào", async () => {
   await window.fetch("https://admin.booking.com/api/x", { headers: { Authorization: "Bearer b" } });
   assert.equal(posted.length, 0);
 });
+
+// YC-246 (đo 27/10/2026): lượt đọc số lúc Quét cần đúng token trang PMS đang gửi.
+// ĐỐI CHỨNG: bỏ dòng giữ token trong capture.js ⇒ ĐỎ.
+test("🔴 PMS: token Bearer trang gửi được giữ trong trang cho lượt đọc số (token mới thay token cũ)", async () => {
+  const { window } = loadAuthPage("https://pms.ezcloudhotel.com/#/dashboard");
+  await window.fetch("/api/Hotel/Settings", { headers: { Authorization: "Bearer tk1" } });
+  assert.equal(window.__urbanbCap.ezcloudToken, "tk1");
+  await window.fetch("/api/Room/List", { headers: { Authorization: "Bearer tk2" } });
+  assert.equal(window.__urbanbCap.ezcloudToken, "tk2");
+});
+
+test("Go2Joy HA: token không bị giữ vào chỗ của PMS", async () => {
+  const { window } = loadAuthPage("https://ha.go2joy.vn/home");
+  await window.fetch("https://api-ha.go2joy.vn/api/v1/x", { headers: { Authorization: "Bearer g1" } });
+  assert.equal(window.__urbanbCap.ezcloudToken, undefined);
+});

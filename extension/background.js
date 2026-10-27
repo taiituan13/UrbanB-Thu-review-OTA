@@ -9,8 +9,8 @@ import { hubBatches, hubRunMeta, hubSnapshots, hubSummaryText, ingestRequest, pa
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
-import { flushShiftHandovers, hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
-import { PMS_HOME_URL, PMS_LOAD_TIMEOUT_MS, PMS_TAB_PATTERN, READING_TIMEOUT_MS, readShiftInPage, readingReport } from "./quay/ezcloud-reading.js";
+import { flushShiftHandovers, hubFetch, hubOriginNow, installQuay, noteReadingFault, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
+import { FRESH_TAB_TOKEN_WAIT_MS, PAGE_TOKEN_WAIT_MS, PMS_HOME_URL, PMS_LOAD_TIMEOUT_MS, PMS_TAB_PATTERN, READING_TIMEOUT_MS, isReadingAuthFault, readShiftInPage, readingFaultCode, readingReport } from "./quay/ezcloud-reading.js";
 import { shiftHandoverRequest } from "./quay/shift-handover.js";
 import { alarmMinutes, loadEffectiveConfig, reviewMissingHelp, reviewMissingText, scanAlarmFor } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
@@ -30,7 +30,7 @@ import {
 } from "./tab-scan.js";
 import { TAB_RETRY_KEY } from "./quay/review-status.js";
 import { HUB_ORIGINS } from "./env.js";
-import { MSG, OUTCOME, SCAN_PORT, createScanRun, isHubSender, joinMode, parseRequestId } from "./shift-scan.js";
+import { MSG, OUTCOME, SCAN_PORT, createScanRun, isHubSender, joinMode, parseRequestId, parseReuseMinutes, reusableOkAt } from "./shift-scan.js";
 import {
   bookingSessionInPage,
   scanAgodaInPage,
@@ -583,11 +583,12 @@ let current = null;
 
 /**
  * Trả chuỗi mô tả nếu lượt quét không chạy được; undefined nếu đã chạy xong. `only` = danh sách kênh cần quét
- * (YC-199: quét lại một kênh); bỏ trống ⇒ mọi kênh đang bật.
+ * (YC-199: quét lại một kênh); bỏ trống ⇒ mọi kênh đang bật. `reuseMinutes` (YC-246, chỉ lượt Quét giao ca): kênh
+ * có lượt gần nhất đạt trong ngần ấy phút thì dùng lại, không mở trang kênh (shift-scan.js reusableOkAt).
  */
 const BUSY_TEXT = "Đang có một lượt quét chạy, đợi nó xong.";
 
-async function runScan(trigger, only = null) {
+async function runScan(trigger, only = null, { reuseMinutes = null } = {}) {
   if (running) return BUSY_TEXT;
   running = true;
   // YC-239: mọi lượt (không riêng lượt giao ca) đều có bản nhìn từ trang Hub, để trang gắn vào lượt đang chạy.
@@ -617,7 +618,13 @@ async function runScan(trigger, only = null) {
       channels.push(channel);
     }
     run.setChannels(channels);
+    const saved = reuseMinutes ? await loadStatus() : {};
     for (const channel of channels) {
+      const okAt = reusableOkAt(saved[channel], reuseMinutes, Date.now());
+      if (okAt) {
+        run.channelReused(channel, okAt);
+        continue;
+      }
       run.channelStarted(channel);
       leftover = await scanOne(channel, cfg, trigger, runId, leftover, run);
     }
@@ -657,11 +664,11 @@ chrome.runtime.onConnect.addListener((port) => {
     const requestId = msg?.type === MSG.scan ? parseRequestId(msg.requestId) : null;
     if (!requestId || taken.has(requestId)) return;
     taken.add(requestId);
-    shiftScan(port, requestId).catch(() => {});
+    shiftScan(port, requestId, parseReuseMinutes(msg.reuseOkWithinMinutes)).catch(() => {});
   });
 });
 
-async function shiftScan(port, requestId) {
+async function shiftScan(port, requestId, reuseMinutes = null) {
   let gone = false;
   const post = (msg) => {
     if (gone) return;
@@ -694,7 +701,8 @@ async function shiftScan(port, requestId) {
     const mode = joinMode(running, current);
     if (mode === "started") {
       // runScan đặt `running` và `current` ngay lúc gọi, trước mọi await: không lượt nào chen vào giữa.
-      const scan = runScan("giao ca");
+      // YC-246: chỉ lượt do trang Giao ca mở mới dùng lại kênh đạt gần đây; gắn vào lượt khác thì nhận đúng lượt ấy.
+      const scan = runScan("giao ca", null, { reuseMinutes });
       attach(current, mode);
       await scan.catch(scanCrashed);
       return;
@@ -713,37 +721,53 @@ async function shiftScan(port, requestId) {
 /**
  * YC-246 (Q1 a, Q2 b): đọc ca ezCloud đang mở trong các tab PMS của máy và gửi Hub một lượt đọc gắn mã lượt quét
  * `scanCode`. Không có tab PMS ⇒ mở một tab PMS nền (không vào nhóm quét review, không giật tiêu điểm), đọc xong
- * đóng. Mỗi khách sạn gửi một lượt. Lỗi nào cũng nuốt: thiếu số ezCloud không được làm hỏng lượt quét review.
+ * đóng. Mỗi khách sạn gửi một lượt. Lỗi không ném ra: thiếu số ezCloud không được làm hỏng lượt quét review; lượt
+ * không gửi được số nào thì ghi mã lỗi (`readingFaultCode`) để Hub thấy vì sao.
+ *
+ * 1.5.8: mọi tab PMS sẵn có đều bị ezCloud từ chối ⇒ mở thêm một tab PMS nền và đọc lại ở đó. Đo 27/10/2026 trên máy
+ * quầy: tab PMS mở từ trước khi extension nạp lại vẫn chạy capture.js bản cũ, không giữ token trang, nên bị 401 tới
+ * khi lễ tân F5. Tab mới nạp capture.js từ đầu và bắt được token ở request đầu tiên trang gửi.
  */
 async function readEzcloudForScan(scanCode) {
   let opened = null;
+  let fault = null;
   try {
-    let targets = (await chrome.tabs.query({ url: PMS_TAB_PATTERN }).catch(() => [])).filter((t) => !t.discarded);
-    if (targets.length === 0) {
+    const origin = await hubOriginNow();
+    const sent = new Set();
+    // Trả mã lỗi, `null` khi số đã lên Hub, `undefined` khi khách sạn này đã gửi ở tab trước.
+    const readTab = async (tabId, waitMs) => {
+      let page = null;
+      try {
+        page = await runInPage(tabId, readShiftInPage, [waitMs]);
+      } catch {}
+      const report = page ? readingReport({ page, scanCode, readAt: new Date().toISOString(), extensionVersion: chrome.runtime.getManifest().version }) : null;
+      if (report && sent.has(report.ezcloudHotelId)) return undefined;
+      let hub = null;
+      if (report) {
+        sent.add(report.ezcloudHotelId);
+        const { url, init } = shiftHandoverRequest(origin, report);
+        hub = await hubFetch(url, init);
+      }
+      return readingFaultCode({ page, report, hub });
+    };
+    const targets = (await chrome.tabs.query({ url: PMS_TAB_PATTERN }).catch(() => [])).filter((t) => !t.discarded);
+    const faults = [];
+    for (const tab of targets) faults.push(await readTab(tab.id, PAGE_TOKEN_WAIT_MS));
+    if (!faults.includes(null) && (targets.length === 0 || faults.some(isReadingAuthFault))) {
       opened = await chrome.tabs.create({ url: "about:blank", active: false });
       const loaded = waitForLoad(opened.id, PMS_LOAD_TIMEOUT_MS);
       await chrome.tabs.update(opened.id, { url: PMS_HOME_URL });
       await loaded;
-      await sleep(2500); // trang PMS là ứng dụng một trang: chờ nó dựng phiên xong
-      targets = [opened];
+      // Trang PMS là ứng dụng một trang: readShiftInPage chờ nó gửi request đầu tiên (token) thay cho một nhịp ngủ cố định.
+      faults.push(await readTab(opened.id, FRESH_TAB_TOKEN_WAIT_MS));
     }
-    const origin = await hubOriginNow();
-    const sent = new Set();
-    for (const tab of targets) {
-      let page = null;
-      try {
-        page = await runInPage(tab.id, readShiftInPage);
-      } catch {
-        continue;
-      }
-      const report = readingReport({ page, scanCode, readAt: new Date().toISOString(), extensionVersion: chrome.runtime.getManifest().version });
-      if (!report || sent.has(report.ezcloudHotelId)) continue;
-      sent.add(report.ezcloudHotelId);
-      const { url, init } = shiftHandoverRequest(origin, report);
-      await hubFetch(url, init);
-    }
+    // Tab máy vừa mở là lần thử sau cùng, nên mã của nó nói đúng nhất vì sao vẫn chưa có số.
+    fault = faults.includes(null) ? null : (faults.filter(Boolean).at(-1) ?? "PMS_READING_NO_PAGE");
   } catch {
+    fault = "PMS_READING_NO_PAGE";
   } finally {
+    // Lượt đọc hỏng không còn im: mã lỗi lên màn Máy quầy của Hub qua lượt báo sống (counter-problems.js).
+    await noteReadingFault(fault).catch(() => {});
     await closeTab(opened?.id);
   }
 }

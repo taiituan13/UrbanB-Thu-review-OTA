@@ -5,9 +5,7 @@ quản lý thấy gì khác. Máy đã cài không tự lên bản: khi có bả
 "Có bản mới …" và phải có người chạy lại lệnh cài (xem [docs/cai-tu-xa.md](docs/cai-tu-xa.md) mục
 Cập nhật).
 
-## Chưa phát hành
-
-Điều phối đặt số phiên bản lúc gộp; nhánh này không tự nâng số.
+## 1.5.9
 
 **Chưa ghép mã khách sạn ezCloud thì máy chỉ báo một lỗi** (YC-251 · H-2047 c, 27/10/2026). Trước đây khách sạn đang
 mở trên PMS chưa được ghép với chi nhánh nào trên Hub (hoặc ghép sang chi nhánh tài khoản không được gán, hoặc chi
@@ -15,14 +13,45 @@ nhánh đã xoá) thì máy báo Hub ba lỗi: lỗi chưa ghép, "Khung PMS kh�
 Booking OTA" của bảng khoá G2J. Hai lỗi sau chỉ là hệ quả của lỗi đầu, và lời sửa của chúng (kiểm mạng, nhập mã kết
 nối) dẫn sai việc.
 
-- Từ bản có thay đổi này, máy chỉ báo lỗi gốc. Ghép mã xong thì khung tự tải lại Chỉ báo và bảng khoá như cũ.
+- Từ 1.5.9, máy chỉ báo lỗi gốc. Ghép mã xong thì khung tự tải lại Chỉ báo và bảng khoá như cũ.
 - Bảng khoá lỗi vì lý do khác (Web App quá thời gian, Apps Script lỗi) vẫn báo như trước.
 - Câu hướng dẫn trong khung chỉ Quản trị tới màn Chi nhánh, khối Mã ezCloud chưa ghép, thay cho màn Kết nối.
-- Máy chưa có bản sửa này vẫn gửi đủ ba lỗi; Hub tự gộp chúng thành một.
+- Máy chạy bản cũ hơn 1.5.9 vẫn gửi đủ ba lỗi; Hub tự gộp chúng thành một.
 
 **Ô bật lên chỉ đúng chỗ đổi kênh quét trên Hub** (YC-250 · H-2049 a, 27/10/2026). Cấu hình chung của Extension máy quầy
 đã rời màn Kết nối. Câu "Nhắn Quản trị hệ thống bật kênh trên Hub" nay chỉ tới màn Chi nhánh, mục Cấu hình chung cả
 chuỗi, khối Extension máy quầy.
+
+## 1.5.8
+
+**Lễ tân không phải F5 tab PMS sau khi máy lên bản mới** (YC-246, 27/10/2026). Đo trên máy quầy chạy 1.5.7: tab PMS
+mở từ trước khi extension nạp lại vẫn chạy mã bắt token bản cũ, nên ezCloud từ chối và thẻ giao ca ghi "Chưa lấy
+được số ezCloud" tới khi lễ tân tải lại tab PMS.
+
+- Mọi tab PMS đang mở đều bị ezCloud từ chối thì máy tự mở một tab PMS nền mới (không giật tiêu điểm), đọc số ở đó
+  rồi đóng. Ca đã kết hay Hub từ chối thì không mở tab.
+- Tab PMS vừa mở hay đang đứng yên chưa gửi gì: máy chờ trang gửi request đầu tiên rồi mới đọc (tối đa 3 giây ở tab
+  đang mở, 6 giây ở tab máy mở).
+- Mã lỗi mới `PMS_READING_NO_TOKEN`: ezCloud từ chối mà trang PMS chưa gửi token nào (thường là PMS chưa đăng
+  nhập). `PMS_READING_AUTH` nay chỉ còn nghĩa ezCloud từ chối cả token trang.
+
+## 1.5.7
+
+**Máy lấy được số ezCloud lúc Quét** (YC-246, 27/10/2026). Bản 1.5.6 chưa lấy được số nào: đo trên PMS Bình Thạnh,
+ezCloud chỉ nhận đúng token mà trang PMS đang gửi, còn hai cách 1.5.6 dùng (phiên cookie, token trang giữ trong bộ
+nhớ) đều bị từ chối. 1.5.7 dùng token ấy trước, hai cách cũ để dự phòng. Token chỉ nằm trong trang PMS, không gửi
+đi đâu.
+
+- Lượt đọc không lấy được số thì máy báo lỗi máy quầy kèm mã `PMS_READING_*` (không có trang PMS, ezCloud từ chối
+  phiên, ezCloud báo lỗi, không có ca đang mở, Hub không nhận). Lượt sau lấy được thì lỗi tự tắt. Hub chưa khai
+  các mã này nên tạm hiện ở nhóm "lỗi khác" kèm mã.
+
+**Quét giao ca dùng lại kênh vừa quét đạt** (YC-252, user chốt 27/10/2026). Lễ tân bấm Quét trên trang Giao ca
+quầy: kênh review nào có lượt quét gần nhất đạt trong vòng 60 phút thì máy không mở trang kênh ấy nữa, thẻ ghi giờ
+lượt quét đó kèm chữ "dùng lại". Kênh lỗi hay cần đăng nhập thì vẫn quét lại. Số ezCloud luôn đọc mới.
+
+- Mốc 60 phút do Hub gửi kèm lệnh Quét. Hub chưa lên bản mới thì máy quét đủ mọi kênh như 1.5.6.
+- Lượt quét hẹn giờ và các nút quét khác không dùng lại.
 
 ## 1.5.6
 

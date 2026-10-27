@@ -197,3 +197,11 @@ test("🔴 nguồn sw.js: phiên đổi ⇒ ghi lần mất kết nối; tập l
     assert.match(body, /void maybeReportProblems\(\)/, fn);
   }
 });
+
+// YC-246: lượt đọc số ezCloud lúc Quét hỏng không còn im.
+// ĐỐI CHỨNG: bỏ dòng `readingFault` trong counterProblems ⇒ ĐỎ.
+test("🔴 lượt đọc số ezCloud hỏng ⇒ mã PMS_READING_* kèm giờ; mã lạ bị bỏ", () => {
+  assert.deepEqual(counterProblems({ readingFault: { code: "PMS_READING_AUTH", at: Date.parse(AT) } }), [{ code: "PMS_READING_AUTH", since: AT }]);
+  assert.deepEqual(counterProblems({ readingFault: { code: "token=abc", at: Date.parse(AT) } }), []);
+  assert.deepEqual(counterProblems({ readingFault: null }), []);
+});

@@ -18,13 +18,16 @@
 //   ngay (quay/sw.js extStatus). Gốc trang service worker tự lấy từ người gửi, không lấy từ tin.
 //
 // Quét trước khi giao ca (YC-239, H-1996 a, H-1976 c):
-// - Trang gửi `{ source: "urbanb-hub", type: "ext:scan", requestId }`. `requestId`: chuỗi 1–64 ký tự
-//   [A-Za-z0-9_-] do trang sinh; sai kiểu, quá dài, hay trùng một requestId đang chạy ⇒ bỏ qua, không trả gì.
+// - Trang gửi `{ source: "urbanb-hub", type: "ext:scan", requestId, reuseOkWithinMinutes? }`. `requestId`: chuỗi
+//   1–64 ký tự [A-Za-z0-9_-] do trang sinh; sai kiểu, quá dài, hay trùng một requestId đang chạy ⇒ bỏ qua, không trả
+//   gì. `reuseOkWithinMinutes` (1.5.7, YC-246): kênh đã quét đạt trong ngần ấy phút thì dùng lại, không mở trang kênh;
+//   số phút do Hub giữ, tệp này chỉ chuyển tiếp, service worker kiểm (shift-scan.js parseReuseMinutes).
 // - `ext:scan-accepted` { requestId, mode, startedAt }: mode "started" (mở lượt mới) · "joined" (gắn vào lượt
 //   mọi kênh đang chạy, không mở lượt thứ hai) · "queued" (lượt đang chạy chỉ quét vài kênh; chờ nó xong rồi mới
 //   chạy, sau đó có thêm một ext:scan-accepted "started" hoặc "joined").
 // - `ext:scan-progress` { requestId, channel, label, state, startedAt, finishedAt, count, code, ref, retryAt,
-//   what, why, steps }: mỗi lần một kênh đổi trạng thái. state "running" | "ok" | "error" | "login".
+//   what, why, steps, reused? }: mỗi lần một kênh đổi trạng thái. state "running" | "ok" | "error" | "login".
+//   `reused: true` ⇒ kênh đạt nhờ dùng lại lượt quét đạt lúc `finishedAt`, không quét lại.
 // - `ext:scan-result` { requestId, outcome, startedAt, finishedAt, version, channels[], what, why, steps }: ĐÚNG
 //   MỘT tin cho mỗi requestId đã nhận. outcome "done" | "not-configured" | "failed" | "interrupted". Mỗi phần tử
 //   `channels` cùng dạng ext:scan-progress, state "ok" | "error" | "login" | "not-run". Chỉ "ok" là đạt.
@@ -79,7 +82,7 @@
 
   const post = (msg) => window.postMessage({ ...msg, source: "urbanb-ext" }, location.origin);
 
-  function scan(requestId) {
+  function scan(requestId, reuseOkWithinMinutes) {
     active.add(requestId);
     let finished = false;
     const finish = (msg) => {
@@ -125,7 +128,7 @@
       lost();
     });
     try {
-      port.postMessage({ type: "ext:scan", requestId });
+      port.postMessage({ type: "ext:scan", requestId, reuseOkWithinMinutes });
     } catch {
       lost();
     }
@@ -142,7 +145,7 @@
     if (d.type === "ext:scan") {
       const id = d.requestId;
       if (typeof id !== "string" || !REQUEST_ID_RE.test(id) || active.has(id)) return;
-      scan(id);
+      scan(id, d.reuseOkWithinMinutes);
     }
   });
   answer();
