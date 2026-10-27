@@ -86,7 +86,7 @@ hướng dẫn còn nói về bảng tính: chữ cũ, chưa sửa.
 
 | Loại | Nghĩa | Khách sạn tự làm | Người quản lý kiểm |
 |---|---|---|---|
-| `SHEET-CONFIG` | Máy chưa có đủ Sheet thu review, mã bí mật, tên khách sạn (Hub chưa có cấu hình thu review, hoặc máy chưa đăng nhập Hub) | Đăng nhập Hub, chọn chi nhánh nếu được hỏi, bấm Thử Sheet | Điền Sheet thu review ở màn Kết nối › Extension máy quầy trên Hub |
+| `SHEET-CONFIG` | Máy chưa có đủ Sheet thu review, mã bí mật, tên khách sạn (Hub chưa có cấu hình thu review, hoặc máy chưa đăng nhập Hub) | Đăng nhập Hub, chọn chi nhánh nếu được hỏi, bấm Thử Sheet | Điền Sheet thu review ở màn Chi nhánh › mục Cấu hình chung cả chuỗi trên Hub |
 | `SHEET-SECRET` | Sheet từ chối mã bí mật | Gửi mã lỗi | Mã bí mật trên Hub khớp Script Property `SECRET` của Sheet? Sửa trên Hub, máy tự nhận lại |
 | `SHEET-NET` | Không gọi được tới Google | Kiểm mạng | — |
 | `SHEET-URL` | Google trả trang lỗi thay vì JSON, cả 3 lần gửi | Kiểm URL kết thúc bằng `/exec` | Đúng URL mà vẫn lỗi: bản triển khai bị lưu trữ, hoặc quyền không còn là "Bất kỳ ai" |

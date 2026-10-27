@@ -197,8 +197,8 @@ trên `hub.urbanb.vn` hay `urbanb.xyz` (để thử); ô bật lên chỉ hiện
 thử không ghi gì lên Hub). Chưa đăng nhập hay hết phiên thì review chưa lên đâu cả, ô bật lên báo
 "Review chưa lên Hub · cần đăng nhập Hub"; lượt quét sau khi đăng nhập gửi lại toàn bộ bài.
 
-**Cấu hình đặt trên Hub** (`H-1348` a): Quản trị hệ thống đặt ở màn Kết nối › tab Mã kết nối Booking OTA ›
-khối Extension máy quầy,
+**Cấu hình đặt trên Hub** (`H-1348` a): Quản trị hệ thống đặt ở màn Chi nhánh › mục Cấu hình chung cả
+chuỗi › khối Extension máy quầy,
 một cấu hình cho cả chuỗi:
 
 - **Kênh quét** và **chu kỳ tự quét**. Máy hỏi Hub trước mỗi lượt quét và mỗi 30 phút. Có cấu

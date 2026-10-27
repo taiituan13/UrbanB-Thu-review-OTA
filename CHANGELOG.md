@@ -18,6 +18,10 @@ nối) dẫn sai việc.
 - Câu hướng dẫn trong khung chỉ Quản trị tới màn Chi nhánh, khối Mã ezCloud chưa ghép, thay cho màn Kết nối.
 - Máy chưa lên bản này vẫn gửi đủ ba lỗi; Hub tự gộp chúng thành một.
 
+**Ô bật lên chỉ đúng chỗ đổi kênh quét trên Hub** (YC-250 · H-2049 a, 27/10/2026). Cấu hình chung của Extension máy quầy
+đã rời màn Kết nối. Câu "Nhắn Quản trị hệ thống bật kênh trên Hub" nay chỉ tới màn Chi nhánh, mục Cấu hình chung cả
+chuỗi, khối Extension máy quầy.
+
 ## 1.5.6
 
 Hai phần dưới đây từng được phát dưới số 1.5.5 (lần hai, 27/10/2026). Máy đã nạp 1.5.5 đầu thấy cùng số nên không

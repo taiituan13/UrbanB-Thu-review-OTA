@@ -35,8 +35,8 @@ UltraViewer/TeamViewer. Mỗi máy mất khoảng 3 phút.
 ⚠️ Lệnh do Sheet tạo vẫn chứa mã bí mật của Sheet (và token Hub). Extension 1.5.2 không dùng mã này,
 nhưng ai có lệnh đều gửi được dữ liệu vào Sheet, nên chỉ gửi qua tin nhắn riêng, không dán vào nhóm chung.
 
-Máy **đã cài** extension muốn đổi cài đặt: từ bản 1.2.0 đổi trên Hub (màn Kết nối › Extension máy
-quầy). Hub chưa biết chi nhánh của máy thì chạy lại cả lệnh có mã: extension nhận mã mới trong vòng 30
+Máy **đã cài** extension muốn đổi cài đặt: từ bản 1.2.0 đổi trên Hub (màn Chi nhánh › mục Cấu hình
+chung cả chuỗi › Extension máy quầy). Hub chưa biết chi nhánh của máy thì chạy lại cả lệnh có mã: extension nhận mã mới trong vòng 30
 phút, hoặc ngay khi mở ô bật lên. Phần **Chỉ mã** chỉ dán được vào máy còn chạy bản trước 1.2.0.
 
 Mã mang **đủ** cài đặt: ô nào để trống trong hộp thoại thì áp vào máy cũng thành trống, kênh không
