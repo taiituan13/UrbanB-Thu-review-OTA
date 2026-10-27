@@ -5,6 +5,19 @@ quản lý thấy gì khác. Máy đã cài không tự lên bản: khi có bả
 "Có bản mới …" và phải có người chạy lại lệnh cài (xem [docs/cai-tu-xa.md](docs/cai-tu-xa.md) mục
 Cập nhật).
 
+## 1.5.7
+
+**Chưa ghép mã khách sạn ezCloud thì máy chỉ báo một lỗi** (YC-251 · H-2047 c, 27/10/2026). Trước đây khách sạn đang
+mở trên PMS chưa được ghép với chi nhánh nào trên Hub (hoặc ghép sang chi nhánh tài khoản không được gán, hoặc chi
+nhánh đã xoá) thì máy báo Hub ba lỗi: lỗi chưa ghép, "Khung PMS không tải được Chỉ báo" và "Hub chưa có mã kết nối
+Booking OTA" của bảng khoá G2J. Hai lỗi sau chỉ là hệ quả của lỗi đầu, và lời sửa của chúng (kiểm mạng, nhập mã kết
+nối) dẫn sai việc.
+
+- Từ bản này máy chỉ báo lỗi gốc. Ghép mã xong thì khung tự tải lại Chỉ báo và bảng khoá như cũ.
+- Bảng khoá lỗi vì lý do khác (Web App quá thời gian, Apps Script lỗi) vẫn báo như trước.
+- Câu hướng dẫn trong khung chỉ Quản trị tới màn Chi nhánh, khối Mã ezCloud chưa ghép, thay cho màn Kết nối.
+- Máy chưa lên bản này vẫn gửi đủ ba lỗi; Hub tự gộp chúng thành một.
+
 ## 1.5.6
 
 Hai phần dưới đây từng được phát dưới số 1.5.5 (lần hai, 27/10/2026). Máy đã nạp 1.5.5 đầu thấy cùng số nên không

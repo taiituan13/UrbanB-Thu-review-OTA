@@ -34,6 +34,20 @@ export function withFault(faults, kind, fault) {
   return next;
 }
 
+/**
+ * YC-251 · H-2047 c — Hub chưa biết chi nhánh của khách sạn đang mở (`nobranch`: chưa ghép, ngoài phạm vi, chi nhánh
+ * đã xoá) thì Chỉ báo không tải được và bảng khoá không có mã. Đó là hệ quả: chỉ lỗi gốc PMS_* được báo, lễ tân và
+ * Quản trị đọc một việc (ghép mã), không phải ba. Hub cũng gộp ba mã của máy bản cũ (counter-problems.rules.ts).
+ */
+export function indicatorsFaultIsCaused(state) {
+  return state === "nobranch";
+}
+
+/** Bảng khoá lỗi vì không có mã (`no-code`) trong lúc Hub chưa biết chi nhánh ⇒ hệ quả, không ghi. Lỗi khác vẫn ghi. */
+export function boardFaultIsCaused(kind, session) {
+  return kind === "no-code" && session === "nobranch";
+}
+
 const SESSION_CODE = { expired: "HUB_SESSION_EXPIRED", out: "HUB_SIGNED_OUT", net: "HUB_UNREACHABLE", server: "HUB_UNREACHABLE", forbidden: "HUB_UNREACHABLE" };
 const NOBRANCH_CODE = { unmapped: "PMS_HOTEL_NOT_LINKED", scope: "PMS_OUT_OF_SCOPE", gone: "PMS_BRANCH_GONE" };
 
@@ -68,16 +82,16 @@ export function counterProblems({
   if (s) add(s, null, snap?.updatedAt);
 
   // Khung PMS
-  if (snap?.session === "nobranch") {
-    const code = NOBRANCH_CODE[snap?.why];
-    if (code) add(code, code === "PMS_HOTEL_NOT_LINKED" ? snap?.hotelId : null, snap?.updatedAt);
-  }
+  const noBranch = snap?.session === "nobranch" ? NOBRANCH_CODE[snap?.why] : undefined;
+  if (noBranch) add(noBranch, noBranch === "PMS_HOTEL_NOT_LINKED" ? snap?.hotelId : null, snap?.updatedAt);
   if (snap?.codeState === "none") add("OTA_CODE_MISSING");
   else if (snap?.codeState === "rejected") add("OTA_CODE_REJECTED", snap?.booking?.error, snap?.booking?.at);
   else if (text(snap?.booking?.error)) add("OTA_SHEET_ERROR", snap.booking.error, snap?.booking?.at);
-  if (faults?.board) add("LOCK_BOARD_FAILED", faults.board.message, faults.board.at);
+  // Lỗi bảng khoá và Chỉ báo ghi trước khi khung biết Hub chưa biết chi nhánh (bản cũ, hay lượt gọi cũ còn trong
+  // `quayFaults`) không gửi kèm lỗi gốc PMS_* (YC-251 · H-2047 c).
+  if (faults?.board && !noBranch) add("LOCK_BOARD_FAILED", faults.board.message, faults.board.at);
   if (faults?.lock) add("G2J_LOCK_FAILED", faults.lock.message, faults.lock.at);
-  if (faults?.indicators) add("INDICATORS_UNREACHABLE", null, faults.indicators.at);
+  if (faults?.indicators && !noBranch) add("INDICATORS_UNREACHABLE", null, faults.indicators.at);
   // TOKEN_REJECTED: lượt đẩy bị Sheet từ chối, hoặc (YC-240 ③, điều phối duyệt lối a) Sheet báo token ezCloud đã
   // lưu rồi bị ezCloud từ chối. Hub hiện "Loại phiên: {detail}" ⇒ detail viết thành câu đọc được.
   const rejected = ["ezcloud", "go2joy"].filter((k) => tokenAt?.[k]?.outcome === "rejected");

@@ -321,7 +321,9 @@ export async function board(hotelId) {
     await patchSnap({ tokenHealth });
     return { ok: true, ...entry, tokenHealth };
   } catch (e) {
-    await noteFault("board", { at: now(), message: e.message });
+    // YC-251 · H-2047 c: Hub chưa biết chi nhánh ⇒ không có mã là hệ quả, lỗi gốc đã báo là PMS_* (counter-problems.js).
+    if (P.boardFaultIsCaused(e.kind, e.conn?.session)) await noteFault("board", null);
+    else await noteFault("board", { at: now(), message: e.message });
     return { ok: false, error: e.message, kind: e.kind, codeState: codeStateOf(e.conn, e), cached: await get(K.board(hotelId)) };
   }
 }
@@ -355,8 +357,10 @@ export async function indicators(hotelId) {
     return { state: "ok", ...entry, origin };
   }
   const session = await sessionNow(cls);
-  // Hết phiên đã có mã riêng (HUB_*): chỉ ghi lỗi Chỉ báo khi Hub không trả lời được.
-  if (cls.state !== "out") await noteFault("indicators", { at: now(), message: cls.message });
+  // Hết phiên đã có mã riêng (HUB_*); Hub chưa biết chi nhánh đã có mã riêng (PMS_*, YC-251 · H-2047 c) ⇒ xoá lỗi
+  // Chỉ báo cũ. Còn lại là Hub không trả lời được ⇒ ghi.
+  if (P.indicatorsFaultIsCaused(cls.state)) await noteFault("indicators", null);
+  else if (cls.state !== "out") await noteFault("indicators", { at: now(), message: cls.message });
   // Mất mạng / Hub lỗi ⇒ hiện số lượt trước, ghi rõ giờ (mockup trạng thái "net").
   return { state: session, why: cls.why, cached, failedAt: now(), message: cls.message, origin };
 }

@@ -1,7 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { HUB_GAPS_MAX, counterProblems, dropSentGaps, problemsSignature, trackHubGap, withFault } from "../extension/quay/counter-problems.js";
+import {
+  HUB_GAPS_MAX,
+  boardFaultIsCaused,
+  counterProblems,
+  dropSentGaps,
+  indicatorsFaultIsCaused,
+  problemsSignature,
+  trackHubGap,
+  withFault,
+} from "../extension/quay/counter-problems.js";
 
 const AT = "2026-10-24T03:00:00.000Z";
 const codes = (list) => list.map((p) => p.code);
@@ -34,6 +43,31 @@ test("🔴 lỗi SW biết lúc gọi (bảng khoá, Khoá G2J, Chỉ báo) đi 
   // Lượt gọi ổn lại ⇒ xoá đúng lỗi ấy.
   assert.deepEqual(codes(counterProblems({ faults: withFault(faults, "lock", null) })), ["LOCK_BOARD_FAILED", "INDICATORS_UNREACHABLE"]);
   assert.deepEqual(withFault({}, "lạ", { at: AT }), {});
+});
+
+// YC-251 · H-2047 c — đo bãi thử 27/10 (máy 83ef4dc7, 1.5.5): chưa ghép mã ezCloud ⇒ máy báo thêm LOCK_BOARD_FAILED
+// ("Hub chưa có mã kết nối…") và INDICATORS_UNREACHABLE. Ba lỗi cho một gốc.
+test("🔴 Hub chưa biết chi nhánh ⇒ chỉ báo lỗi gốc PMS_*, không kèm bảng khoá và Chỉ báo", () => {
+  const faults = withFault(withFault(withFault({}, "board", { at: AT, message: "Hub chưa có mã kết nối Booking OTA của chi nhánh này." }), "indicators", { at: AT }), "lock", { at: AT, message: "G2J ERROR" });
+  for (const why of ["unmapped", "scope", "gone"]) {
+    const r = codes(counterProblems({ snap: { session: "nobranch", why, hotelId: "17200", codeState: "unknown" }, faults }));
+    assert.equal(r.includes("LOCK_BOARD_FAILED"), false, why);
+    assert.equal(r.includes("INDICATORS_UNREACHABLE"), false, why);
+    assert.equal(r.includes("G2J_LOCK_FAILED"), true, `${why}: Khoá G2J lễ tân bấm vẫn báo`);
+  }
+  // Đang chờ đọc mã (`wait`) không phải gốc nào ⇒ lỗi ghi được vẫn báo.
+  assert.deepEqual(codes(counterProblems({ snap: { session: "nobranch", why: "wait" }, faults })), ["LOCK_BOARD_FAILED", "G2J_LOCK_FAILED", "INDICATORS_UNREACHABLE"]);
+});
+
+test("🔴 service worker: Hub chưa biết chi nhánh ⇒ xoá lỗi Chỉ báo, không ghi lỗi bảng khoá vì thiếu mã", () => {
+  assert.equal(indicatorsFaultIsCaused("nobranch"), true);
+  for (const s of ["net", "server", "forbidden", "out", "ok"]) assert.equal(indicatorsFaultIsCaused(s), false, s);
+  assert.equal(boardFaultIsCaused("no-code", "nobranch"), true);
+  assert.equal(boardFaultIsCaused("no-code", "ok"), false, "Hub biết chi nhánh mà chưa có mã ⇒ lỗi thật (OTA_CODE_MISSING kéo theo)");
+  assert.equal(boardFaultIsCaused("timeout", "nobranch"), false, "Web App lỗi vẫn là lỗi");
+  const src = readFileSync(new URL("../extension/quay/sw.js", import.meta.url), "utf8");
+  assert.match(src, /if \(P\.indicatorsFaultIsCaused\(cls\.state\)\) await noteFault\("indicators", null\)/);
+  assert.match(src, /if \(P\.boardFaultIsCaused\(e\.kind, e\.conn\?\.session\)\) await noteFault\("board", null\)/);
 });
 
 test("🔴 token bị từ chối, Go2Joy chờ chọn chi nhánh, thông báo không tải được, Tampermonkey cũ", () => {
