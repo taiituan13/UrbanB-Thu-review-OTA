@@ -10,7 +10,7 @@ import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
 import { flushShiftHandovers, hubFetch, hubOriginNow, installQuay, noteReadingFault, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
-import { PMS_HOME_URL, PMS_LOAD_TIMEOUT_MS, PMS_TAB_PATTERN, READING_TIMEOUT_MS, readShiftInPage, readingFaultCode, readingReport } from "./quay/ezcloud-reading.js";
+import { FRESH_TAB_TOKEN_WAIT_MS, PAGE_TOKEN_WAIT_MS, PMS_HOME_URL, PMS_LOAD_TIMEOUT_MS, PMS_TAB_PATTERN, READING_TIMEOUT_MS, isReadingAuthFault, readShiftInPage, readingFaultCode, readingReport } from "./quay/ezcloud-reading.js";
 import { shiftHandoverRequest } from "./quay/shift-handover.js";
 import { alarmMinutes, loadEffectiveConfig, reviewMissingHelp, reviewMissingText, scanAlarmFor } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
@@ -723,42 +723,46 @@ async function shiftScan(port, requestId, reuseMinutes = null) {
  * `scanCode`. Không có tab PMS ⇒ mở một tab PMS nền (không vào nhóm quét review, không giật tiêu điểm), đọc xong
  * đóng. Mỗi khách sạn gửi một lượt. Lỗi không ném ra: thiếu số ezCloud không được làm hỏng lượt quét review; lượt
  * không gửi được số nào thì ghi mã lỗi (`readingFaultCode`) để Hub thấy vì sao.
+ *
+ * 1.5.8: mọi tab PMS sẵn có đều bị ezCloud từ chối ⇒ mở thêm một tab PMS nền và đọc lại ở đó. Đo 27/10/2026 trên máy
+ * quầy: tab PMS mở từ trước khi extension nạp lại vẫn chạy capture.js bản cũ, không giữ token trang, nên bị 401 tới
+ * khi lễ tân F5. Tab mới nạp capture.js từ đầu và bắt được token ở request đầu tiên trang gửi.
  */
 async function readEzcloudForScan(scanCode) {
   let opened = null;
   let fault = null;
   try {
-    let targets = (await chrome.tabs.query({ url: PMS_TAB_PATTERN }).catch(() => [])).filter((t) => !t.discarded);
-    if (targets.length === 0) {
-      opened = await chrome.tabs.create({ url: "about:blank", active: false });
-      const loaded = waitForLoad(opened.id, PMS_LOAD_TIMEOUT_MS);
-      await chrome.tabs.update(opened.id, { url: PMS_HOME_URL });
-      await loaded;
-      await sleep(2500); // trang PMS là ứng dụng một trang: chờ nó dựng phiên xong
-      targets = [opened];
-    }
     const origin = await hubOriginNow();
     const sent = new Set();
-    let anyOk = false;
-    for (const tab of targets) {
+    // Trả mã lỗi, `null` khi số đã lên Hub, `undefined` khi khách sạn này đã gửi ở tab trước.
+    const readTab = async (tabId, waitMs) => {
       let page = null;
       try {
-        page = await runInPage(tab.id, readShiftInPage);
+        page = await runInPage(tabId, readShiftInPage, [waitMs]);
       } catch {}
       const report = page ? readingReport({ page, scanCode, readAt: new Date().toISOString(), extensionVersion: chrome.runtime.getManifest().version }) : null;
-      if (report && sent.has(report.ezcloudHotelId)) continue;
+      if (report && sent.has(report.ezcloudHotelId)) return undefined;
       let hub = null;
       if (report) {
         sent.add(report.ezcloudHotelId);
         const { url, init } = shiftHandoverRequest(origin, report);
         hub = await hubFetch(url, init);
       }
-      const code = readingFaultCode({ page, report, hub });
-      if (code === null) anyOk = true;
-      else fault ??= code;
+      return readingFaultCode({ page, report, hub });
+    };
+    const targets = (await chrome.tabs.query({ url: PMS_TAB_PATTERN }).catch(() => [])).filter((t) => !t.discarded);
+    const faults = [];
+    for (const tab of targets) faults.push(await readTab(tab.id, PAGE_TOKEN_WAIT_MS));
+    if (!faults.includes(null) && (targets.length === 0 || faults.some(isReadingAuthFault))) {
+      opened = await chrome.tabs.create({ url: "about:blank", active: false });
+      const loaded = waitForLoad(opened.id, PMS_LOAD_TIMEOUT_MS);
+      await chrome.tabs.update(opened.id, { url: PMS_HOME_URL });
+      await loaded;
+      // Trang PMS là ứng dụng một trang: readShiftInPage chờ nó gửi request đầu tiên (token) thay cho một nhịp ngủ cố định.
+      faults.push(await readTab(opened.id, FRESH_TAB_TOKEN_WAIT_MS));
     }
-    if (anyOk) fault = null;
-    else fault ??= "PMS_READING_NO_PAGE";
+    // Tab máy vừa mở là lần thử sau cùng, nên mã của nó nói đúng nhất vì sao vẫn chưa có số.
+    fault = faults.includes(null) ? null : (faults.filter(Boolean).at(-1) ?? "PMS_READING_NO_PAGE");
   } catch {
     fault = "PMS_READING_NO_PAGE";
   } finally {

@@ -21,6 +21,8 @@ import {
   reusableOkAt,
 } from "../extension/shift-scan.js";
 import { retryAlarmName } from "../extension/tab-scan.js";
+import { READING_FAULT_KEY } from "../extension/quay/counter-problems.js";
+import { FRESH_TAB_TOKEN_WAIT_MS, PAGE_TOKEN_WAIT_MS } from "../extension/quay/ezcloud-reading.js";
 
 // Chuỗi đánh dấu bí mật: không được lọt vào bất kỳ tin nào gửi trang. Giá trị giả, không phải bí mật thật.
 const SECRETS = {
@@ -163,13 +165,15 @@ globalThis.chrome = {
   },
   tabGroups: { query: async () => [], update: async () => {} },
   scripting: {
-    executeScript: async ({ target, func }) => {
+    executeScript: async ({ target, func, args }) => {
       if (func.name === "showScanBanner") return [{ result: true }];
       if (func.name === "readShiftInPage") {
         const url = state.pmsTabs.find((t) => t.id === target.tabId)?.url ?? tabs.get(target.tabId)?.url ?? "";
-        state.pmsReads.push({ tabId: target.tabId, url });
+        state.pmsReads.push({ tabId: target.tabId, url, args });
         if (!url.startsWith("https://pms.ezcloudhotel.com")) throw new Error(`No tab with id: ${target.tabId}.`);
-        return [{ result: structuredClone(state.pmsPage) }];
+        // `pmsPage` là hàm ⇒ mỗi tab một kết quả (tab sẵn có ≠ tab máy vừa mở).
+        const page = typeof state.pmsPage === "function" ? state.pmsPage(target.tabId) : state.pmsPage;
+        return [{ result: structuredClone(page) }];
       }
       if (!tabs.has(target.tabId)) throw new Error(`No tab with id: ${target.tabId}.`);
       if (state.scanDelay) await new Promise((r) => realSetTimeout(r, state.scanDelay));
@@ -631,6 +635,55 @@ test("🔴 YC-246 tab PMS không chạy được mã (trang lỗi) ⇒ không g�
   page.scan("K7M2PT");
   await until(() => page.results().length, "kết quả");
   assert.deepEqual(readingPosts(), []);
+});
+
+// ---------- YC-246 bản 1.5.8: tab PMS sẵn có bị từ chối ⇒ đọc lại ở tab PMS mới ----------
+
+// Đo 27/10/2026 trên máy quầy (1.5.7): tab PMS mở từ trước khi extension nạp lại vẫn chạy capture.js cũ, không có
+// token trang ⇒ 401 ⇒ "Chưa lấy được số ezCloud" tới khi lễ tân F5.
+const PMS_NO_TOKEN = { status: 401, code: 401, auth: "cookie", pageToken: false, shift: null };
+const readingFault = () => state.store[READING_FAULT_KEY]?.code ?? null;
+
+// ĐỐI CHỨNG: bỏ nhánh mở tab mới ⇒ không có lượt đọc nào lên Hub, máy báo PMS_READING_NO_TOKEN ⇒ ĐỎ.
+test("🔴 1.5.8 tab PMS sẵn có bị từ chối vì chưa có token ⇒ mở tab PMS nền mới, đọc ở đó, gửi Hub, đóng tab", async () => {
+  fresh({ tripResult: TRIP_OK, pmsPage: (tabId) => (tabId === PMS_TAB.id ? PMS_NO_TOKEN : PMS_PAGE_OK) });
+  const page = connect();
+  page.scan("K7M2PV");
+  await until(() => page.results().length, "kết quả");
+  assert.equal(state.pmsReads.length, 2);
+  const [old, again] = state.pmsReads;
+  assert.equal(old.tabId, PMS_TAB.id);
+  assert.deepEqual(old.args, [PAGE_TOKEN_WAIT_MS], "tab sẵn có: chờ token ngắn");
+  assert.notEqual(again.tabId, PMS_TAB.id);
+  assert.ok(again.url.startsWith("https://pms.ezcloudhotel.com/"));
+  assert.deepEqual(again.args, [FRESH_TAB_TOKEN_WAIT_MS], "tab mới: chờ trang gửi request đầu tiên");
+  assert.ok(!tabs.has(again.tabId), "tab máy mở thì đóng sau khi đọc");
+  assert.ok(state.created.every((c) => c.active === false), "không giật tiêu điểm");
+  assert.equal(readingPosts().length, 1);
+  assert.equal(readingPosts()[0].scanCode, "K7M2PV");
+  assert.equal(readingFault(), null, "đã có số ⇒ không báo lỗi");
+});
+
+test("🔴 1.5.8 tab mới cũng bị từ chối ⇒ không gửi gì, máy báo mã của lần thử sau cùng", async () => {
+  fresh({ tripResult: TRIP_OK, pmsPage: (tabId) => (tabId === PMS_TAB.id ? PMS_NO_TOKEN : { ...PMS_NO_TOKEN, pageToken: true, auth: "page" }) });
+  const page = connect();
+  page.scan("K7M2PW");
+  await until(() => page.results().length, "kết quả");
+  assert.equal(state.pmsReads.length, 2);
+  assert.deepEqual(readingPosts(), []);
+  assert.equal(readingFault(), "PMS_READING_AUTH");
+});
+
+// ĐỐI CHỨNG: mở tab mới cho mọi lỗi ⇒ ca đã kết cũng mở tab ⇒ ĐỎ.
+test("1.5.8 tab sẵn có đọc được, hay lỗi không phải xác thực (ca đã kết) ⇒ không mở tab mới", async () => {
+  for (const pmsPage of [PMS_PAGE_OK, { ...PMS_PAGE_OK, shift: { ...PMS_PAGE_OK.shift, IsFinish: true } }]) {
+    fresh({ tripResult: TRIP_OK, pmsPage });
+    const page = connect();
+    page.scan("K7M2PX");
+    await until(() => page.results().length, "kết quả");
+    assert.deepEqual(state.pmsReads.map((r) => r.tabId), [PMS_TAB.id]);
+  }
+  assert.equal(readingFault(), "PMS_READING_NO_SHIFT");
 });
 
 // ---------- ② manifest: lệnh quét chỉ nhận trên gốc Hub thật ----------

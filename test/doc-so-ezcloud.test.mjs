@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { PMS_HOME_URL, PMS_TAB_PATTERN, readShiftInPage, readingFaultCode, readingReport } from "../extension/quay/ezcloud-reading.js";
+import { FRESH_TAB_TOKEN_WAIT_MS, PAGE_TOKEN_WAIT_MS, PMS_HOME_URL, PMS_TAB_PATTERN, TOKEN_WAIT_MAX_MS, isReadingAuthFault, readShiftInPage, readingFaultCode, readingReport } from "../extension/quay/ezcloud-reading.js";
 
 const FAKE_JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJsZS10YW4tZ2lhIn0.chu-ky-gia";
 // Token trang PMS gửi kèm request (capture.js giữ lại): KHÔNG phải JWT trong bộ nhớ trang.
@@ -48,19 +48,23 @@ function storage(entries) {
 }
 
 /** Chạy readShiftInPage với `fetch` và bộ nhớ trang giả. `reply(headers)` trả `{ status, body }`. */
-async function inPage(reply, { local = {}, session = {}, pageToken = null } = {}) {
+async function inPage(reply, { local = {}, session = {}, pageToken = null, tokenLater = null, waitMs } = {}) {
   const calls = [];
   const saved = { fetch: globalThis.fetch, window: globalThis.window };
   globalThis.window = { localStorage: storage(local), sessionStorage: storage(session) };
   if (pageToken !== null) globalThis.window.__urbanbCap = { ezcloudToken: pageToken };
+  // Trang gửi request đầu tiên (capture.js bắt token) sau `ms` mili giây.
+  const win = globalThis.window;
+  const timer = tokenLater ? setTimeout(() => (win.__urbanbCap = { ezcloudToken: tokenLater.token }), tokenLater.ms) : null;
   globalThis.fetch = async (url, init) => {
     calls.push({ url, init });
     const { status, body } = reply(init.headers ?? {});
     return new Response(body === undefined ? "<html>" : JSON.stringify(body), { status });
   };
   try {
-    return { result: await readShiftInPage(), calls };
+    return { result: await readShiftInPage(waitMs), calls };
   } finally {
+    clearTimeout(timer);
     globalThis.fetch = saved.fetch;
     globalThis.window = saved.window;
   }
@@ -76,6 +80,7 @@ test("🔴 readShiftInPage: gọi đúng GetCurrentShift?shiftId=0 bằng phiên
     status: 200,
     code: 0,
     auth: "cookie",
+    pageToken: false,
     shift: {
       ShiftId: 52011,
       ShiftNumber: 14,
@@ -99,10 +104,10 @@ test("🔴 readShiftInPage: phiên cookie bị từ chối ⇒ thử lại với
 
 test("readShiftInPage: chưa đăng nhập, không có JWT ⇒ trả mã lỗi, không ca; trang trả HTML ⇒ code null", async () => {
   const a = await inPage(() => ({ status: 401, body: { Code: 401, Data: null } }));
-  assert.deepEqual(a.result, { status: 401, code: 401, auth: "cookie", shift: null });
+  assert.deepEqual(a.result, { status: 401, code: 401, auth: "cookie", pageToken: false, shift: null });
   assert.equal(a.calls.length, 1);
   const b = await inPage(() => ({ status: 200, body: undefined }));
-  assert.deepEqual(b.result, { status: 200, code: null, auth: "cookie", shift: null });
+  assert.deepEqual(b.result, { status: 200, code: null, auth: "cookie", pageToken: false, shift: null });
 });
 
 // Đo 27/10/2026 trên PMS 17200: cookie ⇒ 401, JWT trong bộ nhớ trang ⇒ 401, token trang đang gửi ⇒ 200.
@@ -130,6 +135,41 @@ test("readShiftInPage: token trang bị từ chối ⇒ thử cookie rồi JWT t
   );
   assert.equal(result.auth, "storage");
   assert.equal(result.code, 0);
+});
+
+// 1.5.8 — tab PMS chưa gửi request nào thì capture.js chưa có token: chờ trang gửi rồi mới gọi.
+// ĐỐI CHỨNG: bỏ vòng chờ ⇒ lần gọi đầu đi bằng cookie (401 ở PMS thật) ⇒ ĐỎ.
+test("🔴 readShiftInPage: token trang tới sau vài trăm mili giây ⇒ chờ rồi gọi bằng token ấy", async () => {
+  const ok = (h) => (h.Authorization === `Bearer ${PAGE_TOKEN}` ? { status: 200, body: SHIFT_BODY } : { status: 401, body: { Code: 401 } });
+  const { result, calls } = await inPage(ok, { tokenLater: { token: PAGE_TOKEN, ms: 300 }, waitMs: 2_000 });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].init.headers.Authorization, `Bearer ${PAGE_TOKEN}`);
+  assert.deepEqual([result.code, result.auth, result.pageToken], [0, "page", true]);
+  assert.ok(!JSON.stringify(result).includes(PAGE_TOKEN), "token không lọt ra kết quả");
+});
+
+test("readShiftInPage: không chờ khi không xin chờ, hay khi đã có token; trần chờ khớp TOKEN_WAIT_MAX_MS", async () => {
+  const t0 = Date.now();
+  const { calls } = await inPage(() => ({ status: 401, body: { Code: 401 } }), { tokenLater: { token: PAGE_TOKEN, ms: 300 } });
+  assert.ok(Date.now() - t0 < 250, "waitMs mặc định 0");
+  assert.equal(calls[0].init.headers.Authorization, undefined);
+  const t1 = Date.now();
+  await inPage(() => ({ status: 200, body: SHIFT_BODY }), { pageToken: PAGE_TOKEN, waitMs: 5_000 });
+  assert.ok(Date.now() - t1 < 250, "có token sẵn thì gọi ngay");
+  assert.ok(readShiftInPage.toString().includes(String(TOKEN_WAIT_MAX_MS).replace("_", "")), "số trần trong hàm khớp hằng");
+  assert.ok(PAGE_TOKEN_WAIT_MS <= FRESH_TAB_TOKEN_WAIT_MS && FRESH_TAB_TOKEN_WAIT_MS <= TOKEN_WAIT_MAX_MS);
+});
+
+// ĐỐI CHỨNG: gộp hai mã ⇒ Hub không phân biệt được "trang chưa gửi token" với "ezCloud từ chối cả token" ⇒ ĐỎ.
+test("🔴 readingFaultCode: 401 mà trang chưa có token ⇒ NO_TOKEN; 401 cả token trang ⇒ AUTH; cả hai mở được tab mới", () => {
+  const noToken = readingFaultCode({ page: { status: 401, code: 401, pageToken: false, shift: null }, report: null, hub: null });
+  const auth = readingFaultCode({ page: { status: 401, code: 401, pageToken: true, shift: null }, report: null, hub: null });
+  assert.equal(noToken, "PMS_READING_NO_TOKEN");
+  assert.equal(auth, "PMS_READING_AUTH");
+  assert.ok(isReadingAuthFault(noToken) && isReadingAuthFault(auth));
+  for (const code of ["PMS_READING_PMS_ERROR", "PMS_READING_NO_SHIFT", "PMS_READING_HUB_REJECTED", "PMS_READING_NO_PAGE", null]) {
+    assert.equal(isReadingAuthFault(code), false, code);
+  }
 });
 
 test("🔴 readingFaultCode: mỗi chỗ hỏng một mã; số đã lên Hub ⇒ null", () => {
