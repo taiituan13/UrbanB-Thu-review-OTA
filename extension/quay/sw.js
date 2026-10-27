@@ -138,6 +138,16 @@ export async function noteSignedOut() {
   await noteSession({ state: "out" });
 }
 
+/**
+ * YC-246: kết cục lượt đọc số ezCloud lúc Quét (background.js readEzcloudForScan). `code` là mã của
+ * ezcloud-reading.js readingFaultCode, `null` ⇒ số đã lên Hub, xoá lỗi cũ. Ảnh lỗi đổi thì báo Hub ngay.
+ */
+export async function noteReadingFault(code) {
+  if (code) await set(P.READING_FAULT_KEY, { code, at: now() });
+  else await chrome.storage.local.remove(P.READING_FAULT_KEY);
+  void maybeReportProblems();
+}
+
 async function sessionNow(cls) {
   const ever = Boolean(await get(K.ever));
   if (cls.state === "out") return H.sessionState("out", ever);
@@ -628,7 +638,7 @@ async function heartbeatBranchId() {
 
 /** YC-193 — ảnh mọi lỗi đang hiện cho lễ tân, đọc từ bộ nhớ (counter-problems.js). */
 async function problemsNow(version) {
-  const keys = [K.snap, K.faults, K.tok("ezcloud"), K.tok("go2joy"), K.mine, K.branch, "scanCrash", "lastError", "update"];
+  const keys = [K.snap, K.faults, K.tok("ezcloud"), K.tok("go2joy"), K.mine, K.branch, "scanCrash", "lastError", "update", P.READING_FAULT_KEY];
   const got = await chrome.storage.local.get(keys);
   const cfg = await loadEffectiveConfig();
   return P.counterProblems({
@@ -641,6 +651,7 @@ async function problemsNow(version) {
     version,
     reviewMissing: Boolean(reviewMissingText(cfg.review)),
     g2jAsk: H.pickBranch(got[K.mine]?.branches ?? null, got[K.branch] ?? "").state === "ask",
+    readingFault: got[P.READING_FAULT_KEY] ?? null,
   });
 }
 

@@ -17,6 +17,13 @@ import { healthIsCurrent } from "./hub-quay.js";
 export const FAULTS_KEY = "quayFaults";
 export const FAULT_KINDS = ["board", "lock", "indicators"];
 
+/**
+ * Khoá giữ lỗi của lượt đọc số ezCloud lúc Quét gần nhất (YC-246): `{ code, at }`, vắng ⇒ lượt gần nhất đã gửi được
+ * số. Mã do quay/ezcloud-reading.js readingFaultCode sinh, luôn bắt đầu bằng `PMS_READING_`.
+ */
+export const READING_FAULT_KEY = "ezReadingFault";
+const READING_FAULT_RE = /^PMS_READING_[A-Z_]{1,40}$/;
+
 const iso = (v) => {
   if (v === null || v === undefined || v === "") return null;
   const d = new Date(v);
@@ -43,6 +50,8 @@ const NOBRANCH_CODE = { unmapped: "PMS_HOTEL_NOT_LINKED", scope: "PMS_OUT_OF_SCO
  * - `scanCrash`, `lastError`: khoá cùng tên (`lastError` không còn sinh mã nào từ 1.5.2) · `update`: khoá
  *   `update` · `version`: bản đang chạy
  * - `reviewMissing`: máy chưa cấu hình xong thu review · `g2jAsk`: máy nhiều chi nhánh chưa chọn chi nhánh
+ * - `readingFault`: khoá `READING_FAULT_KEY` (YC-246). Hub chưa khai các mã `PMS_READING_*` thì xếp vào nhóm "lỗi
+ *   khác" và vẫn hiện mã — đủ để biết vì sao thẻ ghi "Chưa lấy được số ezCloud".
  */
 export function counterProblems({
   snap = null,
@@ -54,6 +63,7 @@ export function counterProblems({
   version = "",
   reviewMissing = false,
   g2jAsk = false,
+  readingFault = null,
 } = {}) {
   const out = [];
   const add = (code, detail = null, since = null) => {
@@ -94,6 +104,7 @@ export function counterProblems({
     add("NOTIFICATIONS_UNREACHABLE", null, snap.notifications.at);
   }
   if (snap?.tampermonkey === true) add("TAMPERMONKEY_LEFT");
+  if (typeof readingFault?.code === "string" && READING_FAULT_RE.test(readingFault.code)) add(readingFault.code, null, readingFault.at);
 
   // Quét review (ngoài lỗi từng kênh)
   if (reviewMissing) add("REVIEW_NOT_CONFIGURED");

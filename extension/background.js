@@ -9,8 +9,8 @@ import { hubBatches, hubRunMeta, hubSnapshots, hubSummaryText, ingestRequest, pa
 import { REMOTE_MANIFEST_URL, isNewer, parseRemoteVersion } from "./update.js";
 import { SETUP_FILE, applySetup, decodeSetupCode } from "./setup-code.js";
 import { TAB_CLOSED_MESSAGE, blankTabMessage, explainInjectError, isBlankTab } from "./nav.js";
-import { flushShiftHandovers, hubFetch, hubOriginNow, installQuay, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
-import { PMS_HOME_URL, PMS_LOAD_TIMEOUT_MS, PMS_TAB_PATTERN, READING_TIMEOUT_MS, readShiftInPage, readingReport } from "./quay/ezcloud-reading.js";
+import { flushShiftHandovers, hubFetch, hubOriginNow, installQuay, noteReadingFault, noteSignedOut, refreshHubSettings, sendHeartbeat } from "./quay/sw.js";
+import { PMS_HOME_URL, PMS_LOAD_TIMEOUT_MS, PMS_TAB_PATTERN, READING_TIMEOUT_MS, readShiftInPage, readingFaultCode, readingReport } from "./quay/ezcloud-reading.js";
 import { shiftHandoverRequest } from "./quay/shift-handover.js";
 import { alarmMinutes, loadEffectiveConfig, reviewMissingHelp, reviewMissingText, scanAlarmFor } from "./hub-config.js";
 import { badgeText } from "./quay/notifications.js";
@@ -713,10 +713,12 @@ async function shiftScan(port, requestId) {
 /**
  * YC-246 (Q1 a, Q2 b): đọc ca ezCloud đang mở trong các tab PMS của máy và gửi Hub một lượt đọc gắn mã lượt quét
  * `scanCode`. Không có tab PMS ⇒ mở một tab PMS nền (không vào nhóm quét review, không giật tiêu điểm), đọc xong
- * đóng. Mỗi khách sạn gửi một lượt. Lỗi nào cũng nuốt: thiếu số ezCloud không được làm hỏng lượt quét review.
+ * đóng. Mỗi khách sạn gửi một lượt. Lỗi không ném ra: thiếu số ezCloud không được làm hỏng lượt quét review; lượt
+ * không gửi được số nào thì ghi mã lỗi (`readingFaultCode`) để Hub thấy vì sao.
  */
 async function readEzcloudForScan(scanCode) {
   let opened = null;
+  let fault = null;
   try {
     let targets = (await chrome.tabs.query({ url: PMS_TAB_PATTERN }).catch(() => [])).filter((t) => !t.discarded);
     if (targets.length === 0) {
@@ -729,21 +731,31 @@ async function readEzcloudForScan(scanCode) {
     }
     const origin = await hubOriginNow();
     const sent = new Set();
+    let anyOk = false;
     for (const tab of targets) {
       let page = null;
       try {
         page = await runInPage(tab.id, readShiftInPage);
-      } catch {
-        continue;
+      } catch {}
+      const report = page ? readingReport({ page, scanCode, readAt: new Date().toISOString(), extensionVersion: chrome.runtime.getManifest().version }) : null;
+      if (report && sent.has(report.ezcloudHotelId)) continue;
+      let hub = null;
+      if (report) {
+        sent.add(report.ezcloudHotelId);
+        const { url, init } = shiftHandoverRequest(origin, report);
+        hub = await hubFetch(url, init);
       }
-      const report = readingReport({ page, scanCode, readAt: new Date().toISOString(), extensionVersion: chrome.runtime.getManifest().version });
-      if (!report || sent.has(report.ezcloudHotelId)) continue;
-      sent.add(report.ezcloudHotelId);
-      const { url, init } = shiftHandoverRequest(origin, report);
-      await hubFetch(url, init);
+      const code = readingFaultCode({ page, report, hub });
+      if (code === null) anyOk = true;
+      else fault ??= code;
     }
+    if (anyOk) fault = null;
+    else fault ??= "PMS_READING_NO_PAGE";
   } catch {
+    fault = "PMS_READING_NO_PAGE";
   } finally {
+    // Lượt đọc hỏng không còn im: mã lỗi lên màn Máy quầy của Hub qua lượt báo sống (counter-problems.js).
+    await noteReadingFault(fault).catch(() => {});
     await closeTab(opened?.id);
   }
 }

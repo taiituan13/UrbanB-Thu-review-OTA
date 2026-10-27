@@ -23,9 +23,13 @@ export const READING_MONEY_MAX = 10;
 
 /**
  * Chạy TRONG trang PMS (world MAIN, `chrome.scripting.executeScript`), nên phải tự đủ: không dùng gì ngoài thân
- * hàm. Gọi `GetCurrentShift?shiftId=0` bằng phiên của trang (cookie); không được thì thử lại với JWT trang giữ
- * trong bộ nhớ (PMS từ 10/2026 không còn gửi Bearer ở mọi request, xem bridge.js). Chỉ trả mã HTTP, `Code` và các
- * trường cần — không trả token, tên người tạo ca hay người nhận.
+ * hàm. Gọi `GetCurrentShift?shiftId=0` lần lượt bằng:
+ *   1. token Bearer chính trang vừa gửi (capture.js giữ ở `window.__urbanbCap.ezcloudToken`) — đo 27/10/2026 trên
+ *      PMS 17200: chỉ cách này được 200, hai cách sau đều 401;
+ *   2. phiên của trang (cookie);
+ *   3. JWT trang giữ trong bộ nhớ (PMS từ 10/2026 không còn gửi Bearer ở mọi request, xem bridge.js).
+ * Dừng ở lần đầu ezCloud báo `Code` 0. Chỉ trả mã HTTP, `Code`, cách xác thực đã dùng (`auth`) và các trường cần —
+ * không trả token, tên người tạo ca hay người nhận.
  */
 export async function readShiftInPage() {
   const PATH = "/api/Shift/GetCurrentShift?shiftId=0";
@@ -54,10 +58,23 @@ export async function readShiftInPage() {
       return { status: 0, body: null };
     }
   };
-  let res = await call({});
-  if (res.body?.Code !== 0) {
-    const token = jwt();
-    if (token) res = await call({ Authorization: "Bearer " + token });
+  const pageToken = typeof window.__urbanbCap?.ezcloudToken === "string" ? window.__urbanbCap.ezcloudToken : "";
+  const tries = [
+    ["page", () => (pageToken ? { Authorization: "Bearer " + pageToken } : null)],
+    ["cookie", () => ({})],
+    ["storage", () => {
+      const token = jwt();
+      return token && token !== pageToken ? { Authorization: "Bearer " + token } : null;
+    }],
+  ];
+  let res = { status: 0, body: null };
+  let auth = "none";
+  for (const [name, headersOf] of tries) {
+    const headers = headersOf();
+    if (!headers) continue;
+    res = await call(headers);
+    auth = name;
+    if (res.body?.Code === 0) break;
   }
   const data = res.body && typeof res.body.Data === "object" ? res.body.Data : null;
   let shift = null;
@@ -66,7 +83,24 @@ export async function readShiftInPage() {
     const rows = Array.isArray(data.ListShiftDetailModels) ? data.ListShiftDetailModels : [];
     shift.ListShiftDetailModels = rows.filter((r) => r && typeof r === "object").map((r) => Object.fromEntries(MONEY_KEYS.map((k) => [k, r[k] ?? null])));
   }
-  return { status: res.status, code: typeof res.body?.Code === "number" ? res.body.Code : null, shift };
+  return { status: res.status, code: typeof res.body?.Code === "number" ? res.body.Code : null, auth, shift };
+}
+
+/**
+ * Mã lỗi máy quầy của một lượt đọc (gửi Hub trong `problems` của lượt báo sống), hay `null` khi số đã lên Hub.
+ * Trước 27/10/2026 mọi lỗi của lượt đọc bị nuốt im: thẻ chỉ ghi "Chưa lấy được số ezCloud", không ai biết vì sao.
+ *   · `PMS_READING_NO_PAGE` — không chạy được lệnh đọc trong tab PMS (tab chưa tải, bị đóng giữa chừng);
+ *   · `PMS_READING_AUTH` — ezCloud từ chối phiên (401/403): PMS chưa đăng nhập, hay token trang chưa bắt được;
+ *   · `PMS_READING_PMS_ERROR` — ezCloud trả lời nhưng không báo thành công;
+ *   · `PMS_READING_NO_SHIFT` — không có ca đang mở (ca đã kết, thiếu mã);
+ *   · `PMS_READING_HUB_REJECTED` — Hub không nhận thân tin (mất mạng, hết phiên, mã khách sạn chưa ghép…).
+ */
+export function readingFaultCode({ page, report, hub }) {
+  if (!isRecord(page)) return "PMS_READING_NO_PAGE";
+  if (page.code !== 0) return page.status === 401 || page.status === 403 ? "PMS_READING_AUTH" : "PMS_READING_PMS_ERROR";
+  if (!report) return "PMS_READING_NO_SHIFT";
+  if (!isRecord(hub) || !(hub.status >= 200 && hub.status < 300)) return "PMS_READING_HUB_REJECTED";
+  return null;
 }
 
 const isRecord = (v) => v !== null && typeof v === "object" && !Array.isArray(v);

@@ -28,8 +28,14 @@ ca đo được) và lễ tân sửa tay được. Lượt đọc lúc Quét tí
 
 - Trang Giao ca quầy gửi `ext:scan` kèm `requestId` (chính là mã lượt quét `scanCode` của Hub). Song song với lượt
   quét review, extension đọc ca ezCloud đang mở trong **mọi tab `pms.ezcloudhotel.com`** của máy: chạy
-  `GET /api/Shift/GetCurrentShift?shiftId=0` ngay trong trang (world MAIN), bằng phiên ezCloud của trang; không
-  được thì thử lại với JWT trang giữ trong bộ nhớ. Không đổi khách sạn mặc định, không gọi lệnh ghi nào.
+  `GET /api/Shift/GetCurrentShift?shiftId=0` ngay trong trang (world MAIN). Xác thực lần lượt: token Bearer chính
+  trang vừa gửi kèm request (`capture.js` giữ trong trang, không chuyển đi đâu), rồi phiên cookie, rồi JWT trang
+  giữ trong bộ nhớ; dừng ở lần đầu ezCloud nhận. Đo 27/10/2026 trên PMS 17200: chỉ token trang được 200, cookie và
+  JWT trong bộ nhớ đều 401 (bản 1.5.6 chỉ thử hai cách sau nên chưa lấy được số nào). Không đổi khách sạn mặc định,
+  không gọi lệnh ghi nào.
+- Lượt đọc không gửi được số nào ⇒ máy ghi một mã `PMS_READING_*` (`readingFaultCode`) vào `problems` của lượt báo
+  sống (`NO_PAGE` · `AUTH` · `PMS_ERROR` · `NO_SHIFT` · `HUB_REJECTED`); lượt sau gửi được thì xoá. Hub chưa khai
+  các mã này thì hiện ở nhóm "lỗi khác" kèm mã.
 - Máy không có tab PMS nào ⇒ mở một tab `https://pms.ezcloudhotel.com/` nền (không giật tiêu điểm, không vào nhóm
   tab quét review), đọc xong đóng.
 - Chỉ gửi khi ezCloud trả `Code === 0` và ca đang mở (`IsFinish === false`). Mỗi khách sạn một lượt.

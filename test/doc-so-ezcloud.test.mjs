@@ -3,9 +3,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { PMS_HOME_URL, PMS_TAB_PATTERN, readShiftInPage, readingReport } from "../extension/quay/ezcloud-reading.js";
+import { PMS_HOME_URL, PMS_TAB_PATTERN, readShiftInPage, readingFaultCode, readingReport } from "../extension/quay/ezcloud-reading.js";
 
 const FAKE_JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJsZS10YW4tZ2lhIn0.chu-ky-gia";
+// Token trang PMS gửi kèm request (capture.js giữ lại): KHÔNG phải JWT trong bộ nhớ trang.
+const PAGE_TOKEN = "token-trang-gia-640";
 
 // Phản hồi GetCurrentShift giả, đủ trường như fixture g2j_price_crawler/fixtures/tien_ket (kể cả tên người tạo ca).
 const SHIFT_BODY = {
@@ -46,10 +48,11 @@ function storage(entries) {
 }
 
 /** Chạy readShiftInPage với `fetch` và bộ nhớ trang giả. `reply(headers)` trả `{ status, body }`. */
-async function inPage(reply, { local = {}, session = {} } = {}) {
+async function inPage(reply, { local = {}, session = {}, pageToken = null } = {}) {
   const calls = [];
   const saved = { fetch: globalThis.fetch, window: globalThis.window };
   globalThis.window = { localStorage: storage(local), sessionStorage: storage(session) };
+  if (pageToken !== null) globalThis.window.__urbanbCap = { ezcloudToken: pageToken };
   globalThis.fetch = async (url, init) => {
     calls.push({ url, init });
     const { status, body } = reply(init.headers ?? {});
@@ -72,6 +75,7 @@ test("🔴 readShiftInPage: gọi đúng GetCurrentShift?shiftId=0 bằng phiên
   assert.deepEqual(result, {
     status: 200,
     code: 0,
+    auth: "cookie",
     shift: {
       ShiftId: 52011,
       ShiftNumber: 14,
@@ -95,10 +99,49 @@ test("🔴 readShiftInPage: phiên cookie bị từ chối ⇒ thử lại với
 
 test("readShiftInPage: chưa đăng nhập, không có JWT ⇒ trả mã lỗi, không ca; trang trả HTML ⇒ code null", async () => {
   const a = await inPage(() => ({ status: 401, body: { Code: 401, Data: null } }));
-  assert.deepEqual(a.result, { status: 401, code: 401, shift: null });
+  assert.deepEqual(a.result, { status: 401, code: 401, auth: "cookie", shift: null });
   assert.equal(a.calls.length, 1);
   const b = await inPage(() => ({ status: 200, body: undefined }));
-  assert.deepEqual(b.result, { status: 200, code: null, shift: null });
+  assert.deepEqual(b.result, { status: 200, code: null, auth: "cookie", shift: null });
+});
+
+// Đo 27/10/2026 trên PMS 17200: cookie ⇒ 401, JWT trong bộ nhớ trang ⇒ 401, token trang đang gửi ⇒ 200.
+// ĐỐI CHỨNG: bỏ bước token trang (hay đặt nó sau cookie) ⇒ lần gọi đầu không mang token trang ⇒ ĐỎ.
+test("🔴 readShiftInPage: có token trang (capture.js) ⇒ gọi bằng token ấy TRƯỚC, đúng một lần khi ezCloud nhận", async () => {
+  const { result, calls } = await inPage((h) => (h.Authorization === `Bearer ${PAGE_TOKEN}` ? { status: 200, body: SHIFT_BODY } : { status: 401, body: { Code: 401 } }), {
+    pageToken: PAGE_TOKEN,
+    local: { "ls.auth": JSON.stringify({ token: FAKE_JWT }) },
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].init.headers.Authorization, `Bearer ${PAGE_TOKEN}`);
+  assert.equal(result.code, 0);
+  assert.equal(result.auth, "page");
+  assert.ok(!JSON.stringify(result).includes(PAGE_TOKEN), "token không lọt ra kết quả");
+});
+
+test("readShiftInPage: token trang bị từ chối ⇒ thử cookie rồi JWT trong bộ nhớ, dừng ở lần đầu ezCloud nhận", async () => {
+  const { result, calls } = await inPage((h) => (h.Authorization === `Bearer ${FAKE_JWT}` ? { status: 200, body: SHIFT_BODY } : { status: 401, body: { Code: 401 } }), {
+    pageToken: PAGE_TOKEN,
+    local: { "ls.auth": JSON.stringify({ token: FAKE_JWT }) },
+  });
+  assert.deepEqual(
+    calls.map((c) => c.init.headers.Authorization ?? "cookie"),
+    [`Bearer ${PAGE_TOKEN}`, "cookie", `Bearer ${FAKE_JWT}`],
+  );
+  assert.equal(result.auth, "storage");
+  assert.equal(result.code, 0);
+});
+
+test("🔴 readingFaultCode: mỗi chỗ hỏng một mã; số đã lên Hub ⇒ null", () => {
+  const ok = { status: 200, code: 0, auth: "page", shift: {} };
+  assert.equal(readingFaultCode({ page: null, report: null, hub: null }), "PMS_READING_NO_PAGE");
+  assert.equal(readingFaultCode({ page: { status: 401, code: 401, shift: null }, report: null, hub: null }), "PMS_READING_AUTH");
+  assert.equal(readingFaultCode({ page: { status: 403, code: null, shift: null }, report: null, hub: null }), "PMS_READING_AUTH");
+  assert.equal(readingFaultCode({ page: { status: 200, code: 2, shift: null }, report: null, hub: null }), "PMS_READING_PMS_ERROR");
+  assert.equal(readingFaultCode({ page: ok, report: null, hub: null }), "PMS_READING_NO_SHIFT");
+  assert.equal(readingFaultCode({ page: ok, report: {}, hub: { netError: "x" } }), "PMS_READING_HUB_REJECTED");
+  assert.equal(readingFaultCode({ page: ok, report: {}, hub: { status: 404 } }), "PMS_READING_HUB_REJECTED");
+  assert.equal(readingFaultCode({ page: ok, report: {}, hub: { status: 200 } }), null);
 });
 
 test("readShiftInPage tự đủ: không dùng biến ngoài thân hàm (chạy bằng executeScript)", () => {
