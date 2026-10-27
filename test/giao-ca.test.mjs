@@ -505,7 +505,7 @@ test("🔴 (f) tin gửi trang không chứa token, mã bí mật, URL Sheet, em
   assert.deepEqual([...keys].filter((k) => !allowed.has(k)), []);
 });
 
-// ---------- YC-246 (user chốt 27/10/2026, H1 a, H2 a, H3 a): dùng lại kênh đạt gần đây ----------
+// ---------- YC-252 (user chốt 27/10/2026, H-2052 a, H-2053 a, H-2054 a): dùng lại kênh đạt gần đây ----------
 
 const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString();
 const savedOk = (m) => ({ at: minutesAgo(m), okAt: minutesAgo(m), state: "ok", count: 3, message: "", error: null, hub: { ok: true } });
@@ -524,14 +524,14 @@ test("🔴 YC-246 ext:scan kèm reuseOkWithinMinutes ⇒ kênh đạt trong mố
   assert.equal(ch.trip.finishedAt, state.store.status.trip.okAt, "giờ của lượt quét đạt được dùng lại");
   assert.equal(ch.go2joy.reused, undefined);
   assert.equal(state.created.length, 1, "chỉ Go2Joy mở tab");
-  assert.equal(readingPosts().length, 1, "số ezCloud vẫn đọc mới (H1 a)");
+  assert.equal(readingPosts().length, 1, "số ezCloud vẫn đọc mới (H-2052 a)");
 
   fresh({ tripResult: TRIP_OK });
   state.store.status = { trip: { ...savedOk(10), state: "error" }, go2joy: { ...savedOk(5), hub: { ok: false } } };
   const again = connect();
   again.send({ type: MSG.scan, requestId: "rq-reuse-2", reuseOkWithinMinutes: 60 });
   await until(() => again.results().length, "kết quả");
-  assert.ok(again.got.every((m) => !m.reused), "kênh lỗi, gửi Hub hỏng ⇒ quét lại (H2 a)");
+  assert.ok(again.got.every((m) => !m.reused), "kênh lỗi, gửi Hub hỏng ⇒ quét lại (H-2053 a)");
   assert.equal(state.created.length, 2);
 });
 

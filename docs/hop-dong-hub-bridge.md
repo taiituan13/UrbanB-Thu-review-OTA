@@ -8,7 +8,7 @@ người chạy lại lệnh cài.
 |---|---|---|
 | `ext:hello` / `ext:status` | 1.2.x | YC-156 |
 | `ext:scan` (quét trước khi giao ca) | 1.5.4 | YC-239, H-1996 a, H-1976 c |
-| `ext:scan` dùng lại kênh đạt gần đây (`reuseOkWithinMinutes`, `reused`) | 1.5.7 | YC-246, user chốt 27/10/2026 (H1 a, H2 a, H3 a) |
+| `ext:scan` dùng lại kênh đạt gần đây (`reuseOkWithinMinutes`, `reused`) | 1.5.7 | YC-252, user chốt 27/10/2026 (H-2052 a, H-2053 a, H-2054 a) |
 
 ## Chung
 

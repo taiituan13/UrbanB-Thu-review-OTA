@@ -60,7 +60,7 @@ export function joinMode(running, current) {
 }
 
 /**
- * YC-246 (user chốt 27/10/2026, H2 a): trang Giao ca gửi kèm `reuseOkWithinMinutes` — kênh đã quét ĐẠT trong ngần ấy
+ * YC-252 (user chốt 27/10/2026, H-2053 a): trang Giao ca gửi kèm `reuseOkWithinMinutes` — kênh đã quét ĐẠT trong ngần ấy
  * phút thì dùng lại, không mở trang kênh. Số phút do Hub giữ (`HANDOVER_REUSE_OK_WITHIN_MINUTES`); ở đây chỉ kiểm
  * hình dạng. Trần kỹ thuật một ngày. Sai hay vắng ⇒ `null` (quét đủ mọi kênh như bản trước).
  */
@@ -72,7 +72,7 @@ export function parseReuseMinutes(value) {
 
 /**
  * Giờ ISO của lượt quét đạt dùng lại được cho kênh, hay `null` (phải quét lại). `status` là trạng thái kênh đã lưu
- * (config.js saveChannelStatus). Chỉ dùng lại khi lượt GẦN NHẤT của kênh là đạt và đã lên Hub (H2 a: kênh lỗi, cần
+ * (config.js saveChannelStatus). Chỉ dùng lại khi lượt GẦN NHẤT của kênh là đạt và đã lên Hub (H-2053 a: kênh lỗi, cần
  * đăng nhập, hay gửi Hub hỏng thì luôn quét lại), và giờ đạt nằm trong `minutes` phút trước `nowMs`.
  */
 export function reusableOkAt(status, minutes, nowMs) {

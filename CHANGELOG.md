@@ -16,7 +16,7 @@ nhớ) đều bị từ chối. 1.5.7 dùng token ấy trước, hai cách cũ �
   phiên, ezCloud báo lỗi, không có ca đang mở, Hub không nhận). Lượt sau lấy được thì lỗi tự tắt. Hub chưa khai
   các mã này nên tạm hiện ở nhóm "lỗi khác" kèm mã.
 
-**Quét giao ca dùng lại kênh vừa quét đạt** (YC-246, user chốt 27/10/2026). Lễ tân bấm Quét trên trang Giao ca
+**Quét giao ca dùng lại kênh vừa quét đạt** (YC-252, user chốt 27/10/2026). Lễ tân bấm Quét trên trang Giao ca
 quầy: kênh review nào có lượt quét gần nhất đạt trong vòng 60 phút thì máy không mở trang kênh ấy nữa, thẻ ghi giờ
 lượt quét đó kèm chữ "dùng lại". Kênh lỗi hay cần đăng nhập thì vẫn quét lại. Số ezCloud luôn đọc mới.
 
