@@ -5,7 +5,10 @@ quản lý thấy gì khác. Máy đã cài không tự lên bản: khi có bả
 "Có bản mới …" và phải có người chạy lại lệnh cài (xem [docs/cai-tu-xa.md](docs/cai-tu-xa.md) mục
 Cập nhật).
 
-## 1.5.5
+## 1.5.6
+
+Hai phần dưới đây từng được phát dưới số 1.5.5 (lần hai, 27/10/2026). Máy đã nạp 1.5.5 đầu thấy cùng số nên không
+tự nạp mã mới. 1.5.6 mang đúng mã ấy, chỉ đổi số phiên bản để máy tự nạp lại.
 
 **Lễ tân bấm Quét trên trang Giao ca quầy thì máy tự lấy số ezCloud** (YC-246, đổi 27/10/2026). Lễ tân không phải
 bấm Bàn giao trên PMS nữa. Cùng lúc quét review, extension đọc ca ezCloud đang mở trong tab PMS của máy (đúng lệnh
@@ -19,8 +22,18 @@ trang Bàn giao ca của PMS gọi) và gửi Hub số Đầu ca, Tổng thu, T�
 - Extension chỉ đọc: không đổi khách sạn mặc định, không gọi lệnh ghi nào tới ezCloud. Tin gửi Hub chỉ gồm số và
   mã, không token, không tên người. Hợp đồng: [docs/hop-dong-ban-giao-ca-pms.md](docs/hop-dong-ban-giao-ca-pms.md).
 
-**Lượt bấm Bàn giao trên PMS** (H-2034 b, 26/10/2026, phần dưới đây) vẫn được gửi Hub như trước; trang Giao ca
-quầy không còn đọc số này. Lễ tân bấm
+**Nhóm tab "Urban B · đang đọc review" biến mất khi quét xong** (YC-249). Trước đây nhóm có thể còn lại
+trên thanh tab khi lượt quét bị cắt ngang (Chrome dừng tiến trình nền giữa lượt, hoặc tắt Chrome rồi mở
+lại), khi một bước báo lỗi làm máy mất dấu tab, hoặc khi trang extranet tự mở thêm một tab trong nhóm.
+
+- Máy dọn nhóm ở cuối mỗi lượt quét (đạt hay hỏng), ở đầu lượt sau, và mỗi khi tiến trình nền chạy lại.
+- Tab máy tự mở, kể cả tab do trang extranet mở ra từ tab ấy, thì đóng.
+- Tab lễ tân tự kéo vào nhóm thì chỉ được tháo ra khỏi nhóm, tab vẫn mở.
+
+## 1.5.5
+
+**Lễ tân bấm Bàn giao trên PMS thì máy gửi Hub số Bàn giao cho ca sau** (H-2034 b, 26/10/2026). Từ 1.5.6 lượt
+này vẫn được gửi Hub như trước, nhưng trang Giao ca quầy không còn đọc số này. Lễ tân bấm
 **Bàn giao** trên trang Bàn giao ca của PMS ezCloud thì extension gửi Hub con số lễ tân vừa chốt ở dòng 7
 "Bàn giao cho ca sau", kèm dòng 6 "Thực tế trong két" và dòng 8 "Bàn giao cho quản lý". Ô "Số sổ ezCloud"
 trên trang Giao ca quầy của Hub đọc số này. Trang Hub do UrbanB dựng riêng; bản này chỉ là phần của extension.
@@ -32,14 +45,6 @@ trên trang Giao ca quầy của Hub đọc số này. Trang Hub do UrbanB dựn
   extension. Không có token PMS, tên lễ tân hay email. Hợp đồng: [docs/hop-dong-ban-giao-ca-pms.md](docs/hop-dong-ban-giao-ca-pms.md).
 - Hub chưa lên bản có trang nhận số thì máy giữ lượt ấy trong hàng chờ, khung quầy không báo lỗi gì.
 - Extension không bấm gì và không gửi gì tới ezCloud; nó chỉ đọc lượt bấm của lễ tân.
-
-**Nhóm tab "Urban B · đang đọc review" biến mất khi quét xong** (YC-249). Trước đây nhóm có thể còn lại
-trên thanh tab khi lượt quét bị cắt ngang (Chrome dừng tiến trình nền giữa lượt, hoặc tắt Chrome rồi mở
-lại), khi một bước báo lỗi làm máy mất dấu tab, hoặc khi trang extranet tự mở thêm một tab trong nhóm.
-
-- Máy dọn nhóm ở cuối mỗi lượt quét (đạt hay hỏng), ở đầu lượt sau, và mỗi khi tiến trình nền chạy lại.
-- Tab máy tự mở, kể cả tab do trang extranet mở ra từ tab ấy, thì đóng.
-- Tab lễ tân tự kéo vào nhóm thì chỉ được tháo ra khỏi nhóm, tab vẫn mở.
 
 ## 1.5.4
 
